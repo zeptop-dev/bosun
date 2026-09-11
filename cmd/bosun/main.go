@@ -17,6 +17,7 @@ import (
 	"gitlab.com/zeptop-group/bosun/internal/core"
 	"gitlab.com/zeptop-group/bosun/internal/core/mita"
 	"gitlab.com/zeptop-group/bosun/internal/core/singbox"
+	"gitlab.com/zeptop-group/bosun/internal/core/xray"
 	"gitlab.com/zeptop-group/bosun/internal/panel"
 	"gitlab.com/zeptop-group/bosun/internal/panel/xboard"
 )
@@ -82,28 +83,51 @@ func setup(args []string) (*config.Config, *slog.Logger, panel.Driver, *core.Reg
 	}
 
 	reg := core.NewRegistry()
-	if sb := cfg.Cores.Singbox; sb != nil {
-		c, err := singbox.New(singbox.Options{
-			Binary:      sb.Binary,
-			WorkDir:     filepath.Join(cfg.DataDir, "singbox"),
-			StatsListen: sb.StatsListen,
-			LogLevel:    sb.LogLevel,
-		}, log)
-		if err != nil {
-			return nil, nil, nil, nil, err
-		}
-		reg.Register(c)
+	build := map[string]func() (core.Core, error){
+		"singbox": func() (core.Core, error) {
+			sb := cfg.Cores.Singbox
+			if sb == nil {
+				return nil, nil
+			}
+			return singbox.New(singbox.Options{
+				Binary:      sb.Binary,
+				WorkDir:     filepath.Join(cfg.DataDir, "singbox"),
+				StatsListen: sb.StatsListen,
+				LogLevel:    sb.LogLevel,
+			}, log)
+		},
+		"xray": func() (core.Core, error) {
+			xr := cfg.Cores.Xray
+			if xr == nil {
+				return nil, nil
+			}
+			return xray.New(xray.Options{
+				Binary:    xr.Binary,
+				WorkDir:   filepath.Join(cfg.DataDir, "xray"),
+				APIListen: xr.APIListen,
+				LogLevel:  xr.LogLevel,
+			}, log)
+		},
+		"mita": func() (core.Core, error) {
+			mt := cfg.Cores.Mita
+			if mt == nil {
+				return nil, nil
+			}
+			return mita.New(mita.Options{
+				Binary:   mt.Binary,
+				WorkDir:  filepath.Join(cfg.DataDir, "mita"),
+				LogLevel: mt.LogLevel,
+			}, log)
+		},
 	}
-	if mt := cfg.Cores.Mita; mt != nil {
-		c, err := mita.New(mita.Options{
-			Binary:   mt.Binary,
-			WorkDir:  filepath.Join(cfg.DataDir, "mita"),
-			LogLevel: mt.LogLevel,
-		}, log)
+	for _, name := range cfg.CoreOrder() {
+		c, err := build[name]()
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
-		reg.Register(c)
+		if c != nil {
+			reg.Register(c)
+		}
 	}
 	return cfg, log, driver, reg, nil
 }

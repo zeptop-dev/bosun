@@ -17,7 +17,11 @@ type Config struct {
 	LogLevel string `yaml:"log_level"`
 
 	Cores struct {
+		// Order is the preference when several cores can serve an inbound.
+		// Unlisted enabled cores follow in the default order singbox, xray, mita.
+		Order   []string     `yaml:"order"`
 		Singbox *SingboxCore `yaml:"singbox"`
+		Xray    *XrayCore    `yaml:"xray"`
 		Mita    *MitaCore    `yaml:"mita"`
 	} `yaml:"cores"`
 
@@ -30,11 +34,37 @@ type Config struct {
 	Certs []Cert `yaml:"certs"`
 }
 
+// CoreOrder returns the effective core preference order.
+func (c *Config) CoreOrder() []string {
+	def := []string{"singbox", "xray", "mita"}
+	out := append([]string(nil), c.Cores.Order...)
+	for _, d := range def {
+		seen := false
+		for _, o := range out {
+			if o == d {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
 // SingboxCore enables the sing-box adapter.
 type SingboxCore struct {
 	Binary      string `yaml:"binary"`
 	StatsListen string `yaml:"stats_listen"`
 	LogLevel    string `yaml:"log_level"`
+}
+
+// XrayCore enables the Xray-core adapter.
+type XrayCore struct {
+	Binary    string `yaml:"binary"`
+	APIListen string `yaml:"api_listen"`
+	LogLevel  string `yaml:"log_level"`
 }
 
 // MitaCore enables the official mieru server adapter.
@@ -77,14 +107,21 @@ func Load(path string) (*Config, error) {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
-	if c.Cores.Singbox == nil && c.Cores.Mita == nil {
-		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.mita)")
+	if c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil {
+		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita)")
 	}
 	if c.Panel.Driver == "" {
 		return nil, fmt.Errorf("config: panel.driver is required")
 	}
 	if c.Panel.Driver == "xboard" && c.Panel.Xboard == nil {
 		return nil, fmt.Errorf("config: panel.xboard is required when driver is xboard")
+	}
+	for _, name := range c.Cores.Order {
+		switch name {
+		case "singbox", "xray", "mita":
+		default:
+			return nil, fmt.Errorf("config: cores.order: unknown core %q", name)
+		}
 	}
 	for i, cert := range c.Certs {
 		if cert.ServerName == "" || cert.Cert == "" || cert.Key == "" {

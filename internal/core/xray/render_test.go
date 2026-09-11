@@ -1,0 +1,191 @@
+package xray
+
+import (
+	"encoding/json"
+	"testing"
+
+	"google.golang.org/protobuf/encoding/protowire"
+
+	"gitlab.com/zeptop-group/bosun/internal/spec"
+)
+
+var users = []spec.User{
+	{ID: 1, Name: "u1", UUID: "11111111-1111-1111-1111-111111111111", Password: "p1"},
+	{ID: 2, Name: "u2", UUID: "22222222-2222-2222-2222-222222222222", Password: "p2"},
+}
+
+func decode(t *testing.T, b []byte) map[string]any {
+	t.Helper()
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("invalid json: %v\n%s", err, b)
+	}
+	return out
+}
+
+func TestRenderVLESSRealityAndKey(t *testing.T) {
+	ib := spec.Inbound{
+		Tag: "in", Protocol: spec.VLESS, Port: 443, Flow: "xtls-rprx-vision",
+		TLS: &spec.TLS{Mode: spec.TLSReality, ServerName: "www.apple.com", Reality: &spec.Reality{
+			PrivateKey: "pk", ShortIDs: []string{"abcd"}, HandshakeServer: "www.apple.com", HandshakePort: 443,
+		}},
+	}
+	node := &spec.Node{Inbounds: []spec.Inbound{ib}}
+	b, st, err := render(node, node.Inbounds, users, renderOptions{LogLevel: "warning", APIListen: "127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := decode(t, b)
+	in := cfg["inbounds"].([]any)[0].(map[string]any)
+	if in["protocol"] != "vless" || in["port"] != float64(443) {
+		t.Fatalf("inbound: %v", in)
+	}
+	c := in["settings"].(map[string]any)["clients"].([]any)[0].(map[string]any)
+	if c["email"] != "u1" || c["flow"] != "xtls-rprx-vision" {
+		t.Fatalf("client: %v", c)
+	}
+	ss := in["streamSettings"].(map[string]any)
+	if ss["security"] != "reality" || ss["network"] != "raw" {
+		t.Fatalf("stream: %v", ss)
+	}
+	r := ss["realitySettings"].(map[string]any)
+	if r["target"] != "www.apple.com:443" || r["privateKey"] != "pk" {
+		t.Fatalf("reality: %v", r)
+	}
+	if cfg["api"].(map[string]any)["listen"] != "127.0.0.1:1" {
+		t.Fatalf("api: %v", cfg["api"])
+	}
+
+	// Same inbounds, different users: key unchanged. Different port: key changes.
+	_, st2, _ := render(node, node.Inbounds, users[:1], renderOptions{})
+	if st.inboundsKey != st2.inboundsKey {
+		t.Fatal("key must ignore users")
+	}
+	node.Inbounds[0].Port = 8443
+	_, st3, _ := render(node, node.Inbounds, users, renderOptions{})
+	if st.inboundsKey == st3.inboundsKey {
+		t.Fatal("key must change with inbound settings")
+	}
+}
+
+func TestRenderTransportsAndTLS(t *testing.T) {
+	tls := &spec.TLS{Mode: spec.TLSStandard, ServerName: "a", CertPath: "/c", KeyPath: "/k"}
+	cases := []struct {
+		tr   *spec.Transport
+		key  string
+		want string
+	}{
+		{&spec.Transport{Type: "ws", Path: "/ws", Host: "h"}, "wsSettings", "ws"},
+		{&spec.Transport{Type: "grpc", ServiceName: "svc"}, "grpcSettings", "grpc"},
+		{&spec.Transport{Type: "httpupgrade", Path: "/up"}, "httpupgradeSettings", "httpupgrade"},
+		{&spec.Transport{Type: "xhttp", Path: "/x", Mode: "auto"}, "xhttpSettings", "xhttp"},
+	}
+	for _, tc := range cases {
+		node := &spec.Node{Inbounds: []spec.Inbound{{Tag: "t", Protocol: spec.Trojan, Port: 1, TLS: tls, Transport: tc.tr}}}
+		b, _, err := render(node, node.Inbounds, users, renderOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.want, err)
+		}
+		ss := decode(t, b)["inbounds"].([]any)[0].(map[string]any)["streamSettings"].(map[string]any)
+		if ss["network"] != tc.want || ss[tc.key] == nil || ss["security"] != "tls" {
+			t.Fatalf("%s: %v", tc.want, ss)
+		}
+	}
+	node := &spec.Node{Inbounds: []spec.Inbound{{Tag: "t", Protocol: spec.VLESS, Port: 1, Transport: &spec.Transport{Type: "http"}}}}
+	if _, _, err := render(node, node.Inbounds, users, renderOptions{}); err == nil {
+		t.Fatal("http transport must be rejected by xray renderer")
+	}
+	node = &spec.Node{Inbounds: []spec.Inbound{{Tag: "t", Protocol: spec.Shadowsocks, Cipher: "2022-blake3-aes-128-gcm", Port: 1}}}
+	if _, _, err := render(node, node.Inbounds, users, renderOptions{}); err == nil {
+		t.Fatal("ss2022 must be rejected by xray renderer")
+	}
+}
+
+func TestRenderOutboundsAndRoutes(t *testing.T) {
+	node := &spec.Node{
+		Inbounds: []spec.Inbound{{Tag: "in", Protocol: spec.VMess, Port: 1}},
+		Outbounds: []spec.Outbound{{Tag: "landing", Protocol: "socks", ProxyTag: "warp",
+			Settings: map[string]any{"servers": []any{map[string]any{"address": "1.2.3.4", "port": 1080}}, "streamSettings": map[string]any{"network": "tcp"}}}},
+		Routes: []spec.RouteRule{{Match: []string{"protocol:bittorrent"}, Action: "block"}, {Match: []string{"domain:netflix.com", "ip:1.1.1.1/32"}, Action: "outbound", Value: "landing"}},
+	}
+	b, _, err := render(node, node.Inbounds, users, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := decode(t, b)
+	outs := cfg["outbounds"].([]any)
+	o := outs[2].(map[string]any)
+	if o["proxySettings"].(map[string]any)["tag"] != "warp" || o["streamSettings"] == nil || o["settings"].(map[string]any)["servers"] == nil {
+		t.Fatalf("outbound: %v", o)
+	}
+	rules := cfg["routing"].(map[string]any)["rules"].([]any)
+	if rules[0].(map[string]any)["outboundTag"] != "api" {
+		t.Fatalf("api rule missing: %v", rules[0])
+	}
+	if rules[1].(map[string]any)["outboundTag"] != "block" {
+		t.Fatalf("rule1: %v", rules[1])
+	}
+	r2 := rules[2].(map[string]any)
+	if r2["outboundTag"] != "landing" || r2["domain"].([]any)[0] != "domain:netflix.com" || r2["ip"].([]any)[0] != "1.1.1.1/32" {
+		t.Fatalf("rule2: %v", r2)
+	}
+}
+
+// TestAddUserEncoding decodes the hand-built AlterInboundRequest back and
+// checks the nesting: tag, TypedMessage(AddUserOperation{User{email, account}}).
+func TestAddUserEncoding(t *testing.T) {
+	acc, err := account(spec.VLESS, users[0], "xtls-rprx-vision")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := strField(2, users[0].Name)
+	user = append(user, bytesField(3, acc)...)
+	op := typed(typeAddUser, bytesField(1, user))
+	req := strField(1, "in")
+	req = append(req, bytesField(2, op)...)
+
+	fields := parse(t, req)
+	if string(fields[1]) != "in" {
+		t.Fatalf("tag: %q", fields[1])
+	}
+	tm := parse(t, fields[2])
+	if string(tm[1]) != typeAddUser {
+		t.Fatalf("op type: %q", tm[1])
+	}
+	addOp := parse(t, tm[2])
+	u := parse(t, addOp[1])
+	if string(u[2]) != "u1" {
+		t.Fatalf("email: %q", u[2])
+	}
+	accTM := parse(t, u[3])
+	if string(accTM[1]) != "xray.proxy.vless.Account" {
+		t.Fatalf("account type: %q", accTM[1])
+	}
+	accFields := parse(t, accTM[2])
+	if string(accFields[1]) != users[0].UUID || string(accFields[2]) != "xtls-rprx-vision" {
+		t.Fatalf("account: %q %q", accFields[1], accFields[2])
+	}
+}
+
+// parse returns bytes-typed fields of a message by number (last wins).
+func parse(t *testing.T, b []byte) map[protowire.Number][]byte {
+	t.Helper()
+	out := map[protowire.Number][]byte{}
+	for len(b) > 0 {
+		num, typ, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			t.Fatal(protowire.ParseError(n))
+		}
+		b = b[n:]
+		if typ != protowire.BytesType {
+			t.Fatalf("unexpected wire type %v for field %d", typ, num)
+		}
+		v, n := protowire.ConsumeBytes(b)
+		if n < 0 {
+			t.Fatal(protowire.ParseError(n))
+		}
+		out[num] = v
+		b = b[n:]
+	}
+	return out
+}

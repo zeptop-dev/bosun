@@ -6,27 +6,48 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"gitlab.com/zeptop-group/bosun/internal/spec"
 )
 
 // Bundle is a rendered set of configuration files for one core.
 type Bundle struct {
-	Files map[string][]byte // relative file name -> content
-	Main  string            // entry file name inside Files
-	Meta  map[string]string // adapter-private notes carried from Render to Start/Apply
+	Files   map[string][]byte // relative file name -> content
+	Main    string            // entry file name inside Files
+	Meta    map[string]string // adapter-private notes carried from Render to Start/Apply
+	Payload any               // adapter-private state carried from Render to Start/Apply
 }
 
 // Capabilities advertises what a core can serve.
 type Capabilities struct {
-	Protocols     []spec.Protocol
-	HotUserReload bool // true if users can change without a process restart
+	Protocols       []spec.Protocol
+	Transports      []string // stream transports; nil means only "tcp"
+	Shadowsocks2022 bool     // multi-user Shadowsocks 2022 ciphers
+	HotUserReload   bool     // true if users can change without a process restart
 }
 
-// Supports reports whether the core can serve protocol p.
-func (c Capabilities) Supports(p spec.Protocol) bool {
+// Supports reports whether the core can serve inbound ib.
+func (c Capabilities) Supports(ib spec.Inbound) bool {
+	ok := false
 	for _, x := range c.Protocols {
-		if x == p {
+		if x == ib.Protocol {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return false
+	}
+	if ib.Protocol == spec.Shadowsocks && strings.HasPrefix(ib.Cipher, "2022-") && !c.Shadowsocks2022 {
+		return false
+	}
+	tr := ib.TransportType()
+	if tr == "tcp" {
+		return true
+	}
+	for _, x := range c.Transports {
+		if x == tr {
 			return true
 		}
 	}
@@ -100,17 +121,17 @@ func (r *Registry) pick(ib spec.Inbound) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("inbound %q wants core %q which is not enabled", ib.Tag, ib.Core)
 		}
-		if !c.Capabilities().Supports(ib.Protocol) {
-			return "", fmt.Errorf("inbound %q: core %q does not support %s", ib.Tag, ib.Core, ib.Protocol)
+		if !c.Capabilities().Supports(ib) {
+			return "", fmt.Errorf("inbound %q: core %q does not support %s over %s", ib.Tag, ib.Core, ib.Protocol, ib.TransportType())
 		}
 		return ib.Core, nil
 	}
 	for _, name := range r.order {
-		if r.cores[name].Capabilities().Supports(ib.Protocol) {
+		if r.cores[name].Capabilities().Supports(ib) {
 			return name, nil
 		}
 	}
 	enabled := r.Names()
 	sort.Strings(enabled)
-	return "", fmt.Errorf("inbound %q: no enabled core supports %s (enabled: %v)", ib.Tag, ib.Protocol, enabled)
+	return "", fmt.Errorf("inbound %q: no enabled core supports %s over %s (enabled: %v)", ib.Tag, ib.Protocol, ib.TransportType(), enabled)
 }

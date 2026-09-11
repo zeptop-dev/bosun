@@ -203,6 +203,8 @@ func mapTransport(network string, s map[string]any) *spec.Transport {
 			t.Host = hosts[0]
 		}
 		return t
+	case "xhttp", "splithttp":
+		return &spec.Transport{Type: "xhttp", Path: str(s["path"]), Host: str(s["host"]), Mode: str(s["mode"])}
 	}
 	return nil
 }
