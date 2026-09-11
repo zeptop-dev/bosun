@@ -1,0 +1,87 @@
+package forward
+
+import (
+	"context"
+	"io"
+	"net"
+	"sync"
+	"time"
+)
+
+func (r *rule) serveTCP(ctx context.Context, ln net.Listener) {
+	defer r.wg.Done()
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+			r.log.Warn("accept failed", "err", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		r.wg.Add(1)
+		go r.handleTCP(ctx, c)
+	}
+}
+
+func (r *rule) handleTCP(ctx context.Context, c net.Conn) {
+	defer r.wg.Done()
+	defer c.Close()
+	r.total.Add(1)
+	r.active.Add(1)
+	defer r.active.Add(-1)
+
+	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	var d net.Dialer
+	t, err := d.DialContext(dctx, "tcp", r.spec.Target)
+	cancel()
+	if err != nil {
+		r.log.Debug("dial target failed", "target", r.spec.Target, "err", err)
+		return
+	}
+	defer t.Close()
+	if tc, ok := c.(*net.TCPConn); ok {
+		_ = tc.SetKeepAlive(true)
+	}
+	if tt, ok := t.(*net.TCPConn); ok {
+		_ = tt.SetKeepAlive(true)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		n, _ := io.Copy(t, c) // client -> target
+		r.bytesIn.Add(n)
+		closeWrite(t)
+	}()
+	go func() {
+		defer wg.Done()
+		n, _ := io.Copy(c, t) // target -> client
+		r.bytesOut.Add(n)
+		closeWrite(c)
+	}()
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		c.Close()
+		t.Close()
+		<-done
+	}
+}
+
+func closeWrite(c net.Conn) {
+	if tc, ok := c.(*net.TCPConn); ok {
+		_ = tc.CloseWrite()
+		return
+	}
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
+	}
+}

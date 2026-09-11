@@ -130,12 +130,24 @@ type RouteRule struct {
 	Value  string   // outbound tag when Action == "outbound"
 }
 
+// Forward is one relay rule: accept on Listen:Port and forward the raw
+// stream or datagrams to Target. A chain (entry -> relay -> exit) is just
+// one Forward per hop, each pointing at the next; the panel orchestrates.
+type Forward struct {
+	Tag      string
+	Listen   string // "" = all interfaces
+	Port     int
+	Protocol string // "tcp", "udp" or "both"
+	Target   string // host:port of the next hop
+}
+
 // Node is the complete desired state for this server.
 type Node struct {
 	ID        string
 	Inbounds  []Inbound
 	Outbounds []Outbound
 	Routes    []RouteRule
+	Forwards  []Forward
 }
 
 // Traffic is a byte counter pair.

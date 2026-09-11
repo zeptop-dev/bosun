@@ -11,6 +11,8 @@ import (
 
 	"gitlab.com/zeptop-group/bosun/internal/config"
 	"gitlab.com/zeptop-group/bosun/internal/core"
+	"gitlab.com/zeptop-group/bosun/internal/forward"
+	"gitlab.com/zeptop-group/bosun/internal/metrics"
 	"gitlab.com/zeptop-group/bosun/internal/panel"
 	"gitlab.com/zeptop-group/bosun/internal/spec"
 	"gitlab.com/zeptop-group/bosun/internal/sysinfo"
@@ -18,10 +20,12 @@ import (
 
 // Agent wires one panel driver to a core registry.
 type Agent struct {
-	cfg    *config.Config
-	driver panel.Driver
-	reg    *core.Registry
-	log    *slog.Logger
+	cfg     *config.Config
+	driver  panel.Driver
+	reg     *core.Registry
+	fwd     *forward.Manager
+	metrics *metrics.Registry
+	log     *slog.Logger
 
 	node  *spec.Node
 	users []spec.User
@@ -29,9 +33,13 @@ type Agent struct {
 	userIDs map[string]int64
 }
 
-// New builds an agent.
-func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, log *slog.Logger) *Agent {
-	return &Agent{cfg: cfg, driver: driver, reg: reg, log: log.With("component", "agent")}
+// New builds an agent. metrics may be nil.
+func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metrics.Registry, log *slog.Logger) *Agent {
+	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent")}
+	if mreg != nil {
+		a.registerMetrics()
+	}
+	return a
 }
 
 // Run blocks until ctx is cancelled, then stops every core.
@@ -43,6 +51,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	if err := a.apply(ctx); err != nil {
 		return fmt.Errorf("initial apply: %w", err)
+	}
+	if err := a.applyForwards(ctx); err != nil {
+		a.log.Error("forwards", "err", err)
 	}
 
 	iv := a.driver.Intervals()
@@ -62,6 +73,9 @@ func (a *Agent) Run(ctx context.Context) error {
 			} else if changed {
 				if err := a.apply(ctx); err != nil {
 					a.log.Error("apply failed", "err", err)
+				}
+				if err := a.applyForwards(ctx); err != nil {
+					a.log.Error("forwards", "err", err)
 				}
 			}
 			if niv := a.driver.Intervals(); niv != iv {
@@ -229,7 +243,73 @@ func (a *Agent) report(ctx context.Context) {
 	}
 }
 
+// applyForwards reconciles relay rules: the panel's if it manages them,
+// otherwise the local config's.
+func (a *Agent) applyForwards(ctx context.Context) error {
+	rules := a.cfg.ForwardSpecs()
+	if src, ok := a.driver.(panel.ForwardSource); ok {
+		fw, changed, err := src.Forwards(ctx)
+		if err != nil {
+			return err
+		}
+		if changed {
+			a.node.Forwards = fw
+		}
+		rules = append(rules, a.node.Forwards...)
+	}
+	return a.fwd.Apply(rules)
+}
+
+func (a *Agent) registerMetrics() {
+	m := a.metrics
+	m.Describe("bosun_core_running", "gauge", "1 if the core process is running")
+	m.Describe("bosun_users", "gauge", "users currently provisioned")
+	m.Describe("bosun_forward_up", "gauge", "1 if the forward target answered the last probe")
+	m.Describe("bosun_forward_probe_rtt_seconds", "gauge", "last probe round trip to the forward target")
+	m.Describe("bosun_forward_connections_active", "gauge", "open relayed connections or udp sessions")
+	m.Describe("bosun_forward_connections_total", "counter", "relayed connections or udp sessions since start")
+	m.Describe("bosun_forward_bytes_total", "counter", "relayed bytes by direction (in = client to target)")
+	m.Add(func() []metrics.Sample {
+		var out []metrics.Sample
+		for _, name := range a.reg.Names() {
+			c, _ := a.reg.Get(name)
+			v := 0.0
+			if c.Running() {
+				v = 1
+			}
+			out = append(out, metrics.Sample{Name: "bosun_core_running", Labels: map[string]string{"core": name}, Value: v})
+		}
+		out = append(out, metrics.Sample{Name: "bosun_users", Value: float64(len(a.users))})
+		for _, s := range a.fwd.Snapshot() {
+			l := map[string]string{"tag": s.Tag, "target": s.Target, "protocol": s.Protocol}
+			up := 0.0
+			if s.Up {
+				up = 1
+			}
+			out = append(out,
+				metrics.Sample{Name: "bosun_forward_up", Labels: l, Value: up},
+				metrics.Sample{Name: "bosun_forward_probe_rtt_seconds", Labels: l, Value: s.RTT.Seconds()},
+				metrics.Sample{Name: "bosun_forward_connections_active", Labels: l, Value: float64(s.ActiveConn)},
+				metrics.Sample{Name: "bosun_forward_connections_total", Labels: l, Value: float64(s.TotalConn)},
+				metrics.Sample{Name: "bosun_forward_bytes_total", Labels: with(l, "dir", "in"), Value: float64(s.BytesIn)},
+				metrics.Sample{Name: "bosun_forward_bytes_total", Labels: with(l, "dir", "out"), Value: float64(s.BytesOut)},
+			)
+		}
+		return out
+	})
+}
+
+func with(l map[string]string, k, v string) map[string]string {
+	out := make(map[string]string, len(l)+1)
+	for kk, vv := range l {
+		out[kk] = vv
+	}
+	out[k] = v
+	return out
+}
+
 func (a *Agent) stopAll() {
+	a.fwd.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	for _, name := range a.reg.Names() {

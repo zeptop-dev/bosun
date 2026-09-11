@@ -20,3 +20,9 @@ type Driver interface {
 	PushStatus(ctx context.Context, status spec.SystemStatus) error
 	Intervals() spec.Intervals
 }
+
+// ForwardSource is implemented by drivers whose panel manages forwarding
+// rules. Drivers without it (Xboard) leave forwards to the local config.
+type ForwardSource interface {
+	Forwards(ctx context.Context) (forwards []spec.Forward, changed bool, err error)
+}

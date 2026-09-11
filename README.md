@@ -14,11 +14,13 @@ Working vertical slice, verified end to end against sing-box 1.14.0:
 - Hysteria adapter (official Hysteria 2 server): users live in bosun, not in the config. Hysteria calls bosun's HTTP auth endpoint per connection, so adds are instant and removals are enforced with a kick through the traffic stats API; only listener changes restart the process. Per-user stats from `/traffic?clear=1`. One hysteria2 inbound per node with this core; sing-box serves several. Verified e2e with the official client.
 - mita adapter (official mieru server): config file + `mita run` as a child, gRPC over a unix socket for hot user reload, proxy restart on port change, and per-user counters (deltas computed by bosun). Verified with the official mieru client.
 - Per-user traffic via each core's own control plane, hand-encoded protobuf, no generated stubs (`internal/core/grpcraw`).
+- Built-in relay (`internal/forward`): TCP and UDP port forwarding to the next hop with per-rule byte and connection counters and a TCP probe of the target (5 s retry while down, 30 s while up). Rules come from the config file with Xboard; a panel that manages forwarding supplies them through the `panel.ForwardSource` interface. Verified e2e: mihomo connecting to the relay port reaches an Xray REALITY landing behind it.
+- Prometheus endpoint (`metrics_listen`, `/metrics`): core running state, provisioned users, and per-forward up/rtt/connections/bytes. No client library.
 - Supervised child process: log relay, restart with backoff, graceful stop.
 - Core installer with a tested-version manifest (`internal/coreinstall`): leave `binary` empty and bosun downloads the newest release it has verified, checks its sha256, and installs it under `<data_dir>/cores/<core>/<version>/`. Releases known to break deployments are marked `broken` and only installed when named explicitly. sing-box is built from the upstream tag with the stats API tag (needs a Go toolchain until CI ships binaries).
 - Config validated with `sing-box check` before every start or apply.
 
-Not yet: forwarding chains; local UI; traffic spool on push failure; CI-built sing-box.
+Not yet: panel-managed forwarding (needs Captain), kernel-path forwarding (nftables), local UI, traffic spool on push failure, CI-built sing-box.
 
 Core selection: `cores.order` in the config is the preference; an inbound goes to the first core that supports its protocol, transport and cipher. XHTTP only runs on Xray, HTTP/2 transport and Shadowsocks 2022 multi-user only on sing-box, mieru only on mita. Hysteria2 runs on sing-box (default) or the official server when `hysteria` is listed first.
 
@@ -37,6 +39,8 @@ internal/core/mita/         mieru server (mita) renderer, RPC client, process dr
 internal/core/hysteria/     Hysteria 2 renderer, auth endpoint, stats client, process driver
 internal/panel/       Driver interface
 internal/panel/xboard/      Xboard UniProxy v1 driver
+internal/forward/     TCP/UDP relay with probes and counters
+internal/metrics/     Prometheus text exposition
 internal/agent/       managed-mode loop: pull -> render -> apply, stats -> push
 internal/config/      YAML config
 internal/sysinfo/     host status snapshot
@@ -102,3 +106,12 @@ temp dir automatically when the data dir path is too long.
 `references/` in the workspace contains projects under GPL/AGPL. Nothing from
 them is copied here. The sing-box stats client re-implements the wire format
 from the public proto definition.
+
+## Forwarding chains
+
+A chain such as `client -> entry -> relay -> landing` is one `forwards` rule on
+each hop, pointing at the next hop. The landing node serves the real protocol
+(REALITY, Hysteria2, mieru, ...) and does the per-user accounting; hops in
+front of it relay raw bytes and report bytes, connections and probe results.
+Clients get the landing node's protocol settings with the entry host and port,
+which Xboard's separate `host`/`port` vs `server_port` fields already express.
