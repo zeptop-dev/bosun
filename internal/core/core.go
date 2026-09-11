@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"gitlab.com/zeptop-group/bosun/internal/spec"
+	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
 // Bundle is a rendered set of configuration files for one core.

@@ -9,13 +9,13 @@ import (
 	"log/slog"
 	"time"
 
-	"gitlab.com/zeptop-group/bosun/internal/config"
-	"gitlab.com/zeptop-group/bosun/internal/core"
-	"gitlab.com/zeptop-group/bosun/internal/forward"
-	"gitlab.com/zeptop-group/bosun/internal/metrics"
-	"gitlab.com/zeptop-group/bosun/internal/panel"
-	"gitlab.com/zeptop-group/bosun/internal/spec"
-	"gitlab.com/zeptop-group/bosun/internal/sysinfo"
+	"gitlab.com/boyang-hu/bosun/internal/config"
+	"gitlab.com/boyang-hu/bosun/internal/core"
+	"gitlab.com/boyang-hu/bosun/internal/forward"
+	"gitlab.com/boyang-hu/bosun/internal/metrics"
+	"gitlab.com/boyang-hu/bosun/internal/panel"
+	"gitlab.com/boyang-hu/bosun/internal/sysinfo"
+	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
 // Agent wires one panel driver to a core registry.

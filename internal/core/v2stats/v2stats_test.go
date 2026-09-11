@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protowire"
 
-	"gitlab.com/zeptop-group/bosun/internal/spec"
+	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
 func encodeStat(name string, value int64) []byte {

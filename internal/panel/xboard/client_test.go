@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"gitlab.com/zeptop-group/bosun/internal/spec"
+	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
 const configJSON = `{

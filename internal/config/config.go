@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"gitlab.com/zeptop-group/bosun/internal/spec"
+	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
 // Config is the on-disk configuration.
