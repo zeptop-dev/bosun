@@ -1,0 +1,23 @@
+# bosun configuration
+data_dir: /var/lib/bosun
+log_level: info
+
+cores:
+  singbox:
+    binary: /usr/local/bin/sing-box
+    stats_listen: 127.0.0.1:9101
+    log_level: warn
+
+panel:
+  driver: xboard
+  xboard:
+    url: https://panel.example.com
+    token: change-me        # Xboard admin setting "server_token"
+    node_id: 1
+    node_type: ""           # optional; leave empty to resolve by node_id alone
+
+# Local certificates for inbounds with standard TLS (not needed for REALITY).
+certs:
+  - server_name: node1.example.com
+    cert: /etc/bosun/certs/node1.example.com.crt
+    key: /etc/bosun/certs/node1.example.com.key
