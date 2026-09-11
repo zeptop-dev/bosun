@@ -1,0 +1,12 @@
+# bosun on a node. Host networking is required for the proxy cores.
+services:
+  bosun:
+    image: zeptop/bosun:latest   # or registry.gitlab.com/boyang-hu/bosun:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - bosun-data:/var/lib/bosun
+      # - ./config.yaml:/etc/bosun/config.yaml:ro   # optional override
+      # - /etc/letsencrypt:/etc/letsencrypt:ro      # certificates for TLS inbounds
+volumes:
+  bosun-data:
