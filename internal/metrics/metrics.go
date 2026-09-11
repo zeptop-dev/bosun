@@ -45,6 +45,14 @@ func (r *Registry) Add(s Source) {
 	r.mu.Unlock()
 }
 
+// Reset drops every source; descriptions stay. The agent supervisor calls
+// it before starting a replacement agent.
+func (r *Registry) Reset() {
+	r.mu.Lock()
+	r.sources = nil
+	r.mu.Unlock()
+}
+
 // Render writes the exposition text.
 func (r *Registry) Render() string {
 	r.mu.RLock()

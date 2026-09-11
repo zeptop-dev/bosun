@@ -1,0 +1,55 @@
+{
+  "nav": { "overview": "Overview", "inbounds": "Inbounds", "users": "Users", "forwards": "Forwards", "settings": "Settings", "logs": "Logs" },
+  "login": { "title": "Sign in to bosun", "subtitle": "Node panel", "username": "Username", "password": "Password", "submit": "Sign in", "failed": "Invalid username or password", "hint": "The initial password is in bosun's first-start log; run bosun admin reset-password if it is lost." },
+  "common": { "save": "Save", "cancel": "Cancel", "create": "Create", "edit": "Edit", "delete": "Delete", "confirm": "Confirm", "close": "Close", "copy": "Copy", "copied": "Copied", "yes": "Yes", "no": "No", "enabled": "Enabled", "disabled": "Disabled", "none": "None", "actions": "Actions", "empty": "Nothing here yet", "saved": "Saved", "deleted": "Deleted", "confirmDelete": "Delete? This cannot be undone." },
+  "form": { "required": "Required", "port": "Port must be 1-65535", "json": "Invalid JSON" },
+  "mode": {
+    "title": "Mode", "local": "Standalone", "managed": "Managed", "fixed": "Fixed by config: {{driver}}",
+    "fixedHint": "panel.driver in config.yaml is fixed to {{driver}}; this panel is read-only. Set it to local to switch modes here.",
+    "managedHint": "Captain manages this node. Inbounds, users and forwards are edited in the panel; this UI is read-only.",
+    "adopt": "Hand over to Captain", "adoptHint": "Get a pair code from “Add node” in Captain. The current inbounds, users and forwards are snapshotted first; the panel pushes its own state afterwards.",
+    "adoptConfirm": "Local config is disabled and saved as a snapshot; cores restart on the panel's state. Continue?",
+    "captainUrl": "Captain URL", "pairCode": "Pair code", "adopted": "Handed over to Captain", "detached": "Back in standalone mode",
+    "managedBy": "Managed by", "since": "since",
+    "detach": "Detach from panel", "detachConfirm": "The panel loses control of this node; pairing again is needed to re-adopt. Continue?",
+    "keep": "Keep the panel's config", "keepHint": "The last state the panel pushed becomes the local config; otherwise the pre-takeover snapshot is restored.",
+    "restoreHint": "The snapshot taken before takeover will be restored.", "emptyHint": "No snapshot: the node comes back empty."
+  },
+  "overview": {
+    "title": "Overview", "subtitle": "{{mode}} · state from {{panel}}", "applyError": "Applying config failed", "onlineUsers": "Online users", "ofUsers": "of {{count}} users",
+    "inbounds": "Inbounds", "applied": "{{count}} applied", "traffic": "Total traffic", "uptime": "Uptime", "lastReport": "last stats {{ago}} ago",
+    "host": "Host", "memory": "Memory", "disk": "Disk", "cores": "Cores", "running": "Running", "stopped": "Stopped", "inboundsOn": "{{count}} inbounds",
+    "chart": "Daily traffic", "chartSub": "Last 30 days, upload plus download."
+  },
+  "inbounds": {
+    "title": "Inbounds", "subtitle": "Protocol servers this machine offers. Saving applies immediately, no restart.", "create": "Add inbound", "emptyHint": "No inbounds yet. Click “Add inbound” and pick a recipe.",
+    "tag": "Tag", "remark": "Remark", "remarkHint": "Shown in share links", "protocol": "Protocol", "listen": "Listen", "port": "Port", "core": "Core", "coreAuto": "Auto", "enabled": "Enabled", "security": "Security",
+    "tls": "TLS", "tlsNone": "None", "serverName": "SNI / server name", "serverNameReality": "Site to imitate, e.g. www.apple.com", "serverNameTls": "Needs a certificate for this name under certs in config.yaml",
+    "realityPrivate": "REALITY private key", "realityPublic": "Public key (for clients)", "shortId": "Short ID", "handshakeServer": "Handshake server", "handshakePort": "Handshake port", "generate": "Generate",
+    "transport": "Transport", "path": "Path", "cipher": "Cipher", "serverKey": "Server key", "obfs": "Obfuscation", "obfsPassword": "Obfs password", "upMbps": "Up Mbps", "downMbps": "Down Mbps",
+    "congestion": "Congestion control", "mieruTransport": "mieru transport", "trafficPattern": "Traffic pattern", "trafficPatternHint": "Blank = default",
+    "displayHost": "Public address (optional)", "displayHint": "When the entrance is elsewhere (an IPLC front door forwarding here), share links use this address and port.", "displayPort": "Public port",
+    "showAdvanced": "Advanced: extra JSON fields", "hideAdvanced": "Hide advanced", "extra": "Extra fields", "extraHint": "Merged into spec.Inbound, e.g. {\"multiplex\":{\"enabled\":true}}",
+    "recipe": "Quick setup", "recipeHint": "Pick a recipe to fill the fields and generate keys; edit anything afterwards.",
+    "recipes": { "vlessReality": "VLESS + REALITY", "vlessRealityDesc": "Best TCP stealth; no certificate needed.", "hysteria2": "Hysteria2", "hysteria2Desc": "QUIC, best throughput on lossy lines; needs a certificate.", "mieru": "mieru", "mieruDesc": "Low-signature TCP for IPLC and carrier QoS.", "ss2022": "Shadowsocks 2022", "ss2022Desc": "Lightweight; server key generated for you.", "trojanWs": "Trojan + WS + TLS", "trojanWsDesc": "CDN friendly; needs a certificate.", "anytls": "AnyTLS", "anytlsDesc": "New protocol resisting traffic analysis; needs a certificate." }
+  },
+  "users": {
+    "title": "Users", "subtitle": "Who may use this node. Each user has a subscription link and traffic counters.", "create": "Add user", "emptyHint": "No users yet. Add one and send them the subscription link.",
+    "name": "Name", "usage": "Usage", "expires": "Expires", "expiresHint": "Blank = never", "never": "Never", "online": "Online", "status": "Status", "active": "Active", "blocked": "Stopped", "createdAt": "Created",
+    "autoGenerated": "Blank = generated", "password": "Password", "passwordHint": "Blank = UUID (trojan, hysteria2 …)", "quota": "Quota (GiB)", "quotaHint": "0 = unlimited; access stops when used up",
+    "inbounds": "Restrict to inbounds", "inboundsHint": "Blank = every inbound", "onlineIps": "Online IPs (visible on Xray and Hysteria cores)",
+    "subUrl": "Subscription URL", "subHint": "Importing it gives the client every inbound this user may use.", "links": "Share links", "noLinks": "No usable inbound.",
+    "resetTraffic": "Reset traffic", "rotate": "Rotate subscription URL", "rotateHint": "The old link stops working immediately."
+  },
+  "forwards": {
+    "title": "Forwards", "subtitle": "Relay TCP/UDP from a local port to the next hop, for relay chains.", "create": "Add forward", "emptyHint": "No forward rules.",
+    "tag": "Tag", "tagHint": "Blank = auto", "listen": "Listen", "listenAddr": "Listen address", "port": "Port", "protocol": "Protocol", "target": "Target", "targetHint": "host:port of the next hop", "targetInvalid": "host:port required",
+    "health": "Health", "down": "down", "conns": "Conns active/total", "bytes": "Bytes"
+  },
+  "settings": {
+    "title": "Settings", "subtitle": "Node identity, login and mode.", "node": "Node", "publicHost": "Public address", "publicHostHint": "Server address in share links; blank uses the address this panel was opened on.", "nodeName": "Node name", "nodeNameHint": "Prefix for share link names.",
+    "login": "Login", "newPassword": "New password", "newPasswordHint": "Blank keeps the current one", "confirm": "Confirm password", "mismatch": "Passwords differ",
+    "cores": "Core releases", "coresHint": "bosun only runs tested upstream releases, downloaded on first use.", "version": "Version", "status": "Status", "note": "Note", "installed": "installed"
+  },
+  "logs": { "title": "Logs", "subtitle": "Recent bosun log lines; use journalctl -u bosun for everything.", "live": "Auto refresh" }
+}

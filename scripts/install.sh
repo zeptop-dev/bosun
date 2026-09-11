@@ -1,17 +1,20 @@
 #!/bin/sh
 # bosun installer for Linux (systemd). Usage:
-#   sh install.sh --captain https://captain.example.com --pair ABCD-EFGH [--version v0.3.1]
+#   sh install.sh                                   standalone: web panel on :2053
+#   sh install.sh --captain https://captain.example.com --pair ABCD-EFGH
+#   sh install.sh --version v0.4.0 [--web-listen 127.0.0.1:2053]
 # Re-running upgrades the binary and keeps /etc/bosun/config.yaml.
 set -eu
 
 PROJECT="boyang-hu%2Fbosun"
 API="https://gitlab.com/api/v4/projects/$PROJECT"
-CAPTAIN="" PAIR="" VERSION=""
+CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN=":2053"
 while [ $# -gt 0 ]; do
   case "$1" in
     --captain) CAPTAIN="$2"; shift 2 ;;
     --pair) PAIR="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
+    --web-listen) WEB_LISTEN="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -41,7 +44,22 @@ install -m 0755 "$TMP/bosun" /usr/local/bin/bosun
 
 mkdir -p /etc/bosun /var/lib/bosun
 if [ ! -f /etc/bosun/config.yaml ]; then
-  [ -n "$CAPTAIN" ] && [ -n "$PAIR" ] || { echo "--captain and --pair are required on first install" >&2; exit 1; }
+  if [ -n "$CAPTAIN" ] && [ -z "$PAIR" ] || [ -z "$CAPTAIN" ] && [ -n "$PAIR" ]; then
+    echo "--captain and --pair go together" >&2; exit 1
+  fi
+  if [ -n "$CAPTAIN" ]; then
+    PANEL="panel:
+  driver: captain
+  captain:
+    url: $CAPTAIN
+    pair_code: $PAIR"
+  else
+    PANEL="panel:
+  driver: local
+
+web:
+  listen: \"$WEB_LISTEN\""
+  fi
   cat > /etc/bosun/config.yaml <<CFG
 data_dir: /var/lib/bosun
 log_level: info
@@ -54,11 +72,7 @@ cores:
   mita: { log_level: INFO }
   hysteria: { auth_listen: 127.0.0.1:9103, stats_listen: 127.0.0.1:9104, log_level: warn }
 
-panel:
-  driver: captain
-  captain:
-    url: $CAPTAIN
-    pair_code: $PAIR
+$PANEL
 CFG
   chmod 0600 /etc/bosun/config.yaml
   echo "wrote /etc/bosun/config.yaml"
@@ -71,3 +85,10 @@ systemctl restart bosun
 sleep 2
 systemctl --no-pager --lines=5 status bosun || true
 echo "bosun $VERSION installed. Logs: journalctl -u bosun -f"
+if [ -z "$CAPTAIN" ]; then
+  echo
+  echo "web panel: http://<this-server>${WEB_LISTEN}/"
+  echo "login:"
+  journalctl -u bosun --no-pager -o cat 2>/dev/null | grep -o 'username=[^ ]* password=[^ ]*' | tail -1 || true
+  echo "(lost it? run: bosun admin reset-password)"
+fi

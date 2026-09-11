@@ -1,9 +1,13 @@
 BIN := bin/bosun
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test vet tidy clean linux
+.PHONY: build web test vet tidy clean linux
 
-build:
+# The web panel is embedded; build it first (needs pnpm) or fetch a release.
+web:
+	cd web/ui && pnpm install --frozen-lockfile && pnpm build
+
+build: web
 	go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(BIN) ./cmd/bosun
 
 linux:

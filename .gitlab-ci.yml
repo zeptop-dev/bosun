@@ -21,8 +21,21 @@ default:
   before_script:
     - export GOMODCACHE="$CI_PROJECT_DIR/.gocache/mod" GOCACHE="$CI_PROJECT_DIR/.gocache/build"
 
+build:web:
+  stage: test
+  image: node:24
+  cache: { key: pnpm, paths: [web/ui/node_modules/] }
+  before_script: []
+  script:
+    - corepack enable && corepack prepare pnpm@9 --activate
+    - cd web/ui && pnpm install --frozen-lockfile && pnpm build
+  artifacts:
+    paths: [web/ui/dist/]
+    expire_in: 1 week
+
 test:
   stage: test
+  needs: [build:web]
   script:
     - git ls-files "*.go" | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
     - go vet ./...
@@ -30,6 +43,7 @@ test:
 
 build:bosun:
   stage: build
+  needs: [build:web, test]
   script:
     - make linux VERSION="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
     - cd bin && sha256sum bosun-linux-* > SHA256SUMS && cat SHA256SUMS

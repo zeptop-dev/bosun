@@ -121,8 +121,10 @@ func (c *Client) do(ctx context.Context, method, path string, body any, headers 
 	return resp.StatusCode, out, resp.Header, err
 }
 
-// pair redeems the pairing code and persists the token.
-func (c *Client) pair(ctx context.Context) error {
+// Pair redeems the pairing code and persists the token. The agent calls it
+// lazily on the first fetch; the local UI calls it up front so a bad code is
+// reported before the node switches modes.
+func (c *Client) Pair(ctx context.Context) error {
 	host, _ := os.Hostname()
 	code, body, _, err := c.do(ctx, http.MethodPost, "/api/agent/pair", agentproto.PairRequest{
 		Code: c.cfg.PairCode, Hostname: host, Version: c.cfg.Version, Platform: runtime.GOOS + "/" + runtime.GOARCH,
@@ -156,7 +158,7 @@ func (c *Client) fetch(ctx context.Context) (bool, error) {
 	tok, etag := c.token, c.etag
 	c.mu.Unlock()
 	if tok == "" {
-		if err := c.pair(ctx); err != nil {
+		if err := c.Pair(ctx); err != nil {
 			return false, err
 		}
 	}
@@ -185,6 +187,17 @@ func (c *Client) fetch(ctx context.Context) (bool, error) {
 	c.state, c.etag = &st, h.Get("ETag")
 	c.mu.Unlock()
 	return true, nil
+}
+
+// State returns the last state fetched from the panel, or nil.
+func (c *Client) State() *agentproto.State {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state == nil {
+		return nil
+	}
+	st := *c.state
+	return &st
 }
 
 // Node fetches state and returns the node when its revision changed.
