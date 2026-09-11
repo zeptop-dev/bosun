@@ -25,7 +25,11 @@ cores:
     log_level: warn
 
 panel:
-  driver: xboard
+  driver: captain            # captain | xboard
+  captain:
+    url: https://captain.example.com
+    pair_code: ABCD-EFGH     # from "add node" in Captain; used once, then the token is stored in data_dir
+  # driver: xboard
   xboard:
     url: https://panel.example.com
     token: change-me        # Xboard admin setting "server_token"

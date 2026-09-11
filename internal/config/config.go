@@ -34,8 +34,9 @@ type Config struct {
 	} `yaml:"cores"`
 
 	Panel struct {
-		Driver string       `yaml:"driver"`
-		Xboard *XboardPanel `yaml:"xboard"`
+		Driver  string        `yaml:"driver"` // "captain" or "xboard"
+		Xboard  *XboardPanel  `yaml:"xboard"`
+		Captain *CaptainPanel `yaml:"captain"`
 	} `yaml:"panel"`
 
 	// Certs maps server names to local certificate files for TLSStandard inbounds.
@@ -118,6 +119,14 @@ type MitaCore struct {
 	LogLevel string `yaml:"log_level"`
 }
 
+// CaptainPanel configures the Captain driver.
+type CaptainPanel struct {
+	URL       string        `yaml:"url"`
+	PairCode  string        `yaml:"pair_code"`  // one-time; ignored once a token is stored
+	TokenFile string        `yaml:"token_file"` // default <data_dir>/captain.token
+	Timeout   time.Duration `yaml:"timeout"`
+}
+
 // XboardPanel configures the Xboard driver.
 type XboardPanel struct {
 	URL      string        `yaml:"url"`
@@ -160,6 +169,14 @@ func Load(path string) (*Config, error) {
 	}
 	if c.Panel.Driver == "xboard" && c.Panel.Xboard == nil {
 		return nil, fmt.Errorf("config: panel.xboard is required when driver is xboard")
+	}
+	if c.Panel.Driver == "captain" {
+		if c.Panel.Captain == nil || c.Panel.Captain.URL == "" {
+			return nil, fmt.Errorf("config: panel.captain.url is required when driver is captain")
+		}
+		if c.Panel.Captain.TokenFile == "" {
+			c.Panel.Captain.TokenFile = filepath.Join(c.DataDir, "captain.token")
+		}
 	}
 	for _, name := range c.Cores.Order {
 		switch name {

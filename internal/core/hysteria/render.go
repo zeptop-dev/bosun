@@ -70,8 +70,9 @@ func render(inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]by
 		return nil, nil, err
 	}
 	sum := sha256.Sum256(out)
-	st := &state{key: hex.EncodeToString(sum[:8]), users: make(map[string]spec.User, len(users))}
-	for _, u := range users {
+	ibUsers := ib.EffectiveUsers(users)
+	st := &state{key: hex.EncodeToString(sum[:8]), users: make(map[string]spec.User, len(ibUsers))}
+	for _, u := range ibUsers {
 		st.users[u.Password] = u
 	}
 	return out, st, nil

@@ -130,3 +130,30 @@ func TestRenderOutboundChainAndRoutes(t *testing.T) {
 		t.Fatalf("rule1: %v", rules[1])
 	}
 }
+
+func TestRenderScopedUsers(t *testing.T) {
+	node := &spec.Node{Inbounds: []spec.Inbound{
+		{Tag: "all", Protocol: spec.VMess, Port: 1},
+		{Tag: "vip", Protocol: spec.VMess, Port: 2, ScopedUsers: true, Users: users[:1]},
+		{Tag: "nobody", Protocol: spec.VMess, Port: 3, ScopedUsers: true},
+	}}
+	b, err := render(node, node.Inbounds, users, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := decode(t, b)
+	ins := cfg["inbounds"].([]any)
+	if n := len(ins[0].(map[string]any)["users"].([]any)); n != 2 {
+		t.Fatalf("all: %d users", n)
+	}
+	if n := len(ins[1].(map[string]any)["users"].([]any)); n != 1 {
+		t.Fatalf("vip: %d users", n)
+	}
+	if n := len(ins[2].(map[string]any)["users"].([]any)); n != 0 {
+		t.Fatalf("nobody: %d users", n)
+	}
+	stats := cfg["experimental"].(map[string]any)["v2ray_api"].(map[string]any)["stats"].(map[string]any)
+	if len(stats["users"].([]any)) != 2 {
+		t.Fatalf("stats users must be the union: %v", stats["users"])
+	}
+}

@@ -24,6 +24,7 @@ import (
 	"gitlab.com/boyang-hu/bosun/internal/coreinstall"
 	"gitlab.com/boyang-hu/bosun/internal/metrics"
 	"gitlab.com/boyang-hu/bosun/internal/panel"
+	"gitlab.com/boyang-hu/bosun/internal/panel/captain"
 	"gitlab.com/boyang-hu/bosun/internal/panel/xboard"
 )
 
@@ -81,6 +82,9 @@ func setup(args []string) (*config.Config, *slog.Logger, panel.Driver, *core.Reg
 
 	var driver panel.Driver
 	switch cfg.Panel.Driver {
+	case "captain":
+		cp := cfg.Panel.Captain
+		driver, err = captain.New(captain.Config{URL: cp.URL, PairCode: cp.PairCode, TokenFile: cp.TokenFile, Version: version, Timeout: cp.Timeout}, log)
 	case "xboard":
 		x := cfg.Panel.Xboard
 		driver, err = xboard.New(xboard.Config{URL: x.URL, Token: x.Token, NodeID: x.NodeID, NodeType: x.NodeType, Timeout: x.Timeout}, log)

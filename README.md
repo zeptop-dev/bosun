@@ -8,7 +8,8 @@ first cut is managed mode only.
 
 Working vertical slice, verified end to end against sing-box 1.14.0:
 
-- Panel driver for Xboard's UniProxy v1 API (config, users, traffic push, status), with ETag caching.
+- Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
+- Per-inbound user lists (`spec.Inbound.ScopedUsers`): an inbound restricted to a user group only provisions that group; the mita adapter runs one instance per inbound because mita users are global to a process.
 - sing-box adapter: renders VLESS, VMess, Trojan, Shadowsocks (incl. 2022), Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive; TLS, REALITY, ws/grpc/httpupgrade/http transports, multiplex, custom outbounds with chaining, route rules.
 - Xray adapter: VLESS, VMess, Trojan, Shadowsocks (AEAD), SOCKS, HTTP over raw/ws/grpc/httpupgrade/xhttp, TLS and REALITY; **hot user add/remove** on VLESS/VMess/Trojan through HandlerService, restart otherwise; per-user stats via StatsService; config validated with `xray run -test`. Verified e2e: REALITY traffic, hot add and hot remove, per-user push.
 - Hysteria adapter (official Hysteria 2 server): users live in bosun, not in the config. Hysteria calls bosun's HTTP auth endpoint per connection, so adds are instant and removals are enforced with a kick through the traffic stats API; only listener changes restart the process. Per-user stats from `/traffic?clear=1`. One hysteria2 inbound per node with this core; sing-box serves several. Verified e2e with the official client.

@@ -5,6 +5,7 @@ package panel
 import (
 	"context"
 
+	"gitlab.com/boyang-hu/bosun/pkg/agentproto"
 	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
@@ -25,4 +26,12 @@ type Driver interface {
 // rules. Drivers without it (Xboard) leave forwards to the local config.
 type ForwardSource interface {
 	Forwards(ctx context.Context) (forwards []spec.Forward, changed bool, err error)
+}
+
+// Reporter is implemented by drivers that accept one combined report per
+// push interval (traffic, host status, forward probes, core state). The
+// agent prefers it over PushTraffic/PushStatus. stateChanged asks the agent
+// to pull immediately.
+type Reporter interface {
+	Report(ctx context.Context, rep agentproto.Report) (stateChanged bool, err error)
 }
