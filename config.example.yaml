@@ -3,10 +3,15 @@ data_dir: /var/lib/bosun
 log_level: info
 
 cores:
+  order: [singbox, xray, mita]   # preference when several cores can serve an inbound
   singbox:
     binary: /usr/local/bin/sing-box
     stats_listen: 127.0.0.1:9101
     log_level: warn
+  xray:                      # optional; the only core for xhttp, hot user add/remove on vless/vmess/trojan
+    binary: /usr/local/bin/xray
+    api_listen: 127.0.0.1:9102
+    log_level: warning
   mita:                      # official mieru server, for mieru nodes
     binary: /usr/local/bin/mita
     log_level: INFO

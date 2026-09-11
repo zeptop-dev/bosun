@@ -51,10 +51,19 @@ type Reality struct {
 
 // Transport is the stream transport under VLESS/VMess/Trojan.
 type Transport struct {
-	Type        string // "tcp", "ws", "grpc", "httpupgrade", "http"
+	Type        string // "tcp", "ws", "grpc", "httpupgrade", "http", "xhttp"
 	Path        string
 	Host        string
 	ServiceName string
+	Mode        string // xhttp: "auto", "packet-up", "stream-up", "stream-one"
+}
+
+// TransportType returns the transport name, "tcp" when unset.
+func (i Inbound) TransportType() string {
+	if i.Transport == nil || i.Transport.Type == "" {
+		return "tcp"
+	}
+	return i.Transport.Type
 }
 
 // Multiplex enables sing-mux style multiplexing on TCP-based protocols.

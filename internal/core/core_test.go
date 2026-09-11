@@ -10,10 +10,13 @@ import (
 type fakeCore struct {
 	name   string
 	protos []spec.Protocol
+	trans  []string
 }
 
-func (f fakeCore) Name() string                                                    { return f.name }
-func (f fakeCore) Capabilities() Capabilities                                      { return Capabilities{Protocols: f.protos} }
+func (f fakeCore) Name() string { return f.name }
+func (f fakeCore) Capabilities() Capabilities {
+	return Capabilities{Protocols: f.protos, Transports: f.trans}
+}
 func (f fakeCore) Render(*spec.Node, []spec.Inbound, []spec.User) (*Bundle, error) { return nil, nil }
 func (f fakeCore) Start(context.Context, *Bundle) error                            { return nil }
 func (f fakeCore) Apply(context.Context, *Bundle) error                            { return nil }
@@ -23,8 +26,8 @@ func (f fakeCore) Stats(context.Context, bool) (map[string]spec.Traffic, error) 
 
 func TestAssign(t *testing.T) {
 	r := NewRegistry()
-	r.Register(fakeCore{"singbox", []spec.Protocol{spec.VLESS, spec.Hysteria2}})
-	r.Register(fakeCore{"xray", []spec.Protocol{spec.VLESS}})
+	r.Register(fakeCore{"singbox", []spec.Protocol{spec.VLESS, spec.Hysteria2}, []string{"ws"}})
+	r.Register(fakeCore{"xray", []spec.Protocol{spec.VLESS}, []string{"ws", "xhttp"}})
 
 	got, err := r.Assign([]spec.Inbound{
 		{Tag: "a", Protocol: spec.VLESS},
@@ -43,5 +46,12 @@ func TestAssign(t *testing.T) {
 	}
 	if _, err := r.Assign([]spec.Inbound{{Tag: "e", Protocol: spec.Hysteria2, Core: "xray"}}); err == nil {
 		t.Fatal("expected error for explicit core lacking protocol")
+	}
+	got, err = r.Assign([]spec.Inbound{{Tag: "f", Protocol: spec.VLESS, Transport: &spec.Transport{Type: "xhttp"}}})
+	if err != nil || len(got["xray"]) != 1 {
+		t.Fatalf("xhttp should land on xray: %v %v", got, err)
+	}
+	if _, err := r.Assign([]spec.Inbound{{Tag: "g", Protocol: spec.VLESS, Transport: &spec.Transport{Type: "grpc"}}}); err == nil {
+		t.Fatal("expected error for unsupported transport")
 	}
 }
