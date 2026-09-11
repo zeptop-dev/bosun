@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc"
 
 	"gitlab.com/zeptop-group/bosun/internal/core"
+	"gitlab.com/zeptop-group/bosun/internal/core/grpcraw"
 	"gitlab.com/zeptop-group/bosun/internal/core/subprocess"
 	"gitlab.com/zeptop-group/bosun/internal/spec"
 )
@@ -169,7 +170,7 @@ func (c *Core) Running() bool {
 func (c *Core) Stats(ctx context.Context, reset bool) (map[string]spec.Traffic, error) {
 	c.mu.Lock()
 	if c.conn == nil {
-		conn, err := dialStats(c.opt.StatsListen)
+		conn, err := grpcraw.Dial(c.opt.StatsListen)
 		if err != nil {
 			c.mu.Unlock()
 			return nil, err

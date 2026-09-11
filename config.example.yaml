@@ -7,6 +7,9 @@ cores:
     binary: /usr/local/bin/sing-box
     stats_listen: 127.0.0.1:9101
     log_level: warn
+  mita:                      # official mieru server, for mieru nodes
+    binary: /usr/local/bin/mita
+    log_level: INFO
 
 panel:
   driver: xboard

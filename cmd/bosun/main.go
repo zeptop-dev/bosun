@@ -15,6 +15,7 @@ import (
 	"gitlab.com/zeptop-group/bosun/internal/agent"
 	"gitlab.com/zeptop-group/bosun/internal/config"
 	"gitlab.com/zeptop-group/bosun/internal/core"
+	"gitlab.com/zeptop-group/bosun/internal/core/mita"
 	"gitlab.com/zeptop-group/bosun/internal/core/singbox"
 	"gitlab.com/zeptop-group/bosun/internal/panel"
 	"gitlab.com/zeptop-group/bosun/internal/panel/xboard"
@@ -87,6 +88,17 @@ func setup(args []string) (*config.Config, *slog.Logger, panel.Driver, *core.Reg
 			WorkDir:     filepath.Join(cfg.DataDir, "singbox"),
 			StatsListen: sb.StatsListen,
 			LogLevel:    sb.LogLevel,
+		}, log)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		reg.Register(c)
+	}
+	if mt := cfg.Cores.Mita; mt != nil {
+		c, err := mita.New(mita.Options{
+			Binary:   mt.Binary,
+			WorkDir:  filepath.Join(cfg.DataDir, "mita"),
+			LogLevel: mt.LogLevel,
 		}, log)
 		if err != nil {
 			return nil, nil, nil, nil, err

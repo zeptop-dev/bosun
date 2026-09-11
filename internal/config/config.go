@@ -18,6 +18,7 @@ type Config struct {
 
 	Cores struct {
 		Singbox *SingboxCore `yaml:"singbox"`
+		Mita    *MitaCore    `yaml:"mita"`
 	} `yaml:"cores"`
 
 	Panel struct {
@@ -34,6 +35,12 @@ type SingboxCore struct {
 	Binary      string `yaml:"binary"`
 	StatsListen string `yaml:"stats_listen"`
 	LogLevel    string `yaml:"log_level"`
+}
+
+// MitaCore enables the official mieru server adapter.
+type MitaCore struct {
+	Binary   string `yaml:"binary"`
+	LogLevel string `yaml:"log_level"`
 }
 
 // XboardPanel configures the Xboard driver.
@@ -70,8 +77,8 @@ func Load(path string) (*Config, error) {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
-	if c.Cores.Singbox == nil {
-		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox)")
+	if c.Cores.Singbox == nil && c.Cores.Mita == nil {
+		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.mita)")
 	}
 	if c.Panel.Driver == "" {
 		return nil, fmt.Errorf("config: panel.driver is required")

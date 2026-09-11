@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -31,6 +32,7 @@ type Supervisor struct {
 	path string
 	args []string
 	dir  string
+	env  []string
 	log  *slog.Logger
 
 	mu       sync.Mutex
@@ -43,6 +45,12 @@ type Supervisor struct {
 // New prepares a supervisor; nothing runs until Start.
 func New(name, path string, args []string, dir string, log *slog.Logger) *Supervisor {
 	return &Supervisor{name: name, path: path, args: args, dir: dir, log: log.With("proc", name), backoff: minBackoff}
+}
+
+// WithEnv adds environment variables (KEY=VALUE) on top of the parent's.
+func (s *Supervisor) WithEnv(env ...string) *Supervisor {
+	s.env = append(s.env, env...)
+	return s
 }
 
 // Start launches the process. It returns once the process has been spawned;
@@ -61,6 +69,9 @@ func (s *Supervisor) Start(ctx context.Context) error {
 func (s *Supervisor) launch(ctx context.Context) error {
 	cmd := exec.Command(s.path, s.args...)
 	cmd.Dir = s.dir
+	if len(s.env) > 0 {
+		cmd.Env = append(os.Environ(), s.env...)
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
