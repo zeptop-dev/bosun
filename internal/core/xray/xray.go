@@ -173,46 +173,57 @@ func (c *Core) hotCapable(st *state) bool {
 	return true
 }
 
-// hotUpdate diffs users and applies adds/removes on every inbound.
+// hotUpdate diffs each inbound's users and applies adds/removes.
 func (c *Core) hotUpdate(ctx context.Context, prev, next *state) error {
 	conn, err := c.dial()
 	if err != nil {
 		return err
 	}
 	var added, removed int
-	for name, u := range next.users {
-		if old, ok := prev.users[name]; ok && old.UUID == u.UUID && old.Password == u.Password {
-			continue
-		}
-		for tag, proto := range next.inbounds {
-			rctx, cancel := context.WithTimeout(ctx, rpcTimeout)
-			if _, existed := prev.users[name]; existed {
-				_ = removeUser(rctx, conn, tag, name) // credentials changed: replace
-			}
-			err := addUser(rctx, conn, tag, proto, u, next.flows[tag])
-			cancel()
-			if err != nil {
-				return fmt.Errorf("add %s to %s: %w", name, tag, err)
-			}
-		}
-		added++
-	}
-	for name := range prev.users {
-		if _, keep := next.users[name]; keep {
-			continue
-		}
-		for tag := range next.inbounds {
+	for tag, proto := range next.inbounds {
+		adds, removes := diffUsers(prev.users[tag], next.users[tag])
+		for _, name := range removes {
 			rctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 			err := removeUser(rctx, conn, tag, name)
 			cancel()
 			if err != nil {
 				return fmt.Errorf("remove %s from %s: %w", name, tag, err)
 			}
+			removed++
 		}
-		removed++
+		for _, u := range adds {
+			rctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+			err := addUser(rctx, conn, tag, proto, u, next.flows[tag])
+			cancel()
+			if err != nil {
+				return fmt.Errorf("add %s to %s: %w", u.Name, tag, err)
+			}
+			added++
+		}
 	}
 	c.log.Info("users hot-updated", "added", added, "removed", removed)
 	return nil
+}
+
+// diffUsers returns users to add (new or with changed credentials, which
+// are also listed in removes first) and names to remove.
+func diffUsers(prev, next map[string]spec.User) (adds []spec.User, removes []string) {
+	for name, u := range next {
+		old, ok := prev[name]
+		if ok && old.UUID == u.UUID && old.Password == u.Password {
+			continue
+		}
+		if ok {
+			removes = append(removes, name)
+		}
+		adds = append(adds, u)
+	}
+	for name := range prev {
+		if _, keep := next[name]; !keep {
+			removes = append(removes, name)
+		}
+	}
+	return adds, removes
 }
 
 func (c *Core) Stop(ctx context.Context) error {

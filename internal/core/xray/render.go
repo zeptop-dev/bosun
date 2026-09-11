@@ -21,10 +21,10 @@ type renderOptions struct {
 // state is carried from Render to Start/Apply so Apply can decide between a
 // hot user update and a restart.
 type state struct {
-	inboundsKey string                   // hash of inbounds without users
-	users       map[string]spec.User     // by name
-	inbounds    map[string]spec.Protocol // tag -> protocol
-	flows       map[string]string        // tag -> vless flow
+	inboundsKey string                          // hash of inbounds without users
+	users       map[string]map[string]spec.User // tag -> user name -> user
+	inbounds    map[string]spec.Protocol        // tag -> protocol
+	flows       map[string]string               // tag -> vless flow
 }
 
 // render produces an Xray JSON configuration for the given inbounds.
@@ -33,24 +33,27 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		return nil, nil, fmt.Errorf("xray: nothing to render")
 	}
 	st := &state{
-		users:    make(map[string]spec.User, len(users)),
+		users:    make(map[string]map[string]spec.User, len(inbounds)),
 		inbounds: make(map[string]spec.Protocol, len(inbounds)),
 		flows:    map[string]string{},
-	}
-	for _, u := range users {
-		st.users[u.Name] = u
 	}
 
 	ins := make([]any, 0, len(inbounds))
 	keyParts := make([]string, 0, len(inbounds))
 	for _, ib := range inbounds {
-		in, err := renderInbound(ib, users)
+		ibUsers := ib.EffectiveUsers(users)
+		in, err := renderInbound(ib, ibUsers)
 		if err != nil {
 			return nil, nil, err
 		}
 		ins = append(ins, in)
 		st.inbounds[ib.Tag] = ib.Protocol
 		st.flows[ib.Tag] = ib.Flow
+		byName := make(map[string]spec.User, len(ibUsers))
+		for _, u := range ibUsers {
+			byName[u.Name] = u
+		}
+		st.users[ib.Tag] = byName
 		// Key excludes users: same key means only users may have changed.
 		noUsers, err := renderInbound(ib, nil)
 		if err != nil {

@@ -189,3 +189,30 @@ func parse(t *testing.T, b []byte) map[protowire.Number][]byte {
 	}
 	return out
 }
+
+func TestDiffUsers(t *testing.T) {
+	prev := map[string]spec.User{"a": {Name: "a", UUID: "1"}, "b": {Name: "b", UUID: "2"}}
+	next := map[string]spec.User{"a": {Name: "a", UUID: "1"}, "b": {Name: "b", UUID: "changed"}, "c": {Name: "c", UUID: "3"}}
+	adds, removes := diffUsers(prev, next)
+	if len(adds) != 2 || len(removes) != 1 || removes[0] != "b" {
+		t.Fatalf("adds=%v removes=%v", adds, removes)
+	}
+	adds, removes = diffUsers(next, map[string]spec.User{})
+	if len(adds) != 0 || len(removes) != 3 {
+		t.Fatalf("clear: adds=%v removes=%v", adds, removes)
+	}
+}
+
+func TestRenderScopedUsers(t *testing.T) {
+	node := &spec.Node{Inbounds: []spec.Inbound{
+		{Tag: "all", Protocol: spec.VMess, Port: 1},
+		{Tag: "vip", Protocol: spec.VMess, Port: 2, ScopedUsers: true, Users: users[:1]},
+	}}
+	_, st, err := render(node, node.Inbounds, users, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.users["all"]) != 2 || len(st.users["vip"]) != 1 {
+		t.Fatalf("scoped users: %+v", st.users)
+	}
+}

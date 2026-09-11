@@ -20,14 +20,19 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	if len(inbounds) == 0 {
 		return nil, fmt.Errorf("singbox: nothing to render")
 	}
-	names := make([]string, 0, len(users))
-	for _, u := range users {
-		names = append(names, u.Name)
-	}
-
+	// Stats counters are per user name across all inbounds.
+	seen := map[string]bool{}
+	names := []string{}
 	ins := make([]any, 0, len(inbounds))
 	for _, ib := range inbounds {
-		in, err := renderInbound(ib, users)
+		ibUsers := ib.EffectiveUsers(users)
+		for _, u := range ibUsers {
+			if !seen[u.Name] {
+				seen[u.Name] = true
+				names = append(names, u.Name)
+			}
+		}
+		in, err := renderInbound(ib, ibUsers)
 		if err != nil {
 			return nil, err
 		}

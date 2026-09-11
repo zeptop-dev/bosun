@@ -90,21 +90,24 @@ func TestDecodeUserCounters(t *testing.T) {
 	}
 }
 
-func TestStatsDeltas(t *testing.T) {
-	c := &Core{last: map[string]spec.Traffic{"u": {Up: 100, Down: 100}}}
-	// Simulate the delta logic used by Stats without a live RPC.
-	cur := map[string]spec.Traffic{"u": {Up: 150, Down: 90}} // Down went backwards: restart
-	out := map[string]spec.Traffic{}
-	for name, now := range cur {
-		prev := c.last[name]
-		d := spec.Traffic{Up: now.Up - prev.Up, Down: now.Down - prev.Down}
-		if d.Down < 0 {
-			d.Down = now.Down
-		}
-		out[name] = d
+func TestRenderPerInbound(t *testing.T) {
+	c := &Core{opt: Options{LogLevel: "INFO"}}
+	users := []spec.User{{Name: "a", Password: "a"}, {Name: "b", Password: "b"}}
+	b, err := c.Render(nil, []spec.Inbound{
+		{Tag: "shared", Protocol: spec.Mieru, Port: 1000},
+		{Tag: "vip", Protocol: spec.Mieru, Port: 1001, ScopedUsers: true, Users: users[:1]},
+	}, users)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if out["u"] != (spec.Traffic{Up: 50, Down: 90}) {
-		t.Fatalf("delta: %+v", out)
+	if len(b.Files) != 2 || b.Meta["shared"] == "" || b.Meta["vip"] == "" {
+		t.Fatalf("bundle: %+v", b)
+	}
+	var shared, vip map[string]any
+	_ = json.Unmarshal(b.Files["shared/server_config.json"], &shared)
+	_ = json.Unmarshal(b.Files["vip/server_config.json"], &vip)
+	if len(shared["users"].([]any)) != 2 || len(vip["users"].([]any)) != 1 {
+		t.Fatalf("users: shared=%v vip=%v", shared["users"], vip["users"])
 	}
 }
 

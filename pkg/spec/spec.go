@@ -103,6 +103,21 @@ type Inbound struct {
 	PaddingScheme     []string `json:"padding_scheme,omitempty"`     // anytls
 	MieruTransport    string   `json:"mieru_transport,omitempty"`    // mieru: "TCP" or "UDP"
 	TrafficPattern    string   `json:"traffic_pattern,omitempty"`    // mieru
+
+	// Users restricts who may use this inbound. When ScopedUsers is false the
+	// node-level user list applies; when true only Users are provisioned,
+	// even if that is nobody.
+	ScopedUsers bool   `json:"scoped_users,omitempty"`
+	Users       []User `json:"users,omitempty"`
+}
+
+// EffectiveUsers returns the users to provision on this inbound given the
+// node-level list.
+func (i Inbound) EffectiveUsers(nodeUsers []User) []User {
+	if i.ScopedUsers {
+		return i.Users
+	}
+	return nodeUsers
 }
 
 // User is a subscriber allowed on every inbound of the node.

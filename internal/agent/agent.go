@@ -15,6 +15,7 @@ import (
 	"gitlab.com/boyang-hu/bosun/internal/metrics"
 	"gitlab.com/boyang-hu/bosun/internal/panel"
 	"gitlab.com/boyang-hu/bosun/internal/sysinfo"
+	"gitlab.com/boyang-hu/bosun/pkg/agentproto"
 	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
@@ -85,7 +86,20 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.log.Info("intervals updated", "pull", iv.Pull, "push", iv.Push)
 			}
 		case <-push.C:
-			a.report(ctx)
+			if a.report(ctx) {
+				// The panel says newer state exists: pull now instead of
+				// waiting for the next tick.
+				if changed, err := a.pull(ctx); err != nil {
+					a.log.Warn("pull failed", "err", err)
+				} else if changed {
+					if err := a.apply(ctx); err != nil {
+						a.log.Error("apply failed", "err", err)
+					}
+					if err := a.applyForwards(ctx); err != nil {
+						a.log.Error("forwards", "err", err)
+					}
+				}
+			}
 		}
 	}
 }
@@ -130,14 +144,29 @@ func (a *Agent) pull(ctx context.Context) (bool, error) {
 	}
 	if usersChanged {
 		a.users = users
-		a.userIDs = make(map[string]int64, len(users))
-		for _, u := range users {
-			a.userIDs[u.Name] = u.ID
-		}
 		changed = true
 		a.log.Info("user list updated", "users", len(users))
 	}
+	if changed {
+		a.rebuildUserIndex()
+	}
 	return changed, nil
+}
+
+// rebuildUserIndex maps stats keys (user names) to panel IDs across the
+// node-level list and every inbound's scoped list.
+func (a *Agent) rebuildUserIndex() {
+	a.userIDs = make(map[string]int64, len(a.users))
+	for _, u := range a.users {
+		a.userIDs[u.Name] = u.ID
+	}
+	if a.node != nil {
+		for _, ib := range a.node.Inbounds {
+			for _, u := range ib.Users {
+				a.userIDs[u.Name] = u.ID
+			}
+		}
+	}
 }
 
 // ResolveCerts fills certificate paths for standard-TLS inbounds from local
@@ -194,9 +223,9 @@ func (a *Agent) apply(ctx context.Context) error {
 	return nil
 }
 
-// report collects per-user traffic from every running core and pushes it,
-// then pushes a host status snapshot.
-func (a *Agent) report(ctx context.Context) {
+// report collects per-user traffic from every running core and pushes it
+// with a host snapshot. It returns true when the panel signals newer state.
+func (a *Agent) report(ctx context.Context) bool {
 	totals := map[int64]*spec.UserTraffic{}
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
@@ -225,22 +254,50 @@ func (a *Agent) report(ctx context.Context) {
 			ut.Down += t.Down
 		}
 	}
-	if len(totals) > 0 {
-		list := make([]spec.UserTraffic, 0, len(totals))
-		for _, t := range totals {
-			list = append(list, *t)
+	list := make([]spec.UserTraffic, 0, len(totals))
+	for _, t := range totals {
+		list = append(list, *t)
+	}
+	host := sysinfo.Snapshot(ctx)
+
+	if rep, ok := a.driver.(panel.Reporter); ok {
+		changed, err := rep.Report(ctx, a.buildReport(list, host))
+		if err != nil {
+			// Counters were already reset; this delta is lost. A persistent
+			// spool is a later improvement.
+			a.log.Error("report failed", "users", len(list), "err", err)
+			return false
 		}
+		a.log.Debug("report sent", "users", len(list), "state_changed", changed)
+		return changed
+	}
+	if len(list) > 0 {
 		if err := a.driver.PushTraffic(ctx, list); err != nil {
-			// Counters were already reset; this delta is lost. Acceptable for
-			// the first cut, a persistent spool is a later improvement.
 			a.log.Error("push traffic failed", "users", len(list), "err", err)
 		} else {
 			a.log.Debug("traffic pushed", "users", len(list))
 		}
 	}
-	if err := a.driver.PushStatus(ctx, sysinfo.Snapshot(ctx)); err != nil {
+	if err := a.driver.PushStatus(ctx, host); err != nil {
 		a.log.Warn("push status failed", "err", err)
 	}
+	return false
+}
+
+// buildReport assembles the combined report for Reporter drivers.
+func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) agentproto.Report {
+	rep := agentproto.Report{Traffic: traffic, Host: host, Cores: map[string]agentproto.CoreStatus{}}
+	for _, name := range a.reg.Names() {
+		c, _ := a.reg.Get(name)
+		rep.Cores[name] = agentproto.CoreStatus{Running: c.Running()}
+	}
+	for _, s := range a.fwd.Snapshot() {
+		rep.Forwards = append(rep.Forwards, agentproto.ForwardStatus{
+			Tag: s.Tag, Up: s.Up, RTTMillis: s.RTT.Milliseconds(), LastError: s.LastError,
+			ActiveConn: s.ActiveConn, TotalConn: s.TotalConn, BytesIn: s.BytesIn, BytesOut: s.BytesOut,
+		})
+	}
+	return rep
 }
 
 // applyForwards reconciles relay rules: the panel's if it manages them,
