@@ -1,0 +1,19 @@
+# Default config baked into the image: standalone mode, web panel on :2053.
+# Mount your own file over /etc/bosun/config.yaml to change it (see
+# config.example.yaml), or hand the node to Captain from the panel.
+data_dir: /var/lib/bosun
+log_level: info
+metrics_listen: 127.0.0.1:9100
+
+cores:
+  order: [singbox, xray, mita, hysteria]
+  singbox: { stats_listen: 127.0.0.1:9101, log_level: warn }
+  xray: { version: "26.3.27", api_listen: 127.0.0.1:9102, log_level: warning }
+  mita: { log_level: INFO }
+  hysteria: { auth_listen: 127.0.0.1:9103, stats_listen: 127.0.0.1:9104, log_level: warn }
+
+panel:
+  driver: local
+
+web:
+  listen: ":2053"

@@ -1,0 +1,6 @@
+bin/
+dist/
+web/ui/node_modules/
+web/ui/dist/
+.gocache/
+.git/

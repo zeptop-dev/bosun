@@ -72,6 +72,19 @@ installer verifies the binary against the release checksums, writes
 `/etc/bosun/config.yaml`, and starts the `bosun` service; cores are downloaded on
 first start. Re-run without arguments to upgrade.
 
+### Docker
+
+```sh
+docker run -d --name bosun --network host --restart unless-stopped \
+  -v bosun-data:/var/lib/bosun zeptop/bosun:latest
+docker logs bosun 2>&1 | grep password=     # first-start login
+```
+
+Host networking is required (the cores bind the node's ports). `deploy/docker-compose.yml`
+is the same thing as compose; mount a config over `/etc/bosun/config.yaml` to
+change the panel port or pin a managed driver. Images: `zeptop/bosun` on Docker Hub
+and `registry.gitlab.com/boyang-hu/bosun`, both public, amd64 and arm64.
+
 ## Standalone vs managed
 
 `panel.driver: local` (the default) keeps inbounds, users and forwards in
