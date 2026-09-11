@@ -1,0 +1,17 @@
+[Unit]
+Description=bosun node agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/bosun run -c /etc/bosun/config.yaml
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+# Cores are child processes of bosun; they inherit these.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+WorkingDirectory=/var/lib/bosun
+StateDirectory=bosun
+
+[Install]
+WantedBy=multi-user.target

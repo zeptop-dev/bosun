@@ -129,3 +129,13 @@ each hop, pointing at the next hop. The landing node serves the real protocol
 front of it relay raw bytes and report bytes, connections and probe results.
 Clients get the landing node's protocol settings with the entry host and port,
 which Xboard's separate `host`/`port` vs `server_port` fields already express.
+
+## Install on a node (Linux, systemd)
+
+```sh
+curl -fsSL https://gitlab.com/boyang-hu/bosun/-/raw/master/scripts/install.sh | sh -s -- \
+  --captain https://captain.example.com --pair ABCD-EFGH
+```
+
+The pair code comes from "Add node" in Captain and is used once. The installer verifies the binary against the release checksums, writes `/etc/bosun/config.yaml`, and starts the `bosun` service; cores are downloaded on first start. Re-run without arguments to upgrade.
+
