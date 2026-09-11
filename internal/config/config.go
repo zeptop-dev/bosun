@@ -34,6 +34,9 @@ type Config struct {
 	Certs []Cert `yaml:"certs"`
 }
 
+// CoresDir is where bosun-managed core binaries live.
+func (c *Config) CoresDir() string { return filepath.Join(c.DataDir, "cores") }
+
 // CoreOrder returns the effective core preference order.
 func (c *Config) CoreOrder() []string {
 	def := []string{"singbox", "xray", "mita"}
@@ -55,7 +58,8 @@ func (c *Config) CoreOrder() []string {
 
 // SingboxCore enables the sing-box adapter.
 type SingboxCore struct {
-	Binary      string `yaml:"binary"`
+	Binary      string `yaml:"binary"`  // explicit path; empty = managed by bosun
+	Version     string `yaml:"version"` // manifest version when managed; empty = newest tested
 	StatsListen string `yaml:"stats_listen"`
 	LogLevel    string `yaml:"log_level"`
 }
@@ -63,6 +67,7 @@ type SingboxCore struct {
 // XrayCore enables the Xray-core adapter.
 type XrayCore struct {
 	Binary    string `yaml:"binary"`
+	Version   string `yaml:"version"`
 	APIListen string `yaml:"api_listen"`
 	LogLevel  string `yaml:"log_level"`
 }
@@ -70,6 +75,7 @@ type XrayCore struct {
 // MitaCore enables the official mieru server adapter.
 type MitaCore struct {
 	Binary   string `yaml:"binary"`
+	Version  string `yaml:"version"`
 	LogLevel string `yaml:"log_level"`
 }
 

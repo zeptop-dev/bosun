@@ -14,6 +14,7 @@ Working vertical slice, verified end to end against sing-box 1.14.0:
 - mita adapter (official mieru server): config file + `mita run` as a child, gRPC over a unix socket for hot user reload, proxy restart on port change, and per-user counters (deltas computed by bosun). Verified with the official mieru client.
 - Per-user traffic via each core's own control plane, hand-encoded protobuf, no generated stubs (`internal/core/grpcraw`).
 - Supervised child process: log relay, restart with backoff, graceful stop.
+- Core installer with a tested-version manifest (`internal/coreinstall`): leave `binary` empty and bosun downloads the newest release it has verified, checks its sha256, and installs it under `<data_dir>/cores/<core>/<version>/`. Releases known to break deployments are marked `broken` and only installed when named explicitly. sing-box is built from the upstream tag with the stats API tag (needs a Go toolchain until CI ships binaries).
 - Config validated with `sing-box check` before every start or apply.
 
 Not yet: official Hysteria core; forwarding chains; local UI; traffic spool on push failure.
@@ -43,22 +44,31 @@ internal/sysinfo/     host status snapshot
 
 ```sh
 make build
-cp config.example.yaml /etc/bosun/config.yaml   # edit panel + core paths
+cp config.example.yaml /etc/bosun/config.yaml   # edit panel settings
+bin/bosun core list                              # manifest + what is installed
+bin/bosun core install xray                      # optional; run installs missing cores itself
 bin/bosun render -c /etc/bosun/config.yaml       # print what would be applied
 bin/bosun run    -c /etc/bosun/config.yaml
 ```
 
+Current manifest:
+
+| core | version | status | note |
+|---|---|---|---|
+| singbox | 1.14.0 | tested | built from source with `with_v2ray_api` |
+| xray | 26.3.27 | tested | REALITY works with mihomo and sing-box clients |
+| xray | 26.9.9 | broken | REALITY rejects mihomo/sing-box clients |
+| mita | 3.36.1 | tested | official mieru server |
+| hysteria | 2.12.2 | caution | no adapter yet |
+
 ## sing-box binary
 
 Official sing-box release builds do **not** include the V2Ray stats API, which
-per-user accounting needs. Build from the upstream tag with the tag enabled:
-
-```sh
-go build -tags "with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme" ./cmd/sing-box
-```
-
-This is unmodified upstream source with an extra build tag, not a fork. Bosun
-releases will ship such a binary. Note sing-box has no runtime user API: every
+per-user accounting needs. The installer therefore runs
+`go install -tags with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme github.com/sagernet/sing-box/cmd/sing-box@v1.14.0`,
+unmodified upstream source with extra build tags, not a fork. Module checksums
+are verified by the Go toolchain. Bosun's CI will publish prebuilt binaries so
+nodes do not need Go; until then a Go toolchain is required for sing-box. Note sing-box has no runtime user API: every
 user or inbound change is a config rewrite plus restart, batched per pull interval.
 
 ## Xray binary and REALITY interop
