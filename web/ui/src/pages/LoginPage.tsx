@@ -1,0 +1,39 @@
+import { Button, Card, Center, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core'
+import { useForm } from '@mantine/form'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { api } from '../lib/api'
+import { useAuth } from '../lib/auth'
+
+export default function LoginPage() {
+  const { t } = useTranslation()
+  const nav = useNavigate()
+  const { refresh } = useAuth()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const form = useForm({ initialValues: { Username: '', Password: '' } })
+  const submit = form.onSubmit(async (v) => {
+    setBusy(true); setError('')
+    try { await api.post('/api/login', v); refresh(); nav('/') } catch (e) { setError(e instanceof Error ? e.message : t('login.failed')) } finally { setBusy(false) }
+  })
+  return (
+    <Center h="100vh" p="md">
+      <Card w={380} p="xl">
+        <form onSubmit={submit}>
+          <Stack>
+            <div>
+              <Title order={3}>{t('login.title')}</Title>
+              <Text c="dimmed" size="sm">{t('login.subtitle')}</Text>
+            </div>
+            <TextInput label={t('login.username')} required autoFocus {...form.getInputProps('Username')} />
+            <PasswordInput label={t('login.password')} required {...form.getInputProps('Password')} />
+            {error && <Text c="red" size="sm">{error}</Text>}
+            <Button type="submit" loading={busy}>{t('login.submit')}</Button>
+            <Text size="xs" c="dimmed">{t('login.hint')}</Text>
+          </Stack>
+        </form>
+      </Card>
+    </Center>
+  )
+}

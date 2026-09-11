@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"gitlab.com/boyang-hu/bosun/internal/config"
@@ -32,7 +33,49 @@ type Agent struct {
 	users []spec.User
 	// userIDs maps spec.User.Name (the stats key) to the panel user ID.
 	userIDs map[string]int64
+
+	statusMu sync.Mutex
+	status   Status
 }
+
+// Status is what the agent is doing, for the local UI.
+type Status struct {
+	Panel       string            `json:"panel"`
+	Ready       bool              `json:"ready"` // bootstrap done, first apply attempted
+	Inbounds    int               `json:"inbounds"`
+	Users       int               `json:"users"`
+	LastPull    time.Time         `json:"last_pull"`
+	LastApply   time.Time         `json:"last_apply"`
+	LastError   string            `json:"last_error,omitempty"`
+	CoreRunning map[string]bool   `json:"core_running"`
+	CoreInbound map[string]int    `json:"core_inbounds"`
+	Forwards    []forward.Stats   `json:"-"`
+	Assign      map[string]string `json:"assign"` // inbound tag -> core
+}
+
+// Status returns a snapshot of the agent state.
+func (a *Agent) Status() Status {
+	a.statusMu.Lock()
+	defer a.statusMu.Unlock()
+	st := a.status
+	st.Panel = a.driver.Name()
+	st.CoreRunning = map[string]bool{}
+	for _, name := range a.reg.Names() {
+		c, _ := a.reg.Get(name)
+		st.CoreRunning[name] = c.Running()
+	}
+	st.Forwards = a.fwd.Snapshot()
+	return st
+}
+
+func (a *Agent) setStatus(f func(*Status)) {
+	a.statusMu.Lock()
+	f(&a.status)
+	a.statusMu.Unlock()
+}
+
+// ForwardStats exposes relay counters for the local UI.
+func (a *Agent) ForwardStats() []forward.Stats { return a.fwd.Snapshot() }
 
 // New builds an agent. metrics may be nil.
 func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metrics.Registry, log *slog.Logger) *Agent {
@@ -51,12 +94,19 @@ func (a *Agent) Run(ctx context.Context) error {
 		return err
 	}
 	if err := a.apply(ctx); err != nil {
-		return fmt.Errorf("initial apply: %w", err)
+		// A bad inbound must not take the whole node down in local mode:
+		// keep running so the UI can fix it.
+		a.log.Error("initial apply failed", "err", err)
 	}
 	if err := a.applyForwards(ctx); err != nil {
 		a.log.Error("forwards", "err", err)
 	}
+	a.setStatus(func(s *Status) { s.Ready = true })
 
+	var wake <-chan struct{}
+	if n, ok := a.driver.(panel.Notifier); ok {
+		wake = n.Changed()
+	}
 	iv := a.driver.Intervals()
 	pull := time.NewTicker(iv.Pull)
 	push := time.NewTicker(iv.Push)
@@ -68,6 +118,10 @@ func (a *Agent) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-wake:
+			// Coalesce bursts of edits before rendering.
+			time.Sleep(300 * time.Millisecond)
+			a.pullApply(ctx)
 		case <-pull.C:
 			if changed, err := a.pull(ctx); err != nil {
 				a.log.Warn("pull failed", "err", err)
@@ -101,6 +155,24 @@ func (a *Agent) Run(ctx context.Context) error {
 				}
 			}
 		}
+	}
+}
+
+// pullApply is one pull followed by apply when anything moved.
+func (a *Agent) pullApply(ctx context.Context) {
+	changed, err := a.pull(ctx)
+	if err != nil {
+		a.log.Warn("pull failed", "err", err)
+		return
+	}
+	if !changed {
+		return
+	}
+	if err := a.apply(ctx); err != nil {
+		a.log.Error("apply failed", "err", err)
+	}
+	if err := a.applyForwards(ctx); err != nil {
+		a.log.Error("forwards", "err", err)
 	}
 }
 
@@ -150,6 +222,13 @@ func (a *Agent) pull(ctx context.Context) (bool, error) {
 	if changed {
 		a.rebuildUserIndex()
 	}
+	a.setStatus(func(s *Status) {
+		s.LastPull = time.Now()
+		if a.node != nil {
+			s.Inbounds = len(a.node.Inbounds)
+		}
+		s.Users = len(a.users)
+	})
 	return changed, nil
 }
 
@@ -190,10 +269,31 @@ func ResolveCerts(cfg *config.Config, node *spec.Node, log *slog.Logger) {
 // apply renders the current state onto each core and starts, restarts or
 // stops cores as their assignment changes.
 func (a *Agent) apply(ctx context.Context) error {
+	err := a.applyInner(ctx)
+	a.setStatus(func(s *Status) {
+		s.LastApply = time.Now()
+		s.LastError = ""
+		if err != nil {
+			s.LastError = err.Error()
+		}
+	})
+	return err
+}
+
+func (a *Agent) applyInner(ctx context.Context) error {
 	assign, err := a.reg.Assign(a.node.Inbounds)
 	if err != nil {
 		return err
 	}
+	byTag := map[string]string{}
+	perCore := map[string]int{}
+	for name, list := range assign {
+		perCore[name] = len(list)
+		for _, ib := range list {
+			byTag[ib.Tag] = name
+		}
+	}
+	a.setStatus(func(s *Status) { s.Assign, s.CoreInbound = byTag, perCore })
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		inbounds := assign[name]

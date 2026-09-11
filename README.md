@@ -50,12 +50,42 @@ internal/sysinfo/     host status snapshot
 
 ## Install on a node (Linux, systemd)
 
+Standalone, with the built-in web panel on port 2053:
+
+```sh
+curl -fsSL https://gitlab.com/boyang-hu/bosun/-/raw/master/scripts/install.sh | sh
+```
+
+The installer prints the generated login. Open `http://<server>:2053/`, add inbounds
+and users, hand out subscription links. Put the panel behind Caddy or reach it over
+an SSH tunnel; or set `web.cert`/`web.key` for TLS.
+
+Managed by Captain from the start (no local panel edits):
+
 ```sh
 curl -fsSL https://gitlab.com/boyang-hu/bosun/-/raw/master/scripts/install.sh | sh -s -- \
   --captain https://captain.example.com --pair ABCD-EFGH
 ```
 
-The pair code comes from "Add node" in Captain and is used once. The installer verifies the binary against the release checksums, writes `/etc/bosun/config.yaml`, and starts the `bosun` service; cores are downloaded on first start. Re-run without arguments to upgrade.
+The pair code comes from "Add node" in Captain and is used once. Either way the
+installer verifies the binary against the release checksums, writes
+`/etc/bosun/config.yaml`, and starts the `bosun` service; cores are downloaded on
+first start. Re-run without arguments to upgrade.
+
+## Standalone vs managed
+
+`panel.driver: local` (the default) keeps inbounds, users and forwards in
+`<data_dir>/local.json`, edited through the web panel. Every save applies at once:
+cores are reconfigured or restarted as needed. Users get per-user quota and expiry,
+traffic counters, share links and a `/sub/<token>` subscription.
+
+Settings → Mode → "Hand over to Captain" takes a pair code, snapshots the local
+objects, and restarts the agent on the Captain driver; the panel turns read-only.
+"Detach" comes back to local mode, restoring the snapshot or keeping the last
+state the panel pushed. `bosun admin reset-password` recovers a lost login.
+
+`panel.driver: captain` or `xboard` pins headless managed mode from the config
+file; `web:` may still be set for read-only diagnostics.
 
 ## Run
 

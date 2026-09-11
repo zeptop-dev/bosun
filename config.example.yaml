@@ -24,9 +24,14 @@ cores:
     stats_listen: 127.0.0.1:9104
     log_level: warn
 
+# Who owns the desired state.
+#   local   - standalone: the built-in web panel edits inbounds/users/forwards
+#             and can hand the node to Captain later (default)
+#   captain - headless managed mode fixed by this file
+#   xboard  - headless Xboard node
 panel:
-  driver: captain            # captain | xboard
-  captain:
+  driver: local
+  captain:                   # only for driver: captain
     url: https://captain.example.com
     pair_code: ABCD-EFGH     # from "add node" in Captain; used once, then the token is stored in data_dir
   # driver: xboard
@@ -35,6 +40,15 @@ panel:
     token: change-me        # Xboard admin setting "server_token"
     node_id: 1
     node_type: ""           # optional; leave empty to resolve by node_id alone
+
+# Built-in web panel. Always on for driver local; optional read-only
+# diagnostics for the headless drivers. Put it behind Caddy or an SSH tunnel
+# unless cert/key are set.
+web:
+  listen: ":2053"
+  # cert: /etc/bosun/panel.crt
+  # key: /etc/bosun/panel.key
+  # state_file: /var/lib/bosun/local.json
 
 # Local certificates for inbounds with standard TLS (not needed for REALITY).
 certs:

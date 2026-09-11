@@ -34,10 +34,17 @@ type Config struct {
 	} `yaml:"cores"`
 
 	Panel struct {
-		Driver  string        `yaml:"driver"` // "captain" or "xboard"
+		// Driver is "local" (standalone; the built-in web UI owns the
+		// config and can hand the node to Captain later), "captain" or
+		// "xboard" (headless managed mode fixed by this file).
+		Driver  string        `yaml:"driver"`
 		Xboard  *XboardPanel  `yaml:"xboard"`
 		Captain *CaptainPanel `yaml:"captain"`
 	} `yaml:"panel"`
+
+	// Web is the built-in panel. Required for driver "local"; optional
+	// (read-only diagnostics) for the headless drivers.
+	Web *Web `yaml:"web"`
 
 	// Certs maps server names to local certificate files for TLSStandard inbounds.
 	Certs []Cert `yaml:"certs"`
@@ -136,6 +143,15 @@ type XboardPanel struct {
 	Timeout  time.Duration `yaml:"timeout"`
 }
 
+// Web configures the built-in panel.
+type Web struct {
+	Listen string `yaml:"listen"` // default ":2053"
+	Cert   string `yaml:"cert"`   // optional; plain HTTP without
+	Key    string `yaml:"key"`
+	// StateFile holds the local objects; default <data_dir>/local.json.
+	StateFile string `yaml:"state_file"`
+}
+
 // Cert is one certificate/key pair.
 type Cert struct {
 	ServerName string `yaml:"server_name"`
@@ -165,7 +181,24 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita, cores.hysteria)")
 	}
 	if c.Panel.Driver == "" {
-		return nil, fmt.Errorf("config: panel.driver is required")
+		c.Panel.Driver = "local"
+	}
+	if c.Panel.Driver == "local" && c.Web == nil {
+		c.Web = &Web{}
+	}
+	if c.Web != nil {
+		if c.Web.Listen == "" {
+			c.Web.Listen = ":2053"
+		}
+		if c.Web.StateFile == "" {
+			c.Web.StateFile = filepath.Join(c.DataDir, "local.json")
+		}
+		if (c.Web.Cert == "") != (c.Web.Key == "") {
+			return nil, fmt.Errorf("config: web.cert and web.key go together")
+		}
+	}
+	if c.Panel.Driver == "local" && c.Panel.Captain != nil && c.Panel.Captain.TokenFile == "" {
+		c.Panel.Captain.TokenFile = filepath.Join(c.DataDir, "captain.token")
 	}
 	if c.Panel.Driver == "xboard" && c.Panel.Xboard == nil {
 		return nil, fmt.Errorf("config: panel.xboard is required when driver is xboard")

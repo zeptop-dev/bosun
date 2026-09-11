@@ -28,6 +28,13 @@ type ForwardSource interface {
 	Forwards(ctx context.Context) (forwards []spec.Forward, changed bool, err error)
 }
 
+// Notifier is implemented by drivers that can wake the agent when desired
+// state changes (the local store does this on every edit), so changes apply
+// at once instead of on the next pull tick.
+type Notifier interface {
+	Changed() <-chan struct{}
+}
+
 // Reporter is implemented by drivers that accept one combined report per
 // push interval (traffic, host status, forward probes, core state). The
 // agent prefers it over PushTraffic/PushStatus. stateChanged asks the agent
