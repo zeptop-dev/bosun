@@ -216,3 +216,25 @@ func TestRenderScopedUsers(t *testing.T) {
 		t.Fatalf("scoped users: %+v", st.users)
 	}
 }
+
+func TestDecodeIPMap(t *testing.T) {
+	entry := func(ip string, n uint64) []byte {
+		var e []byte
+		e = protowire.AppendTag(e, 1, protowire.BytesType)
+		e = protowire.AppendString(e, ip)
+		e = protowire.AppendTag(e, 2, protowire.VarintType)
+		e = protowire.AppendVarint(e, n)
+		return e
+	}
+	var resp []byte
+	resp = protowire.AppendTag(resp, 1, protowire.BytesType)
+	resp = protowire.AppendString(resp, "user>>>u1>>>online")
+	for _, e := range [][]byte{entry("1.2.3.4", 1), entry("5.6.7.8", 2)} {
+		resp = protowire.AppendTag(resp, 2, protowire.BytesType)
+		resp = protowire.AppendBytes(resp, e)
+	}
+	ips, err := decodeIPMap(resp)
+	if err != nil || len(ips) != 2 || ips[0] != "1.2.3.4" || ips[1] != "5.6.7.8" {
+		t.Fatalf("ips=%v err=%v", ips, err)
+	}
+}

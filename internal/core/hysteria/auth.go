@@ -21,7 +21,13 @@ type authServer struct {
 
 	mu    sync.RWMutex
 	users map[string]spec.User // auth string -> user
+	// seen records client IPs per user name at auth time; hysteria's own
+	// /online endpoint only counts connections, so this is the IP source.
+	seen map[string]map[string]time.Time
 }
+
+// onlineWindow is how long an authenticated IP counts as online.
+const onlineWindow = 5 * time.Minute
 
 type authRequest struct {
 	Addr string `json:"addr"`
@@ -30,7 +36,7 @@ type authRequest struct {
 }
 
 func newAuthServer(listen string, log *slog.Logger) (*authServer, error) {
-	a := &authServer{log: log, users: map[string]spec.User{}}
+	a := &authServer{log: log, users: map[string]spec.User{}, seen: map[string]map[string]time.Time{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth", a.handle)
 	ln, err := net.Listen("tcp", listen)
@@ -63,7 +69,47 @@ func (a *authServer) handle(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false})
 		return
 	}
+	a.record(u.Name, req.Addr)
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": u.Name})
+}
+
+func (a *authServer) record(user, addr string) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	if host == "" {
+		return
+	}
+	a.mu.Lock()
+	m := a.seen[user]
+	if m == nil {
+		m = map[string]time.Time{}
+		a.seen[user] = m
+	}
+	m[host] = time.Now()
+	a.mu.Unlock()
+}
+
+// online returns IPs seen within onlineWindow, dropping stale ones.
+func (a *authServer) online() map[string][]string {
+	cutoff := time.Now().Add(-onlineWindow)
+	out := map[string][]string{}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for user, m := range a.seen {
+		for ip, at := range m {
+			if at.Before(cutoff) {
+				delete(m, ip)
+				continue
+			}
+			out[user] = append(out[user], ip)
+		}
+		if len(m) == 0 {
+			delete(a.seen, user)
+		}
+	}
+	return out
 }
 
 func (a *authServer) close(ctx context.Context) error {
