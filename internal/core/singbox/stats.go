@@ -2,13 +2,12 @@ package singbox
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protowire"
 
+	"gitlab.com/zeptop-group/bosun/internal/core/grpcraw"
 	"gitlab.com/zeptop-group/bosun/internal/spec"
 )
 
@@ -17,32 +16,6 @@ import (
 // that is the name on the wire. Its messages are tiny, so they are encoded by
 // hand with protowire rather than pulling in generated stubs.
 const queryStatsMethod = "/v2ray.core.app.stats.command.StatsService/QueryStats"
-
-// rawCodec passes pre-encoded protobuf bytes straight through gRPC.
-type rawCodec struct{}
-
-func (rawCodec) Marshal(v any) ([]byte, error) {
-	b, ok := v.([]byte)
-	if !ok {
-		return nil, fmt.Errorf("rawCodec: expected []byte, got %T", v)
-	}
-	return b, nil
-}
-
-func (rawCodec) Unmarshal(data []byte, v any) error {
-	p, ok := v.(*[]byte)
-	if !ok {
-		return fmt.Errorf("rawCodec: expected *[]byte, got %T", v)
-	}
-	*p = append((*p)[:0], data...)
-	return nil
-}
-
-func (rawCodec) Name() string { return "raw" }
-
-func dialStats(addr string) (*grpc.ClientConn, error) {
-	return grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-}
 
 // queryUserStats returns per-user traffic keyed by user name. With reset the
 // counters are zeroed server-side after being read.
@@ -54,8 +27,8 @@ func queryUserStats(ctx context.Context, conn *grpc.ClientConn, reset bool) (map
 		req = protowire.AppendTag(req, 2, protowire.VarintType)
 		req = protowire.AppendVarint(req, 1)
 	}
-	var resp []byte
-	if err := conn.Invoke(ctx, queryStatsMethod, req, &resp, grpc.ForceCodec(rawCodec{})); err != nil {
+	resp, err := grpcraw.Invoke(ctx, conn, queryStatsMethod, req)
+	if err != nil {
 		return nil, err
 	}
 	return decodeUserStats(resp)

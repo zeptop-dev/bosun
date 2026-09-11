@@ -14,6 +14,7 @@ import (
 type Bundle struct {
 	Files map[string][]byte // relative file name -> content
 	Main  string            // entry file name inside Files
+	Meta  map[string]string // adapter-private notes carried from Render to Start/Apply
 }
 
 // Capabilities advertises what a core can serve.
