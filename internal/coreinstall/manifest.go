@@ -57,7 +57,7 @@ var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2r
 
 // bosunRegistry is the generic package registry of the bosun project, where
 // CI publishes sing-box builds (see .gitlab-ci.yml, job publish:singbox).
-const bosunRegistry = "https://gitlab.com/api/v4/projects/zeptop-group%2Fbosun/packages/generic"
+const bosunRegistry = "https://gitlab.com/api/v4/projects/boyang-hu%2Fbosun/packages/generic"
 
 func singboxCI(version, arch string) Asset {
 	base := bosunRegistry + "/sing-box/" + version + "/"
