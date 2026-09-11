@@ -19,10 +19,11 @@ type Config struct {
 	Cores struct {
 		// Order is the preference when several cores can serve an inbound.
 		// Unlisted enabled cores follow in the default order singbox, xray, mita.
-		Order   []string     `yaml:"order"`
-		Singbox *SingboxCore `yaml:"singbox"`
-		Xray    *XrayCore    `yaml:"xray"`
-		Mita    *MitaCore    `yaml:"mita"`
+		Order    []string      `yaml:"order"`
+		Singbox  *SingboxCore  `yaml:"singbox"`
+		Xray     *XrayCore     `yaml:"xray"`
+		Mita     *MitaCore     `yaml:"mita"`
+		Hysteria *HysteriaCore `yaml:"hysteria"`
 	} `yaml:"cores"`
 
 	Panel struct {
@@ -39,7 +40,7 @@ func (c *Config) CoresDir() string { return filepath.Join(c.DataDir, "cores") }
 
 // CoreOrder returns the effective core preference order.
 func (c *Config) CoreOrder() []string {
-	def := []string{"singbox", "xray", "mita"}
+	def := []string{"singbox", "xray", "mita", "hysteria"}
 	out := append([]string(nil), c.Cores.Order...)
 	for _, d := range def {
 		seen := false
@@ -70,6 +71,15 @@ type XrayCore struct {
 	Version   string `yaml:"version"`
 	APIListen string `yaml:"api_listen"`
 	LogLevel  string `yaml:"log_level"`
+}
+
+// HysteriaCore enables the official Hysteria 2 server adapter.
+type HysteriaCore struct {
+	Binary      string `yaml:"binary"`
+	Version     string `yaml:"version"`
+	AuthListen  string `yaml:"auth_listen"`  // bosun's auth callback endpoint
+	StatsListen string `yaml:"stats_listen"` // hysteria's traffic stats API
+	LogLevel    string `yaml:"log_level"`
 }
 
 // MitaCore enables the official mieru server adapter.
@@ -113,8 +123,8 @@ func Load(path string) (*Config, error) {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
-	if c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil {
-		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita)")
+	if c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil && c.Cores.Hysteria == nil {
+		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita, cores.hysteria)")
 	}
 	if c.Panel.Driver == "" {
 		return nil, fmt.Errorf("config: panel.driver is required")
@@ -124,7 +134,7 @@ func Load(path string) (*Config, error) {
 	}
 	for _, name := range c.Cores.Order {
 		switch name {
-		case "singbox", "xray", "mita":
+		case "singbox", "xray", "mita", "hysteria":
 		default:
 			return nil, fmt.Errorf("config: cores.order: unknown core %q", name)
 		}

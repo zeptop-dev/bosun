@@ -7,7 +7,7 @@ log_level: info
 # `bosun core list`). Set `version` to pin a manifest version, or `binary` to
 # use your own build.
 cores:
-  order: [singbox, xray, mita]   # preference when several cores can serve an inbound
+  order: [singbox, xray, mita, hysteria]   # preference when several cores can serve an inbound
   singbox:
     stats_listen: 127.0.0.1:9101
     log_level: warn
@@ -17,6 +17,10 @@ cores:
     log_level: warning
   mita:                      # official mieru server, for mieru nodes
     log_level: INFO
+  hysteria:                  # official Hysteria 2 server; one hysteria2 inbound per node, instant user changes
+    auth_listen: 127.0.0.1:9103
+    stats_listen: 127.0.0.1:9104
+    log_level: warn
 
 panel:
   driver: xboard
