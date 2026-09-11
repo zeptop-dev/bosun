@@ -18,6 +18,7 @@ import (
 	"gitlab.com/zeptop-group/bosun/internal/core/mita"
 	"gitlab.com/zeptop-group/bosun/internal/core/singbox"
 	"gitlab.com/zeptop-group/bosun/internal/core/xray"
+	"gitlab.com/zeptop-group/bosun/internal/coreinstall"
 	"gitlab.com/zeptop-group/bosun/internal/panel"
 	"gitlab.com/zeptop-group/bosun/internal/panel/xboard"
 )
@@ -35,6 +36,8 @@ func main() {
 		err = cmdRun(os.Args[2:])
 	case "render":
 		err = cmdRender(os.Args[2:])
+	case "core":
+		err = cmdCore(os.Args[2:])
 	case "version":
 		fmt.Println("bosun", version)
 	default:
@@ -51,6 +54,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   bosun run    -c config.yaml   start the agent
   bosun render -c config.yaml   fetch state from the panel and print rendered core configs
+  bosun core list    [-c config.yaml]            show known core releases and what is installed
+  bosun core install [-c config.yaml] <core> [version]   install a release (default: newest tested)
   bosun version`)
 }
 
@@ -83,14 +88,27 @@ func setup(args []string) (*config.Config, *slog.Logger, panel.Driver, *core.Reg
 	}
 
 	reg := core.NewRegistry()
+	inst := coreinstall.New(cfg.CoresDir(), log)
+	// binaryFor returns an explicit path as-is, otherwise the bosun-managed
+	// release, installing it on first use.
+	binaryFor := func(name, explicit, version string) (string, error) {
+		if explicit != "" {
+			return explicit, nil
+		}
+		return inst.Ensure(context.Background(), name, version)
+	}
 	build := map[string]func() (core.Core, error){
 		"singbox": func() (core.Core, error) {
 			sb := cfg.Cores.Singbox
 			if sb == nil {
 				return nil, nil
 			}
+			bin, err := binaryFor("singbox", sb.Binary, sb.Version)
+			if err != nil {
+				return nil, err
+			}
 			return singbox.New(singbox.Options{
-				Binary:      sb.Binary,
+				Binary:      bin,
 				WorkDir:     filepath.Join(cfg.DataDir, "singbox"),
 				StatsListen: sb.StatsListen,
 				LogLevel:    sb.LogLevel,
@@ -101,8 +119,12 @@ func setup(args []string) (*config.Config, *slog.Logger, panel.Driver, *core.Reg
 			if xr == nil {
 				return nil, nil
 			}
+			bin, err := binaryFor("xray", xr.Binary, xr.Version)
+			if err != nil {
+				return nil, err
+			}
 			return xray.New(xray.Options{
-				Binary:    xr.Binary,
+				Binary:    bin,
 				WorkDir:   filepath.Join(cfg.DataDir, "xray"),
 				APIListen: xr.APIListen,
 				LogLevel:  xr.LogLevel,
@@ -113,8 +135,12 @@ func setup(args []string) (*config.Config, *slog.Logger, panel.Driver, *core.Reg
 			if mt == nil {
 				return nil, nil
 			}
+			bin, err := binaryFor("mita", mt.Binary, mt.Version)
+			if err != nil {
+				return nil, err
+			}
 			return mita.New(mita.Options{
-				Binary:   mt.Binary,
+				Binary:   bin,
 				WorkDir:  filepath.Join(cfg.DataDir, "mita"),
 				LogLevel: mt.LogLevel,
 			}, log)
@@ -176,4 +202,58 @@ func cmdRender(args []string) error {
 		}
 	}
 	return nil
+}
+
+// cmdCore implements `bosun core list|install`. The config file is optional
+// here; without it the default data dir is used.
+func cmdCore(args []string) error {
+	if len(args) == 0 {
+		usage()
+		return fmt.Errorf("core: missing subcommand")
+	}
+	sub, rest := args[0], args[1:]
+	fs := flag.NewFlagSet("bosun core", flag.ContinueOnError)
+	cfgPath := fs.String("c", "/etc/bosun/config.yaml", "config file")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	rest = fs.Args()
+	dataDir := "/var/lib/bosun"
+	if cfg, err := config.Load(*cfgPath); err == nil {
+		dataDir = cfg.DataDir
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	inst := coreinstall.New(filepath.Join(dataDir, "cores"), log)
+
+	switch sub {
+	case "list":
+		for _, name := range coreinstall.Cores() {
+			for _, r := range coreinstall.Releases(name) {
+				state := "-"
+				if inst.Installed(name, r.Version) {
+					state = "installed"
+				}
+				fmt.Printf("%-9s %-9s %-8s %-10s %s\n", name, r.Version, r.Status, state, r.Note)
+			}
+		}
+		return nil
+	case "install":
+		if len(rest) == 0 {
+			return fmt.Errorf("core install: <core> is required (one of %v)", coreinstall.Cores())
+		}
+		version := ""
+		if len(rest) > 1 {
+			version = rest[1]
+		}
+		path, err := inst.Ensure(context.Background(), rest[0], version)
+		if err != nil {
+			return err
+		}
+		fmt.Println(path)
+		return nil
+	}
+	usage()
+	return fmt.Errorf("core: unknown subcommand %q", sub)
 }

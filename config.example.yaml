@@ -2,18 +2,20 @@
 data_dir: /var/lib/bosun
 log_level: info
 
+# Core binaries: leave `binary` empty and bosun installs the newest release it
+# has tested into <data_dir>/cores/<core>/<version>/ on first start (see
+# `bosun core list`). Set `version` to pin a manifest version, or `binary` to
+# use your own build.
 cores:
   order: [singbox, xray, mita]   # preference when several cores can serve an inbound
   singbox:
-    binary: /usr/local/bin/sing-box
     stats_listen: 127.0.0.1:9101
     log_level: warn
   xray:                      # optional; the only core for xhttp, hot user add/remove on vless/vmess/trojan
-    binary: /usr/local/bin/xray
+    version: "26.3.27"       # 26.9.9 breaks REALITY for mihomo/sing-box clients
     api_listen: 127.0.0.1:9102
     log_level: warning
   mita:                      # official mieru server, for mieru nodes
-    binary: /usr/local/bin/mita
     log_level: INFO
 
 panel:
