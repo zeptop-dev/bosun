@@ -9,12 +9,15 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"gitlab.com/zeptop-group/bosun/internal/spec"
 )
 
 // Config is the on-disk configuration.
 type Config struct {
-	DataDir  string `yaml:"data_dir"`
-	LogLevel string `yaml:"log_level"`
+	DataDir       string `yaml:"data_dir"`
+	LogLevel      string `yaml:"log_level"`
+	MetricsListen string `yaml:"metrics_listen"` // Prometheus endpoint; "" disables
 
 	Cores struct {
 		// Order is the preference when several cores can serve an inbound.
@@ -33,6 +36,28 @@ type Config struct {
 
 	// Certs maps server names to local certificate files for TLSStandard inbounds.
 	Certs []Cert `yaml:"certs"`
+
+	// Forwards are local relay rules, used when the panel does not manage
+	// forwarding (Xboard). A panel that does supplies them instead.
+	Forwards []ForwardRule `yaml:"forwards"`
+}
+
+// ForwardRule is one relay rule in the config file.
+type ForwardRule struct {
+	Tag      string `yaml:"tag"`
+	Listen   string `yaml:"listen"`
+	Port     int    `yaml:"port"`
+	Protocol string `yaml:"protocol"` // tcp, udp, both (default tcp)
+	Target   string `yaml:"target"`   // host:port
+}
+
+// ForwardSpecs converts the configured rules into spec.Forward values.
+func (c *Config) ForwardSpecs() []spec.Forward {
+	out := make([]spec.Forward, 0, len(c.Forwards))
+	for _, f := range c.Forwards {
+		out = append(out, spec.Forward{Tag: f.Tag, Listen: f.Listen, Port: f.Port, Protocol: f.Protocol, Target: f.Target})
+	}
+	return out
 }
 
 // CoresDir is where bosun-managed core binaries live.
@@ -137,6 +162,15 @@ func Load(path string) (*Config, error) {
 		case "singbox", "xray", "mita", "hysteria":
 		default:
 			return nil, fmt.Errorf("config: cores.order: unknown core %q", name)
+		}
+	}
+	for i := range c.Forwards {
+		f := &c.Forwards[i]
+		if f.Protocol == "" {
+			f.Protocol = "tcp"
+		}
+		if f.Tag == "" {
+			f.Tag = fmt.Sprintf("forward-%d", f.Port)
 		}
 	}
 	for i, cert := range c.Certs {

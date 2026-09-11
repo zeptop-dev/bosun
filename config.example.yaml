@@ -1,6 +1,7 @@
 # bosun configuration
 data_dir: /var/lib/bosun
 log_level: info
+metrics_listen: 127.0.0.1:9100   # Prometheus text endpoint at /metrics; remove to disable
 
 # Core binaries: leave `binary` empty and bosun installs the newest release it
 # has tested into <data_dir>/cores/<core>/<version>/ on first start (see
@@ -35,3 +36,11 @@ certs:
   - server_name: node1.example.com
     cert: /etc/bosun/certs/node1.example.com.crt
     key: /etc/bosun/certs/node1.example.com.key
+
+# Local relay rules (entry -> next hop). With Xboard these come from here;
+# a panel that manages forwarding supplies them instead.
+forwards:
+  - tag: to-landing-us
+    port: 24443            # what clients connect to on this relay
+    protocol: tcp          # tcp | udp | both
+    target: 203.0.113.10:443

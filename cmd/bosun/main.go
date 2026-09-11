@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"gitlab.com/zeptop-group/bosun/internal/agent"
 	"gitlab.com/zeptop-group/bosun/internal/config"
@@ -20,6 +22,7 @@ import (
 	"gitlab.com/zeptop-group/bosun/internal/core/singbox"
 	"gitlab.com/zeptop-group/bosun/internal/core/xray"
 	"gitlab.com/zeptop-group/bosun/internal/coreinstall"
+	"gitlab.com/zeptop-group/bosun/internal/metrics"
 	"gitlab.com/zeptop-group/bosun/internal/panel"
 	"gitlab.com/zeptop-group/bosun/internal/panel/xboard"
 )
@@ -184,7 +187,21 @@ func cmdRun(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	log.Info("bosun starting", "version", version, "panel", driver.Name(), "cores", reg.Names())
-	return agent.New(cfg, driver, reg, log).Run(ctx)
+	var mreg *metrics.Registry
+	if cfg.MetricsListen != "" {
+		mreg = metrics.NewRegistry()
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", mreg.Handler())
+		srv := &http.Server{Addr: cfg.MetricsListen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Error("metrics server", "err", err)
+			}
+		}()
+		defer srv.Close()
+		log.Info("metrics endpoint", "listen", cfg.MetricsListen)
+	}
+	return agent.New(cfg, driver, reg, mreg, log).Run(ctx)
 }
 
 func cmdRender(args []string) error {
