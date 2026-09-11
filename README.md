@@ -64,9 +64,11 @@ user or inbound change is a config rewrite plus restart, batched per pull interv
 ## Xray binary and REALITY interop
 
 Tested: Xray 26.3.27 serves REALITY to mihomo 1.19.30 and sing-box 1.14.0
-clients. **Xray 26.9.9 does not**: its REALITY library update of 2026-09-08
-rejects those clients' handshakes (server log shows the ClientHello falling
-through to the real target), while Xray's own client still connects. Until
+clients. **Xray 26.9.9 does not**: xtls/reality commit 8cdf7bf (2026-09-08,
+"Reject outdated/strange Client Hello that doesn't have X25519MLKEM768 before
+optional X25519") makes the server treat those clients' handshakes as
+unauthenticated and forward them to the real target; Xray's own client
+offers the post-quantum group first and still connects. Until
 the client ecosystem catches up, pin Xray at 26.3.x for REALITY nodes or let
 sing-box serve them. This is the reason bosun keeps a tested version list per
 core instead of tracking the newest upstream release blindly.
