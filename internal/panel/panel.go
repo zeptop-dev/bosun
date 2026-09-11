@@ -5,7 +5,7 @@ package panel
 import (
 	"context"
 
-	"gitlab.com/zeptop-group/bosun/internal/spec"
+	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
 // Driver talks to one panel implementation.

@@ -28,7 +28,7 @@ Core selection: `cores.order` in the config is the preference; an inbound goes t
 
 ```
 cmd/bosun/            entry point: run | render | version
-internal/spec/        core-agnostic node / inbound / user model
+pkg/spec/             core-agnostic (public, imported by Captain) node / inbound / user model
 internal/core/        Core interface, registry, inbound -> core assignment
 internal/core/subprocess/   child process supervisor
 internal/core/grpcraw/      raw gRPC invoke for hand-encoded protobuf

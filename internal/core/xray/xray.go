@@ -18,11 +18,11 @@ import (
 
 	"google.golang.org/grpc"
 
-	"gitlab.com/zeptop-group/bosun/internal/core"
-	"gitlab.com/zeptop-group/bosun/internal/core/grpcraw"
-	"gitlab.com/zeptop-group/bosun/internal/core/subprocess"
-	"gitlab.com/zeptop-group/bosun/internal/core/v2stats"
-	"gitlab.com/zeptop-group/bosun/internal/spec"
+	"gitlab.com/boyang-hu/bosun/internal/core"
+	"gitlab.com/boyang-hu/bosun/internal/core/grpcraw"
+	"gitlab.com/boyang-hu/bosun/internal/core/subprocess"
+	"gitlab.com/boyang-hu/bosun/internal/core/v2stats"
+	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
 // Options configures the Xray adapter.

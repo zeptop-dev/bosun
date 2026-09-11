@@ -10,8 +10,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protowire"
 
-	"gitlab.com/zeptop-group/bosun/internal/core/grpcraw"
-	"gitlab.com/zeptop-group/bosun/internal/spec"
+	"gitlab.com/boyang-hu/bosun/internal/core/grpcraw"
+	"gitlab.com/boyang-hu/bosun/pkg/spec"
 )
 
 // QueryUsers calls QueryStats(pattern, reset) on method and returns traffic
