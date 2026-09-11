@@ -93,6 +93,9 @@ func setup(args []string) (*config.Config, *slog.Logger, panel.Driver, *core.Reg
 
 	reg := core.NewRegistry()
 	inst := coreinstall.New(cfg.CoresDir(), log)
+	if cfg.Cores.RegistryToken != "" {
+		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
+	}
 	// binaryFor returns an explicit path as-is, otherwise the bosun-managed
 	// release, installing it on first use.
 	binaryFor := func(name, explicit, version string) (string, error) {
@@ -261,6 +264,9 @@ func cmdCore(args []string) error {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	inst := coreinstall.New(filepath.Join(dataDir, "cores"), log)
+	if cfg, err := config.Load(*cfgPath); err == nil && cfg.Cores.RegistryToken != "" {
+		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
+	}
 
 	switch sub {
 	case "list":

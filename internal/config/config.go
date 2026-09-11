@@ -22,11 +22,15 @@ type Config struct {
 	Cores struct {
 		// Order is the preference when several cores can serve an inbound.
 		// Unlisted enabled cores follow in the default order singbox, xray, mita.
-		Order    []string      `yaml:"order"`
-		Singbox  *SingboxCore  `yaml:"singbox"`
-		Xray     *XrayCore     `yaml:"xray"`
-		Mita     *MitaCore     `yaml:"mita"`
-		Hysteria *HysteriaCore `yaml:"hysteria"`
+		Order []string `yaml:"order"`
+		// RegistryToken authenticates downloads from bosun's own package
+		// registry (CI-built sing-box) when the GitLab project is private.
+		// A Deploy Token with read_package_registry is enough.
+		RegistryToken string        `yaml:"registry_token"`
+		Singbox       *SingboxCore  `yaml:"singbox"`
+		Xray          *XrayCore     `yaml:"xray"`
+		Mita          *MitaCore     `yaml:"mita"`
+		Hysteria      *HysteriaCore `yaml:"hysteria"`
 	} `yaml:"cores"`
 
 	Panel struct {

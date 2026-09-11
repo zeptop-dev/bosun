@@ -9,6 +9,7 @@ metrics_listen: 127.0.0.1:9100   # Prometheus text endpoint at /metrics; remove 
 # use your own build.
 cores:
   order: [singbox, xray, mita, hysteria]   # preference when several cores can serve an inbound
+  # registry_token: glpat-...   # Deploy Token (read_package_registry) if the bosun GitLab project is private
   singbox:
     stats_listen: 127.0.0.1:9101
     log_level: warn
