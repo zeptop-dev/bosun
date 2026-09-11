@@ -24,7 +24,7 @@ default:
 test:
   stage: test
   script:
-    - gofmt -l . | tee /dev/stderr | test -z "$(cat)"
+    - git ls-files "*.go" | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
     - go vet ./...
     - go test ./...
 
