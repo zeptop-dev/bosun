@@ -44,6 +44,7 @@ type TLS struct {
 // Reality holds REALITY server parameters.
 type Reality struct {
 	PrivateKey      string   `json:"private_key,omitempty"`
+	PublicKey       string   `json:"public_key,omitempty"` // clients need it; servers ignore it
 	ShortIDs        []string `json:"short_ids,omitempty"`
 	HandshakeServer string   `json:"handshake_server,omitempty"`
 	HandshakePort   int      `json:"handshake_port,omitempty"`
