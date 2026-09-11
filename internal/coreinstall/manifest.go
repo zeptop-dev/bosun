@@ -14,10 +14,13 @@ const (
 	StatusBroken  Status = "broken"  // known to break real deployments
 )
 
-// Asset is one downloadable build of a release.
+// Asset is one downloadable build of a release. Either SHA256 pins the
+// digest in the manifest, or SumsURL points at a SHA256SUMS file published
+// next to the asset (used for builds bosun's own CI produces).
 type Asset struct {
 	URL     string
 	SHA256  string
+	SumsURL string
 	Archive string // "tar.gz", "zip" or "raw"
 	Member  string // file inside the archive; ignored for raw
 }
@@ -52,11 +55,24 @@ var Binary = map[string]string{
 
 var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2ray_api", "with_gvisor", "with_acme"}
 
+// bosunRegistry is the generic package registry of the bosun project, where
+// CI publishes sing-box builds (see .gitlab-ci.yml, job publish:singbox).
+const bosunRegistry = "https://gitlab.com/api/v4/projects/zeptop-group%2Fbosun/packages/generic"
+
+func singboxCI(version, arch string) Asset {
+	base := bosunRegistry + "/sing-box/" + version + "/"
+	return Asset{URL: base + "sing-box-" + version + "-linux-" + arch, SumsURL: base + "SHA256SUMS", Archive: "raw"}
+}
+
 // Manifest lists every release bosun knows about. Newest first per core.
 var Manifest = []Release{
 	{
 		Core: "singbox", Version: "1.14.0", Status: StatusTested,
-		Note: "built from the upstream tag with with_v2ray_api; official release binaries lack the stats API",
+		Note: "upstream tag built with with_v2ray_api by bosun CI; official release binaries lack the stats API",
+		Assets: map[string]Asset{
+			"linux/amd64": singboxCI("1.14.0", "amd64"),
+			"linux/arm64": singboxCI("1.14.0", "arm64"),
+		},
 		Build: &Build{Package: "github.com/sagernet/sing-box/cmd/sing-box", Version: "v1.14.0", Tags: singboxTags,
 			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.0"},
 	},

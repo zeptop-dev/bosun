@@ -133,3 +133,49 @@ func TestEnsureDownloadsVerifiesAndInstalls(t *testing.T) {
 		t.Fatal("partial file must be cleaned up")
 	}
 }
+
+func TestSumsURLAndFallback(t *testing.T) {
+	bin := []byte("#!/bin/sh\necho ci-singbox\n")
+	sum := sha256.Sum256(bin)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Deploy-Token") != "tok" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/sing-box/1.0.0/SHA256SUMS":
+			_, _ = w.Write([]byte(hex.EncodeToString(sum[:]) + "  sing-box-1.0.0-testos-testarch\nabc  other\n"))
+		case "/sing-box/1.0.0/sing-box-1.0.0-testos-testarch":
+			_, _ = w.Write(bin)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	inst := New(t.TempDir(), slog.Default())
+	inst.GOOS, inst.GOARCH = "testos", "testarch"
+	base := srv.URL + "/sing-box/1.0.0/"
+	rel := Release{Core: "singbox", Version: "1.0.0", Status: StatusTested, Assets: map[string]Asset{
+		"testos/testarch": {URL: base + "sing-box-1.0.0-testos-testarch", SumsURL: base + "SHA256SUMS", Archive: "raw"},
+	}}
+
+	// Without the token the registry answers 401 and there is no build recipe.
+	if _, err := inst.Install(context.Background(), rel); err == nil {
+		t.Fatal("expected failure without token")
+	}
+	inst.Headers = map[string]string{"Deploy-Token": "tok"}
+	path, err := inst.Install(context.Background(), rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); !bytes.Equal(data, bin) {
+		t.Fatalf("content: %q", data)
+	}
+
+	// An asset missing from SHA256SUMS is refused.
+	rel.Version = "1.0.1"
+	rel.Assets["testos/testarch"] = Asset{URL: base + "sing-box-1.0.1-testos-testarch", SumsURL: base + "SHA256SUMS", Archive: "raw"}
+	if _, err := inst.Install(context.Background(), rel); err == nil {
+		t.Fatal("expected failure for unlisted asset")
+	}
+}

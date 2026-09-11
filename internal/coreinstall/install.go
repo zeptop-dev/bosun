@@ -23,11 +23,12 @@ import (
 
 // Installer places core binaries under Root/<core>/<version>/<binary>.
 type Installer struct {
-	Root   string
-	Log    *slog.Logger
-	HTTP   *http.Client
-	GOOS   string // defaults to runtime.GOOS
-	GOARCH string // defaults to runtime.GOARCH
+	Root    string
+	Log     *slog.Logger
+	HTTP    *http.Client
+	GOOS    string            // defaults to runtime.GOOS
+	GOARCH  string            // defaults to runtime.GOARCH
+	Headers map[string]string // extra request headers, e.g. a GitLab Deploy-Token
 }
 
 // New returns an installer rooted at root.
@@ -89,9 +90,14 @@ func (i *Installer) Install(ctx context.Context, rel Release) (string, error) {
 	defer os.Remove(tmp)
 
 	var err error
-	if asset, ok := rel.Assets[i.platform()]; ok {
+	asset, hasAsset := rel.Assets[i.platform()]
+	if hasAsset {
 		i.Log.Info("downloading", "core", rel.Core, "version", rel.Version, "url", asset.URL)
 		err = i.download(ctx, asset, tmp)
+		if err != nil && rel.Build != nil {
+			i.Log.Warn("download failed, building from source instead", "core", rel.Core, "version", rel.Version, "err", err)
+			err = i.build(ctx, *rel.Build, tmp)
+		}
 	} else if rel.Build != nil {
 		i.Log.Info("no prebuilt asset for this platform, building from source", "core", rel.Core, "version", rel.Version, "package", rel.Build.Package)
 		err = i.build(ctx, *rel.Build, tmp)
@@ -111,27 +117,61 @@ func (i *Installer) Install(ctx context.Context, rel Release) (string, error) {
 	return dest, nil
 }
 
-func (i *Installer) download(ctx context.Context, a Asset, dest string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
+func (i *Installer) fetch(ctx context.Context, url string, limit int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	for k, v := range i.Headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := i.HTTP.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("coreinstall: GET %s: %s", a.URL, resp.Status)
+		return nil, fmt.Errorf("coreinstall: GET %s: %s", url, resp.Status)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 512<<20))
+	return io.ReadAll(io.LimitReader(resp.Body, limit))
+}
+
+// expectedSum resolves the digest for an asset: pinned in the manifest, or
+// looked up by file name in a SHA256SUMS file next to it.
+func (i *Installer) expectedSum(ctx context.Context, a Asset) (string, error) {
+	if a.SHA256 != "" {
+		return a.SHA256, nil
+	}
+	if a.SumsURL == "" {
+		return "", nil
+	}
+	sums, err := i.fetch(ctx, a.SumsURL, 1<<20)
+	if err != nil {
+		return "", err
+	}
+	name := a.URL[strings.LastIndex(a.URL, "/")+1:]
+	for _, line := range strings.Split(string(sums), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == name {
+			return fields[0], nil
+		}
+	}
+	return "", fmt.Errorf("coreinstall: %s not listed in %s", name, a.SumsURL)
+}
+
+func (i *Installer) download(ctx context.Context, a Asset, dest string) error {
+	want, err := i.expectedSum(ctx, a)
 	if err != nil {
 		return err
 	}
-	if a.SHA256 != "" {
+	body, err := i.fetch(ctx, a.URL, 512<<20)
+	if err != nil {
+		return err
+	}
+	if want != "" {
 		sum := sha256.Sum256(body)
-		if got := hex.EncodeToString(sum[:]); !strings.EqualFold(got, a.SHA256) {
-			return fmt.Errorf("coreinstall: sha256 mismatch for %s: got %s want %s", a.URL, got, a.SHA256)
+		if got := hex.EncodeToString(sum[:]); !strings.EqualFold(got, want) {
+			return fmt.Errorf("coreinstall: sha256 mismatch for %s: got %s want %s", a.URL, got, want)
 		}
 	} else {
 		i.Log.Warn("asset has no sha256 in the manifest; skipping verification", "url", a.URL)

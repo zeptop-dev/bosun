@@ -67,14 +67,26 @@ Current manifest:
 | mita | 3.36.1 | tested | official mieru server |
 | hysteria | 2.12.2 | tested | official Hysteria 2 server |
 
-## sing-box binary
+## sing-box binary and CI
 
 Official sing-box release builds do **not** include the V2Ray stats API, which
-per-user accounting needs. The installer therefore runs
-`go install -tags with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme github.com/sagernet/sing-box/cmd/sing-box@v1.14.0`,
-unmodified upstream source with extra build tags, not a fork. Module checksums
-are verified by the Go toolchain. Bosun's CI will publish prebuilt binaries so
-nodes do not need Go; until then a Go toolchain is required for sing-box. Note sing-box has no runtime user API: every
+per-user accounting needs. `scripts/build-singbox.sh` builds the unmodified
+upstream tag with the extra tags (`with_v2ray_api` among them); module
+checksums are verified by the Go toolchain. Not a fork.
+
+`.gitlab-ci.yml` runs tests, cross-builds bosun and sing-box for linux
+amd64/arm64, and publishes them to this project's Generic Package Registry:
+
+```
+<registry>/sing-box/1.14.0/sing-box-1.14.0-linux-{amd64,arm64}  + SHA256SUMS   (job publish:singbox, manual on master or on tag)
+<registry>/bosun/<tag>/bosun-linux-{amd64,arm64}                + SHA256SUMS   (on tag, plus a GitLab Release)
+```
+
+The installer downloads sing-box from there and verifies it against the
+published SHA256SUMS. If the project is private, set `cores.registry_token`
+to a Deploy Token with `read_package_registry`. If the download is not
+available (pipeline not run yet, no token), the installer falls back to
+building from source, which needs a Go toolchain on the node. Note sing-box has no runtime user API: every
 user or inbound change is a config rewrite plus restart, batched per pull interval.
 
 ## Xray binary and REALITY interop
