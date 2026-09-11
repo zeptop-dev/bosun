@@ -211,6 +211,17 @@ func (c *Core) Running() bool {
 	return c.sup != nil && c.sup.Running()
 }
 
+// Online implements core.OnlineTracker from auth-time client addresses.
+func (c *Core) Online(_ context.Context) (map[string][]string, error) {
+	c.mu.Lock()
+	auth := c.auth
+	c.mu.Unlock()
+	if auth == nil {
+		return nil, nil
+	}
+	return auth.online(), nil
+}
+
 func (c *Core) Stats(ctx context.Context, reset bool) (map[string]spec.Traffic, error) {
 	rctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()

@@ -286,10 +286,25 @@ func (a *Agent) report(ctx context.Context) bool {
 
 // buildReport assembles the combined report for Reporter drivers.
 func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) agentproto.Report {
-	rep := agentproto.Report{Traffic: traffic, Host: host, Cores: map[string]agentproto.CoreStatus{}}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	rep := agentproto.Report{Traffic: traffic, Host: host, Cores: map[string]agentproto.CoreStatus{}, Online: map[string][]string{}}
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		rep.Cores[name] = agentproto.CoreStatus{Running: c.Running()}
+		if tr, ok := c.(core.OnlineTracker); ok && c.Running() {
+			online, err := tr.Online(ctx)
+			if err != nil {
+				a.log.Warn("online lookup failed", "core", name, "err", err)
+				continue
+			}
+			for user, ips := range online {
+				rep.Online[user] = append(rep.Online[user], ips...)
+			}
+		}
+	}
+	if len(rep.Online) == 0 {
+		rep.Online = nil
 	}
 	for _, s := range a.fwd.Snapshot() {
 		rep.Forwards = append(rep.Forwards, agentproto.ForwardStatus{

@@ -103,6 +103,9 @@ func TestAuthServer(t *testing.T) {
 	if r := post("wrong"); r["ok"] != false {
 		t.Fatalf("invalid auth: %v", r)
 	}
+	if on := a.online(); len(on["u1"]) != 1 || on["u1"][0] != "1.2.3.4" {
+		t.Fatalf("online after auth: %v", on)
+	}
 	a.setUsers(map[string]spec.User{})
 	if r := post("pw-1"); r["ok"] != false {
 		t.Fatalf("removed user must be rejected: %v", r)

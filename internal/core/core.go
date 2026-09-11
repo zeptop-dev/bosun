@@ -135,3 +135,10 @@ func (r *Registry) pick(ib spec.Inbound) (string, error) {
 	sort.Strings(enabled)
 	return "", fmt.Errorf("inbound %q: no enabled core supports %s over %s (enabled: %v)", ib.Tag, ib.Protocol, ib.TransportType(), enabled)
 }
+
+// OnlineTracker is implemented by cores that can report which client IPs
+// each user currently connects from. Not every upstream core exposes this:
+// Xray and the official Hysteria server do, sing-box and mita do not.
+type OnlineTracker interface {
+	Online(ctx context.Context) (map[string][]string, error)
+}
