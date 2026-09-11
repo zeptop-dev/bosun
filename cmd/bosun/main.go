@@ -15,6 +15,7 @@ import (
 	"gitlab.com/zeptop-group/bosun/internal/agent"
 	"gitlab.com/zeptop-group/bosun/internal/config"
 	"gitlab.com/zeptop-group/bosun/internal/core"
+	"gitlab.com/zeptop-group/bosun/internal/core/hysteria"
 	"gitlab.com/zeptop-group/bosun/internal/core/mita"
 	"gitlab.com/zeptop-group/bosun/internal/core/singbox"
 	"gitlab.com/zeptop-group/bosun/internal/core/xray"
@@ -128,6 +129,23 @@ func setup(args []string) (*config.Config, *slog.Logger, panel.Driver, *core.Reg
 				WorkDir:   filepath.Join(cfg.DataDir, "xray"),
 				APIListen: xr.APIListen,
 				LogLevel:  xr.LogLevel,
+			}, log)
+		},
+		"hysteria": func() (core.Core, error) {
+			hy := cfg.Cores.Hysteria
+			if hy == nil {
+				return nil, nil
+			}
+			bin, err := binaryFor("hysteria", hy.Binary, hy.Version)
+			if err != nil {
+				return nil, err
+			}
+			return hysteria.New(hysteria.Options{
+				Binary:      bin,
+				WorkDir:     filepath.Join(cfg.DataDir, "hysteria"),
+				AuthListen:  hy.AuthListen,
+				StatsListen: hy.StatsListen,
+				LogLevel:    hy.LogLevel,
 			}, log)
 		},
 		"mita": func() (core.Core, error) {

@@ -88,8 +88,8 @@ var Manifest = []Release{
 		Build: &Build{Package: "github.com/enfein/mieru/v3/cmd/mita", Version: "v3.36.1"},
 	},
 	{
-		Core: "hysteria", Version: "2.12.2", Status: StatusCaution,
-		Note: "binary verified; bosun has no hysteria adapter yet",
+		Core: "hysteria", Version: "2.12.2", Status: StatusTested,
+		Note: "official Hysteria 2 server; verified with the official client, HTTP auth and traffic stats",
 		Assets: map[string]Asset{
 			"linux/amd64":  {URL: "https://github.com/apernet/hysteria/releases/download/app%2Fv2.12.2/hysteria-linux-amd64", SHA256: "6493dfffd55b5883f64c76c63880ecc32988f0c568c9ca9014907877b4d55f94", Archive: "raw"},
 			"linux/arm64":  {URL: "https://github.com/apernet/hysteria/releases/download/app%2Fv2.12.2/hysteria-linux-arm64", SHA256: "ebfacc1ec3a0edfd742cd68ce17f292a6092e606b9d11f99b035c1d888f3d709", Archive: "raw"},

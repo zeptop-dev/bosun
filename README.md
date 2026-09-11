@@ -11,15 +11,16 @@ Working vertical slice, verified end to end against sing-box 1.14.0:
 - Panel driver for Xboard's UniProxy v1 API (config, users, traffic push, status), with ETag caching.
 - sing-box adapter: renders VLESS, VMess, Trojan, Shadowsocks (incl. 2022), Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive; TLS, REALITY, ws/grpc/httpupgrade/http transports, multiplex, custom outbounds with chaining, route rules.
 - Xray adapter: VLESS, VMess, Trojan, Shadowsocks (AEAD), SOCKS, HTTP over raw/ws/grpc/httpupgrade/xhttp, TLS and REALITY; **hot user add/remove** on VLESS/VMess/Trojan through HandlerService, restart otherwise; per-user stats via StatsService; config validated with `xray run -test`. Verified e2e: REALITY traffic, hot add and hot remove, per-user push.
+- Hysteria adapter (official Hysteria 2 server): users live in bosun, not in the config. Hysteria calls bosun's HTTP auth endpoint per connection, so adds are instant and removals are enforced with a kick through the traffic stats API; only listener changes restart the process. Per-user stats from `/traffic?clear=1`. One hysteria2 inbound per node with this core; sing-box serves several. Verified e2e with the official client.
 - mita adapter (official mieru server): config file + `mita run` as a child, gRPC over a unix socket for hot user reload, proxy restart on port change, and per-user counters (deltas computed by bosun). Verified with the official mieru client.
 - Per-user traffic via each core's own control plane, hand-encoded protobuf, no generated stubs (`internal/core/grpcraw`).
 - Supervised child process: log relay, restart with backoff, graceful stop.
 - Core installer with a tested-version manifest (`internal/coreinstall`): leave `binary` empty and bosun downloads the newest release it has verified, checks its sha256, and installs it under `<data_dir>/cores/<core>/<version>/`. Releases known to break deployments are marked `broken` and only installed when named explicitly. sing-box is built from the upstream tag with the stats API tag (needs a Go toolchain until CI ships binaries).
 - Config validated with `sing-box check` before every start or apply.
 
-Not yet: official Hysteria core; forwarding chains; local UI; traffic spool on push failure.
+Not yet: forwarding chains; local UI; traffic spool on push failure; CI-built sing-box.
 
-Core selection: `cores.order` in the config is the preference; an inbound goes to the first core that supports its protocol, transport and cipher. XHTTP only runs on Xray, HTTP/2 transport and Shadowsocks 2022 multi-user only on sing-box, mieru only on mita.
+Core selection: `cores.order` in the config is the preference; an inbound goes to the first core that supports its protocol, transport and cipher. XHTTP only runs on Xray, HTTP/2 transport and Shadowsocks 2022 multi-user only on sing-box, mieru only on mita. Hysteria2 runs on sing-box (default) or the official server when `hysteria` is listed first.
 
 ## Layout
 
@@ -33,6 +34,7 @@ internal/core/v2stats/      V2Ray-lineage StatsService client (sing-box and Xray
 internal/core/singbox/      sing-box renderer, stats client, process driver
 internal/core/xray/         Xray renderer, HandlerService hot user updates, process driver
 internal/core/mita/         mieru server (mita) renderer, RPC client, process driver
+internal/core/hysteria/     Hysteria 2 renderer, auth endpoint, stats client, process driver
 internal/panel/       Driver interface
 internal/panel/xboard/      Xboard UniProxy v1 driver
 internal/agent/       managed-mode loop: pull -> render -> apply, stats -> push
@@ -59,7 +61,7 @@ Current manifest:
 | xray | 26.3.27 | tested | REALITY works with mihomo and sing-box clients |
 | xray | 26.9.9 | broken | REALITY rejects mihomo/sing-box clients |
 | mita | 3.36.1 | tested | official mieru server |
-| hysteria | 2.12.2 | caution | no adapter yet |
+| hysteria | 2.12.2 | tested | official Hysteria 2 server |
 
 ## sing-box binary
 
