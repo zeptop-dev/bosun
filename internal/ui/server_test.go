@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/boyang-hu/bosun/internal/local"
-	"gitlab.com/boyang-hu/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/internal/local"
+	"github.com/zeptop-dev/bosun/pkg/agentproto"
 )
 
 type client struct {

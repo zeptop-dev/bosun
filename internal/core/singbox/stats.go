@@ -5,8 +5,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"gitlab.com/boyang-hu/bosun/internal/core/v2stats"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/internal/core/v2stats"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // sing-box registers its stats service under the original V2Ray name for

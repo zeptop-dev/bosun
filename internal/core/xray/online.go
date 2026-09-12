@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protowire"
 
-	"gitlab.com/boyang-hu/bosun/internal/core/grpcraw"
+	"github.com/zeptop-dev/bosun/internal/core/grpcraw"
 )
 
 const (

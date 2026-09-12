@@ -1,4 +1,4 @@
-module gitlab.com/boyang-hu/bosun
+module github.com/zeptop-dev/bosun
 
 go 1.26.0
 

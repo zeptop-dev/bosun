@@ -7,8 +7,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protowire"
 
-	"gitlab.com/boyang-hu/bosun/internal/core/grpcraw"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/internal/core/grpcraw"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Xray's HandlerService lets users be added to and removed from a running

@@ -55,12 +55,10 @@ var Binary = map[string]string{
 
 var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2ray_api", "with_gvisor", "with_acme"}
 
-// bosunRegistry is the generic package registry of the bosun project, where
-// CI publishes sing-box builds (see .gitlab-ci.yml, job publish:singbox).
-const bosunRegistry = "https://gitlab.com/api/v4/projects/boyang-hu%2Fbosun/packages/generic"
-
+// singboxCI points at the sing-box builds the bosun CI publishes as a
+// GitHub pre-release tagged singbox-<version> (workflow singbox.yml).
 func singboxCI(version, arch string) Asset {
-	base := bosunRegistry + "/sing-box/" + version + "/"
+	base := "https://github.com/zeptop-dev/bosun/releases/download/singbox-" + version + "/"
 	return Asset{URL: base + "sing-box-" + version + "-linux-" + arch, SumsURL: base + "SHA256SUMS", Archive: "raw"}
 }
 

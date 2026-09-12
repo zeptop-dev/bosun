@@ -1,0 +1,30 @@
+# Builds upstream sing-box with bosun's extra tags (with_v2ray_api ...) for
+# linux amd64/arm64 and publishes it as a pre-release tagged singbox-<version>.
+# Pre-release so it never becomes "latest" for the installer's version lookup.
+name: singbox
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: sing-box version (e.g. 1.14.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - run: scripts/build-singbox.sh "${{ inputs.version }}" linux amd64 dist
+      - run: scripts/build-singbox.sh "${{ inputs.version }}" linux arm64 dist
+      - run: cd dist && sha256sum sing-box-* > SHA256SUMS && cat SHA256SUMS && ./sing-box-${{ inputs.version }}-linux-amd64 version
+      - env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release create "singbox-${{ inputs.version }}" --prerelease \
+            --title "sing-box ${{ inputs.version }} (bosun build)" \
+            --notes "Unmodified upstream sing-box v${{ inputs.version }} built with tags with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme. Consumed by bosun's core installer." \
+            dist/sing-box-* dist/SHA256SUMS

@@ -53,7 +53,7 @@ internal/sysinfo/     host status snapshot
 Standalone, with the built-in web panel on port 2053:
 
 ```sh
-curl -fsSL https://gitlab.com/boyang-hu/bosun/-/raw/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/install.sh | sh
 ```
 
 The installer prints the generated login. Open `http://<server>:2053/`, add inbounds
@@ -63,7 +63,7 @@ an SSH tunnel; or set `web.cert`/`web.key` for TLS.
 Managed by Captain from the start (no local panel edits):
 
 ```sh
-curl -fsSL https://gitlab.com/boyang-hu/bosun/-/raw/master/scripts/install.sh | sh -s -- \
+curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/install.sh | sh -s -- \
   --captain https://captain.example.com --pair ABCD-EFGH
 ```
 
@@ -83,7 +83,7 @@ docker logs bosun 2>&1 | grep password=     # first-start login
 Host networking is required (the cores bind the node's ports). `deploy/docker-compose.yml`
 is the same thing as compose; mount a config over `/etc/bosun/config.yaml` to
 change the panel port or pin a managed driver. Images: `zeptop/bosun` on Docker Hub
-and `registry.gitlab.com/boyang-hu/bosun`, both public, amd64 and arm64.
+and `ghcr.io/zeptop-dev/bosun`, both public, amd64 and arm64.
 
 ## Standalone vs managed
 
@@ -128,19 +128,21 @@ per-user accounting needs. `scripts/build-singbox.sh` builds the unmodified
 upstream tag with the extra tags (`with_v2ray_api` among them); module
 checksums are verified by the Go toolchain. Not a fork.
 
-`.gitlab-ci.yml` runs tests, cross-builds bosun and sing-box for linux
-amd64/arm64, and publishes them to this project's Generic Package Registry:
+GitHub Actions (`.github/workflows/`) run tests on every push, and on a `v*`
+tag cross-build bosun for linux amd64/arm64 and attach the binaries plus
+`SHA256SUMS` to the GitHub Release, and push the container image. The
+`singbox` workflow (run by hand with a version) builds sing-box the same way and
+publishes it as a pre-release tagged `singbox-<version>`:
 
 ```
-<registry>/sing-box/1.14.0/sing-box-1.14.0-linux-{amd64,arm64}  + SHA256SUMS   (job publish:singbox, manual on master or on tag)
-<registry>/bosun/<tag>/bosun-linux-{amd64,arm64}                + SHA256SUMS   (on tag, plus a GitLab Release)
+releases/download/singbox-1.14.0/sing-box-1.14.0-linux-{amd64,arm64}  + SHA256SUMS
+releases/download/<tag>/bosun-linux-{amd64,arm64}                     + SHA256SUMS
 ```
 
 The installer downloads sing-box from there and verifies it against the
-published SHA256SUMS. If the project is private, set `cores.registry_token`
-to a Deploy Token with `read_package_registry`. If the download is not
-available (pipeline not run yet, no token), the installer falls back to
-building from source, which needs a Go toolchain on the node. Note sing-box has no runtime user API: every
+published SHA256SUMS. If the download is not available (workflow not run for
+that version yet), the installer falls back to building from source, which
+needs a Go toolchain on the node. Note sing-box has no runtime user API: every
 user or inbound change is a config rewrite plus restart, batched per pull interval.
 
 ## Xray binary and REALITY interop

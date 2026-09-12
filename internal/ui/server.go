@@ -19,15 +19,15 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/boyang-hu/bosun/internal/agent"
-	"gitlab.com/boyang-hu/bosun/internal/authutil"
-	"gitlab.com/boyang-hu/bosun/internal/coreinstall"
-	"gitlab.com/boyang-hu/bosun/internal/local"
-	"gitlab.com/boyang-hu/bosun/internal/logring"
-	"gitlab.com/boyang-hu/bosun/internal/sysinfo"
-	"gitlab.com/boyang-hu/bosun/pkg/agentproto"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
-	"gitlab.com/boyang-hu/bosun/web"
+	"github.com/zeptop-dev/bosun/internal/agent"
+	"github.com/zeptop-dev/bosun/internal/authutil"
+	"github.com/zeptop-dev/bosun/internal/coreinstall"
+	"github.com/zeptop-dev/bosun/internal/local"
+	"github.com/zeptop-dev/bosun/internal/logring"
+	"github.com/zeptop-dev/bosun/internal/sysinfo"
+	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/web"
 )
 
 const (

@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/boyang-hu/bosun/internal/authutil"
-	"gitlab.com/boyang-hu/bosun/pkg/agentproto"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/internal/authutil"
+	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // ErrNotFound is returned for unknown tags and IDs.
