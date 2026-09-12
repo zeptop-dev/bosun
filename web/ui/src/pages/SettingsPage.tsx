@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type CoreRelease, type Settings, type Status } from '../lib/api'
+import { UpdateCard } from '../components/UpdateCard'
 import { useAuth } from '../lib/auth'
 import { when } from '../lib/format'
 import { toast } from '../lib/notify'
@@ -81,6 +82,8 @@ export default function SettingsPage() {
           </Stack>
         )}
       </Card>
+
+      <UpdateCard mb="lg" />
 
       <Card>
         <Title order={5} mb="xs">{t('settings.cores')}</Title>

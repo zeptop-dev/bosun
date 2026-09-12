@@ -65,7 +65,11 @@ type CoreStatus struct {
 	Version string `json:"version,omitempty"`
 }
 
-// ReportResponse lets Captain nudge the agent to fetch state immediately.
+// ReportResponse lets Captain nudge the agent to fetch state immediately
+// and, when an operator asked for it, upgrade itself.
 type ReportResponse struct {
 	StateChanged bool `json:"state_changed"`
+	// UpgradeTo is a bosun release tag (e.g. "v0.6.0") the agent should
+	// install and restart into. Empty means nothing to do.
+	UpgradeTo string `json:"upgrade_to,omitempty"`
 }

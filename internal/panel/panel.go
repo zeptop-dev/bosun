@@ -35,6 +35,13 @@ type Notifier interface {
 	Changed() <-chan struct{}
 }
 
+// UpgradeRequester is implemented by drivers whose panel can ask the agent
+// to upgrade itself; the value is the release tag from the last report
+// response, "" when none.
+type UpgradeRequester interface {
+	UpgradeRequested() string
+}
+
 // Reporter is implemented by drivers that accept one combined report per
 // push interval (traffic, host status, forward probes, core state). The
 // agent prefers it over PushTraffic/PushStatus. stateChanged asks the agent

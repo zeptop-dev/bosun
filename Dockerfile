@@ -24,6 +24,9 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata
+# Tells the self-updater to point at `docker compose pull` instead of
+# replacing the binary inside the image.
+ENV IN_CONTAINER=1
 COPY --from=build /out/bosun /usr/local/bin/bosun
 COPY deploy/docker-config.yaml /etc/bosun/config.yaml
 VOLUME /var/lib/bosun

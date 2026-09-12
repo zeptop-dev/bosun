@@ -33,7 +33,42 @@ import (
 	"github.com/zeptop-dev/bosun/internal/panel/xboard"
 	"github.com/zeptop-dev/bosun/internal/ui"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 )
+
+// newUpdater returns the self-update client for this binary.
+func newUpdater() *selfupdate.Client {
+	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version}
+}
+
+// upgradeHook applies a panel-requested release and restarts. In a container
+// it only logs: the image has to be pulled by the operator.
+func upgradeHook(log *slog.Logger, upd *selfupdate.Client) func(string) {
+	return func(v string) {
+		if v == version {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		got, err := upd.Apply(ctx, v)
+		if err != nil {
+			log.Error("panel-requested upgrade failed", "version", v, "err", err)
+			return
+		}
+		log.Warn("upgraded on panel request; restarting", "from", version, "to", got)
+		selfupdate.Restart(2 * time.Second)
+	}
+}
+
+// watchUpdates logs when a newer release appears (every 6h check).
+func watchUpdates(ctx context.Context, log *slog.Logger, upd *selfupdate.Client) {
+	if !upd.ReleaseBuild() {
+		return
+	}
+	upd.Watch(ctx, 6*time.Hour, func(info selfupdate.Info) {
+		log.Info("a newer bosun release is available", "current", info.Current, "latest", info.Latest, "url", info.URL)
+	})
+}
 
 var version = "dev"
 
@@ -232,9 +267,14 @@ func cmdRun(args []string) error {
 		log.Info("metrics endpoint", "listen", cfg.MetricsListen)
 	}
 
+	upd := newUpdater()
+	go watchUpdates(ctx, log, upd)
+
 	// Headless managed mode without a web panel: the original single agent.
 	if e.driver != nil && cfg.Web == nil {
-		return agent.New(cfg, e.driver, e.reg, mreg, log).Run(ctx)
+		ag := agent.New(cfg, e.driver, e.reg, mreg, log)
+		ag.Upgrade = upgradeHook(log, upd)
+		return ag.Run(ctx)
 	}
 
 	store, initialPassword, err := local.Open(cfg.Web.StateFile, log)
@@ -244,11 +284,11 @@ func cmdRun(args []string) error {
 	if initialPassword != "" {
 		log.Warn("web panel login created; change it after signing in", "username", "admin", "password", initialPassword)
 	}
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver}
+	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd)}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
 		Fixed: fixedName(e.driver), Adopt: sup.adopt, Detach: sup.detach, ManagedState: sup.managedState,
-		Secure: cfg.Web.Cert != "",
+		Secure: cfg.Web.Cert != "", Updater: upd,
 	})
 	sup.ui = panelUI
 	srv := &http.Server{Addr: cfg.Web.Listen, Handler: panelUI.Handler(), ReadHeaderTimeout: 10 * time.Second}
@@ -285,6 +325,8 @@ type supervisor struct {
 	store *local.Store
 	fixed panel.Driver // config-pinned headless driver, or nil
 	ui    *ui.Server
+	// upgrade handles a panel-requested release change.
+	upgrade func(string)
 
 	mu      sync.Mutex
 	captain *captain.Client // current managed driver, when any
@@ -333,6 +375,7 @@ func (s *supervisor) run(ctx context.Context) error {
 			s.mreg.Reset()
 		}
 		ag := agent.New(s.cfg, d, s.reg, s.mreg, s.log)
+		ag.Upgrade = s.upgrade
 		s.ui.SetAgent(ag)
 		actx, cancel := context.WithCancel(ctx)
 		done := make(chan error, 1)

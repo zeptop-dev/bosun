@@ -36,6 +36,11 @@ type Agent struct {
 
 	statusMu sync.Mutex
 	status   Status
+
+	// Upgrade is called (in its own goroutine, once per requested version)
+	// when the panel asks the node to move to another release.
+	Upgrade      func(version string)
+	upgradeAsked string
 }
 
 // Status is what the agent is doing, for the local UI.
@@ -369,6 +374,13 @@ func (a *Agent) report(ctx context.Context) bool {
 			return false
 		}
 		a.log.Debug("report sent", "users", len(list), "state_changed", changed)
+		if ur, ok := a.driver.(panel.UpgradeRequester); ok && a.Upgrade != nil {
+			if v := ur.UpgradeRequested(); v != "" && v != a.upgradeAsked {
+				a.upgradeAsked = v
+				a.log.Info("panel requested upgrade", "version", v)
+				go a.Upgrade(v)
+			}
+		}
 		return changed
 	}
 	if len(list) > 0 {
