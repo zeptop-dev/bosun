@@ -72,18 +72,32 @@ installer verifies the binary against the release checksums, writes
 `/etc/bosun/config.yaml`, and starts the `bosun` service; cores are downloaded on
 first start. Re-run without arguments to upgrade.
 
-### Docker
+### Docker Compose
+
+Docker installed (`curl -fsSL https://get.docker.com | sh`), then:
 
 ```sh
-docker run -d --name bosun --network host --restart unless-stopped \
-  -v bosun-data:/var/lib/bosun zeptop/bosun:latest
-docker logs bosun 2>&1 | grep password=     # first-start login
+mkdir -p /opt/bosun && cd /opt/bosun
+curl -fsSLO https://raw.githubusercontent.com/zeptop-dev/bosun/master/deploy/docker-compose.yml
+docker compose up -d
+docker compose logs bosun 2>&1 | grep password=     # first-start login
 ```
 
-Host networking is required (the cores bind the node's ports). `deploy/docker-compose.yml`
-is the same thing as compose; mount a config over `/etc/bosun/config.yaml` to
-change the panel port or pin a managed driver. Images: `zeptop/bosun` on Docker Hub
-and `ghcr.io/zeptop-dev/bosun`, both public, amd64 and arm64.
+Open `http://<server>:2053/` (or reach it over an SSH tunnel:
+`ssh -L 2053:127.0.0.1:2053 root@<server>`). `network_mode: host` is required:
+the proxy cores bind the node's ports directly and forwards use the real
+interfaces. Cores are downloaded into the `bosun-data` volume on first use.
+
+To start already managed by Captain, or to change the panel port or add TLS
+certificates for inbounds, put a `config.yaml` next to the compose file (start
+from `config.example.yaml`) and uncomment the mount lines in the compose file.
+
+Day-to-day:
+
+```sh
+docker compose logs -f bosun
+docker compose pull && docker compose up -d   # upgrade; the panel shows this command when a release is out
+```
 
 ## Updating
 
