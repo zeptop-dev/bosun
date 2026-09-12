@@ -581,6 +581,9 @@ func with(l map[string]string, k, v string) map[string]string {
 }
 
 func (a *Agent) stopAll() {
+	if c, ok := a.driver.(interface{ Close() error }); ok {
+		_ = c.Close()
+	}
 	a.fwd.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
