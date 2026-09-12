@@ -57,4 +57,9 @@ export interface Status {
 export interface Settings { public_host: string; node_name: string }
 export interface Link { tag: string; name: string; uri: string }
 export interface CoreRelease { Core: string; Version: string; Status: string; Note: string; Installed: boolean }
+export interface UpdateInfo {
+  current: string; latest: string; has_update: boolean; release_build: boolean; in_container: boolean
+  notes?: string; published_at?: string; url?: string; checked_at: string; cached: boolean; warning?: string
+  has_backup: boolean; backup_version?: string
+}
 export interface LogEntry { time: string; level: string; msg: string; attrs?: string }

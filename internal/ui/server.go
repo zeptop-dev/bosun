@@ -26,6 +26,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/logring"
 	"github.com/zeptop-dev/bosun/internal/sysinfo"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 	"github.com/zeptop-dev/bosun/web"
 )
@@ -52,6 +53,8 @@ type Deps struct {
 	// ManagedState returns the last state pushed by the panel, if any.
 	ManagedState func() *agentproto.State
 	Secure       bool // cookies get the Secure flag
+	// Updater checks and applies bosun releases; nil disables the feature.
+	Updater *selfupdate.Client
 }
 
 // Server is the panel HTTP handler.
@@ -132,6 +135,11 @@ func (s *Server) routes() {
 
 	m.HandleFunc("POST /api/mode/adopt", auth(s.adopt))
 	m.HandleFunc("POST /api/mode/detach", auth(s.detach))
+
+	m.HandleFunc("GET /api/update", auth(s.updateCheck))
+	m.HandleFunc("POST /api/update/apply", auth(s.updateApply))
+	m.HandleFunc("POST /api/update/rollback", auth(s.updateRollback))
+	m.HandleFunc("POST /api/restart", auth(s.restart))
 
 	m.Handle("/", web.UI())
 }
@@ -653,4 +661,62 @@ func (s *Server) detach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ok(w, map[string]bool{"ok": true})
+}
+
+// ---- self-update -------------------------------------------------------------
+
+func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
+	if s.d.Updater == nil {
+		fail(w, http.StatusNotFound, errors.New("self-update disabled"))
+		return
+	}
+	ok(w, s.d.Updater.Check(r.Context(), r.URL.Query().Get("force") == "1"))
+}
+
+// updateApply installs the latest (or requested) release and restarts.
+func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
+	if s.d.Updater == nil {
+		fail(w, http.StatusNotFound, errors.New("self-update disabled"))
+		return
+	}
+	var in struct {
+		Version string `json:"version"`
+	}
+	_ = decode(r, &in)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	ver, err := s.d.Updater.Apply(ctx, in.Version)
+	if err != nil {
+		code := http.StatusBadGateway
+		if errors.Is(err, selfupdate.ErrInContainer) || errors.Is(err, selfupdate.ErrUpToDate) {
+			code = http.StatusConflict
+		}
+		fail(w, code, err)
+		return
+	}
+	s.d.Log.Warn("bosun updated; restarting", "version", ver)
+	ok(w, map[string]any{"installed": ver, "restarting": true})
+	selfupdate.Restart(500 * time.Millisecond)
+}
+
+func (s *Server) updateRollback(w http.ResponseWriter, r *http.Request) {
+	if s.d.Updater == nil {
+		fail(w, http.StatusNotFound, errors.New("self-update disabled"))
+		return
+	}
+	ver, err := s.d.Updater.Rollback()
+	if err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	s.d.Log.Warn("bosun rolled back; restarting", "version", ver)
+	ok(w, map[string]any{"installed": ver, "restarting": true})
+	selfupdate.Restart(500 * time.Millisecond)
+}
+
+// restart exits so the supervisor starts the binary again.
+func (s *Server) restart(w http.ResponseWriter, r *http.Request) {
+	s.d.Log.Warn("restart requested from the web panel")
+	ok(w, map[string]bool{"restarting": true})
+	selfupdate.Restart(500 * time.Millisecond)
 }

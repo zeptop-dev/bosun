@@ -85,6 +85,22 @@ is the same thing as compose; mount a config over `/etc/bosun/config.yaml` to
 change the panel port or pin a managed driver. Images: `zeptop/bosun` on Docker Hub
 and `ghcr.io/zeptop-dev/bosun`, both public, amd64 and arm64.
 
+## Updating
+
+Settings → "Version and updates" checks GitHub Releases (cached 20 minutes; a
+red dot on the version badge means a newer release exists). "Update and
+restart" downloads `bosun-linux-<arch>` for the running platform, verifies it
+against the release's `SHA256SUMS`, swaps the binary atomically (the previous
+one stays as `bosun.backup` for "Roll back") and exits; systemd's
+`Restart=always` starts the new version. Cores restart with it, so users drop
+for a few seconds. Managed nodes can also be upgraded from Captain's node list,
+one at a time or all at once: the request rides on the next report and the node
+applies it the same way.
+
+Inside Docker the binary is part of the image, so the panel only shows the
+`docker compose pull && docker compose up -d` command instead. `bosun` also logs
+a notice every six hours when a newer release exists.
+
 ## Standalone vs managed
 
 `panel.driver: local` (the default) keeps inbounds, users and forwards in

@@ -45,6 +45,14 @@ type Client struct {
 	nodeSeen  string // revision last returned by Node()
 	usersSeen string // revision last returned by Users()
 	fwdSeen   string // revision last returned by Forwards()
+	upgradeTo string // from the last report response
+}
+
+// UpgradeRequested implements panel.UpgradeRequester.
+func (c *Client) UpgradeRequested() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.upgradeTo
 }
 
 // New returns a driver. It loads a stored token if present; pairing happens
@@ -264,6 +272,9 @@ func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error
 	}
 	var resp agentproto.ReportResponse
 	_ = json.Unmarshal(body, &resp)
+	c.mu.Lock()
+	c.upgradeTo = resp.UpgradeTo
+	c.mu.Unlock()
 	return resp.StateChanged, nil
 }
 
