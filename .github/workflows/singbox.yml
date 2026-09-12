@@ -1,4 +1,4 @@
-# Builds upstream sing-box with bosun's extra tags (with_v2ray_api ...) for
+# Builds upstream sing-box (bosun CI) with bosun's extra tags (with_v2ray_api ...) for
 # linux amd64/arm64 and publishes it as a pre-release tagged singbox-<version>.
 # Pre-release so it never becomes "latest" for the installer's version lookup.
 name: singbox
