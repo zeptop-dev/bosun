@@ -167,11 +167,13 @@ its own data dir, so it does not touch a system-installed mita's config or
 socket. Unix socket paths are limited to ~100 bytes; bosun falls back to the
 temp dir automatically when the data dir path is too long.
 
-## Licensing notes
+## License
 
-`references/` in the workspace contains projects under GPL/AGPL. Nothing from
-them is copied here. The sing-box stats client re-implements the wire format
-from the public proto definition.
+MIT, see `LICENSE`. bosun runs sing-box, Xray, mita and Hysteria as separate
+processes from their upstream release binaries and talks to them over their
+own APIs and config files; none of their code is linked or copied, so their
+licenses (GPL-3 for sing-box and mieru) do not extend to bosun. The sing-box
+stats client re-implements the wire format from the public proto definition.
 
 ## Forwarding chains
 
