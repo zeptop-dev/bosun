@@ -1,7 +1,7 @@
 # bosun on a node. Host networking is required for the proxy cores.
 services:
   bosun:
-    image: zeptop/bosun:latest   # or registry.gitlab.com/boyang-hu/bosun:latest
+    image: zeptop/bosun:latest   # or ghcr.io/zeptop-dev/bosun:latest
     restart: unless-stopped
     network_mode: host
     volumes:

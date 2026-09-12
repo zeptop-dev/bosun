@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 type fakeCore struct {

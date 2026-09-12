@@ -10,14 +10,14 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/boyang-hu/bosun/internal/config"
-	"gitlab.com/boyang-hu/bosun/internal/core"
-	"gitlab.com/boyang-hu/bosun/internal/forward"
-	"gitlab.com/boyang-hu/bosun/internal/metrics"
-	"gitlab.com/boyang-hu/bosun/internal/panel"
-	"gitlab.com/boyang-hu/bosun/internal/sysinfo"
-	"gitlab.com/boyang-hu/bosun/pkg/agentproto"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/internal/config"
+	"github.com/zeptop-dev/bosun/internal/core"
+	"github.com/zeptop-dev/bosun/internal/forward"
+	"github.com/zeptop-dev/bosun/internal/metrics"
+	"github.com/zeptop-dev/bosun/internal/panel"
+	"github.com/zeptop-dev/bosun/internal/sysinfo"
+	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Agent wires one panel driver to a core registry.

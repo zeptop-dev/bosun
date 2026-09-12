@@ -6,8 +6,7 @@
 # Re-running upgrades the binary and keeps /etc/bosun/config.yaml.
 set -eu
 
-PROJECT="boyang-hu%2Fbosun"
-API="https://gitlab.com/api/v4/projects/$PROJECT"
+REPO="zeptop-dev/bosun"
 CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN=":2053"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -29,10 +28,10 @@ case "$(uname -m)" in
 esac
 
 if [ -z "$VERSION" ]; then
-  VERSION=$(curl -fsSL "$API/releases?per_page=1" | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | head -1)
+  VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
   [ -n "$VERSION" ] || { echo "could not determine the latest release" >&2; exit 1; }
 fi
-BASE="$API/packages/generic/bosun/$VERSION"
+BASE="https://github.com/$REPO/releases/download/$VERSION"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 echo "downloading bosun $VERSION ($ARCH)"
 curl -fsSL -o "$TMP/bosun" "$BASE/bosun-linux-$ARCH"
@@ -78,7 +77,7 @@ CFG
   echo "wrote /etc/bosun/config.yaml"
 fi
 
-curl -fsSL -o /etc/systemd/system/bosun.service "https://gitlab.com/boyang-hu/bosun/-/raw/$VERSION/deploy/bosun.service"
+curl -fsSL -o /etc/systemd/system/bosun.service "https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.service"
 systemctl daemon-reload
 systemctl enable --now bosun
 systemctl restart bosun

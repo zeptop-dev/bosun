@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // statsClient talks to hysteria's trafficStats HTTP API.

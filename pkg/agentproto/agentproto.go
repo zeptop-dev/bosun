@@ -8,7 +8,7 @@
 //	POST /api/agent/report  Report       -> ReportResponse
 package agentproto
 
-import "gitlab.com/boyang-hu/bosun/pkg/spec"
+import "github.com/zeptop-dev/bosun/pkg/spec"
 
 // PairRequest redeems a one-time pairing code for a node token.
 type PairRequest struct {

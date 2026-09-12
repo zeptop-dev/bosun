@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // authServer answers hysteria's HTTP auth callbacks. Hysteria POSTs

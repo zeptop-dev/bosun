@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 func freePort(t *testing.T) int {

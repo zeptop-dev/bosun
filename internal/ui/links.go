@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/boyang-hu/bosun/internal/local"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/internal/local"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Link is one share URI for a user on an inbound.

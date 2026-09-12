@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 func decode(t *testing.T, b []byte) map[string]any {

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Config is the connection setup for one node.

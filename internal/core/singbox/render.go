@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 type m = map[string]any

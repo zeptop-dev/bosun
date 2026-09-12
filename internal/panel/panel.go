@@ -5,8 +5,8 @@ package panel
 import (
 	"context"
 
-	"gitlab.com/boyang-hu/bosun/pkg/agentproto"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Driver talks to one panel implementation.

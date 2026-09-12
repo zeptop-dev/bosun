@@ -12,7 +12,7 @@ package local
 import (
 	"time"
 
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Mode is who owns the node's desired state.

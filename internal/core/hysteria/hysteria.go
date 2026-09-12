@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/boyang-hu/bosun/internal/core"
-	"gitlab.com/boyang-hu/bosun/internal/core/subprocess"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/internal/core"
+	"github.com/zeptop-dev/bosun/internal/core/subprocess"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Options configures the Hysteria adapter.

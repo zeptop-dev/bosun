@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gitlab.com/boyang-hu/bosun/pkg/agentproto"
-	"gitlab.com/boyang-hu/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // fakeCaptain implements the three agent endpoints in memory.
