@@ -146,7 +146,13 @@
       "trojanWsDesc": "CDN friendly; needs a certificate.",
       "anytls": "AnyTLS",
       "anytlsDesc": "New protocol resisting traffic analysis; needs a certificate."
-    }
+    },
+    "serverNameAuto": "Domain of the certificate; its DNS must point at this machine",
+    "autoCert": "Automatic certificate",
+    "autoCertHint": "Obtained and renewed from Let's Encrypt; no certificate files to manage",
+    "acme": "Challenge",
+    "acmeHttp": "HTTP (port 80 here must be reachable from the internet)",
+    "acmeDns": "DNS (Cloudflare, token in Settings)"
   },
   "users": {
     "title": "Users",
@@ -216,7 +222,18 @@
     "version": "Version",
     "status": "Status",
     "note": "Note",
-    "installed": "installed"
+    "installed": "installed",
+    "certs": "Automatic certificates",
+    "certsHint": "Inbounds with “Automatic certificate” use this account. HTTP needs port 80 reachable; DNS goes through Cloudflare.",
+    "acmeEmail": "Let's Encrypt email",
+    "cfToken": "Cloudflare API token",
+    "cfTokenHint": "DNS challenge only; permission Zone.DNS edit",
+    "panelDomain": "Panel domain",
+    "panelDomainHint": "Serves the panel over HTTPS with an automatic certificate; restart after saving",
+    "certList": "Certificates",
+    "domain": "Domain",
+    "expires": "Expires",
+    "certOk": "ok"
   },
   "logs": {
     "title": "Logs",

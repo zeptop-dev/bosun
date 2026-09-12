@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/certs"
 	"github.com/zeptop-dev/bosun/internal/config"
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/forward"
@@ -41,6 +42,26 @@ type Agent struct {
 	// when the panel asks the node to move to another release.
 	Upgrade      func(version string)
 	upgradeAsked string
+
+	// Certs obtains certificates for inbounds with auto_cert; nil disables.
+	Certs *certs.Manager
+	// kick re-applies the current state (after a certificate renewal).
+	kick         chan struct{}
+	forceRestart bool
+	// skipped are inbounds left out of the last apply (no certificate yet).
+	skipped map[string]string
+}
+
+// ReloadCerts asks the agent to restart the cores so renewed certificate
+// files are picked up.
+func (a *Agent) ReloadCerts(string) {
+	a.statusMu.Lock()
+	a.forceRestart = true
+	a.statusMu.Unlock()
+	select {
+	case a.kick <- struct{}{}:
+	default:
+	}
 }
 
 // Status is what the agent is doing, for the local UI.
@@ -56,6 +77,9 @@ type Status struct {
 	CoreInbound map[string]int    `json:"core_inbounds"`
 	Forwards    []forward.Stats   `json:"-"`
 	Assign      map[string]string `json:"assign"` // inbound tag -> core
+	// Skipped lists inbounds not running and why (usually a missing
+	// certificate); they are retried on the next pull.
+	Skipped map[string]string `json:"skipped,omitempty"`
 }
 
 // Status returns a snapshot of the agent state.
@@ -84,7 +108,7 @@ func (a *Agent) ForwardStats() []forward.Stats { return a.fwd.Snapshot() }
 
 // New builds an agent. metrics may be nil.
 func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metrics.Registry, log *slog.Logger) *Agent {
-	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent")}
+	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), kick: make(chan struct{}, 1)}
 	if mreg != nil {
 		a.registerMetrics()
 	}
@@ -127,6 +151,12 @@ func (a *Agent) Run(ctx context.Context) error {
 			// Coalesce bursts of edits before rendering.
 			time.Sleep(300 * time.Millisecond)
 			a.pullApply(ctx)
+		case <-a.kick:
+			if a.node != nil {
+				if err := a.apply(ctx); err != nil {
+					a.log.Error("apply failed", "err", err)
+				}
+			}
 		case <-pull.C:
 			if changed, err := a.pull(ctx); err != nil {
 				a.log.Warn("pull failed", "err", err)
@@ -210,7 +240,7 @@ func (a *Agent) pull(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("node: %w", err)
 	}
 	if nodeChanged {
-		ResolveCerts(a.cfg, node, a.log)
+		a.resolveCerts(ctx, node)
 		a.node = node
 		changed = true
 		a.log.Info("node config updated", "inbounds", len(node.Inbounds), "outbounds", len(node.Outbounds))
@@ -258,7 +288,7 @@ func (a *Agent) rebuildUserIndex() {
 func ResolveCerts(cfg *config.Config, node *spec.Node, log *slog.Logger) {
 	for i := range node.Inbounds {
 		t := node.Inbounds[i].TLS
-		if t == nil || t.Mode != spec.TLSStandard {
+		if t == nil || t.Mode != spec.TLSStandard || t.AutoCert {
 			continue
 		}
 		certPath, keyPath, ok := cfg.CertFor(t.ServerName)
@@ -271,6 +301,38 @@ func ResolveCerts(cfg *config.Config, node *spec.Node, log *slog.Logger) {
 	}
 }
 
+// resolveCerts fills local certificate paths and obtains ACME certificates
+// for inbounds that ask for them. An inbound whose certificate cannot be
+// obtained is skipped (not rendered) rather than breaking the whole core;
+// it is retried on the next pull.
+func (a *Agent) resolveCerts(ctx context.Context, node *spec.Node) {
+	ResolveCerts(a.cfg, node, a.log)
+	skipped := map[string]string{}
+	if a.Certs != nil && node.ACME != nil {
+		a.Certs.Configure(node.ACME.Email, node.ACME.CloudflareToken)
+	}
+	for i := range node.Inbounds {
+		ib := &node.Inbounds[i]
+		t := ib.TLS
+		if t == nil || t.Mode != spec.TLSStandard || !t.AutoCert {
+			continue
+		}
+		if a.Certs == nil {
+			skipped[ib.Tag] = "certificate automation is disabled"
+			continue
+		}
+		certPath, keyPath, err := a.Certs.Ensure(ctx, t.ServerName, t.ACME)
+		if err != nil {
+			skipped[ib.Tag] = err.Error()
+			continue
+		}
+		t.CertPath, t.KeyPath = certPath, keyPath
+	}
+	a.statusMu.Lock()
+	a.skipped = skipped
+	a.statusMu.Unlock()
+}
+
 // apply renders the current state onto each core and starts, restarts or
 // stops cores as their assignment changes.
 func (a *Agent) apply(ctx context.Context) error {
@@ -281,12 +343,26 @@ func (a *Agent) apply(ctx context.Context) error {
 		if err != nil {
 			s.LastError = err.Error()
 		}
+		s.Skipped = a.skipped
 	})
 	return err
 }
 
 func (a *Agent) applyInner(ctx context.Context) error {
-	assign, err := a.reg.Assign(a.node.Inbounds)
+	a.statusMu.Lock()
+	restart := a.forceRestart
+	a.forceRestart = false
+	skipped := a.skipped
+	a.statusMu.Unlock()
+	inbounds := make([]spec.Inbound, 0, len(a.node.Inbounds))
+	for _, ib := range a.node.Inbounds {
+		if _, skip := skipped[ib.Tag]; skip {
+			a.log.Warn("inbound skipped", "inbound", ib.Tag, "reason", skipped[ib.Tag])
+			continue
+		}
+		inbounds = append(inbounds, ib)
+	}
+	assign, err := a.reg.Assign(inbounds)
 	if err != nil {
 		return err
 	}
@@ -314,6 +390,13 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		bundle, err := c.Render(a.node, inbounds, a.users)
 		if err != nil {
 			return fmt.Errorf("%s: render: %w", name, err)
+		}
+		if restart && c.Running() {
+			// Certificate files changed underneath: a plain Apply would see
+			// an identical config and do nothing.
+			if err := c.Stop(ctx); err != nil {
+				return fmt.Errorf("%s: stop for reload: %w", name, err)
+			}
 		}
 		if c.Running() {
 			err = c.Apply(ctx, bundle)
@@ -417,6 +500,11 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 	}
 	if len(rep.Online) == 0 {
 		rep.Online = nil
+	}
+	if a.Certs != nil {
+		for _, st := range a.Certs.Status() {
+			rep.Certs = append(rep.Certs, agentproto.CertStatus{Domain: st.Domain, Method: st.Method, NotAfter: st.NotAfter, Error: st.Error})
+		}
 	}
 	for _, s := range a.fwd.Snapshot() {
 		rep.Forwards = append(rep.Forwards, agentproto.ForwardStatus{

@@ -68,6 +68,15 @@ type Settings struct {
 	PublicHost string `json:"public_host"`
 	// NodeName prefixes share-link names.
 	NodeName string `json:"node_name"`
+	// ACMEEmail is the Let's Encrypt account contact for automatic certificates.
+	ACMEEmail string `json:"acme_email"`
+	// CloudflareToken enables DNS-01 challenges (wildcards, boxes without port 80).
+	CloudflareToken string `json:"cloudflare_token"`
+	// PanelDomain serves the web panel over HTTPS with an automatic
+	// certificate for this name (takes effect after a restart).
+	PanelDomain string `json:"panel_domain"`
+	// PanelACME is the challenge for the panel certificate: "http" or "dns".
+	PanelACME string `json:"panel_acme"`
 }
 
 // Inbound is a spec.Inbound plus local bookkeeping.

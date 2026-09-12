@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Group, PasswordInput, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core'
+import { Alert, Badge, Button, Card, Group, PasswordInput, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -18,7 +18,7 @@ export default function SettingsPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api.get<Settings>('/api/settings') })
   const status = useQuery({ queryKey: ['status'], queryFn: () => api.get<Status>('/api/status'), refetchInterval: 5_000 })
   const cores = useQuery({ queryKey: ['cores'], queryFn: () => api.get<CoreRelease[]>('/api/cores') })
-  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '' } })
+  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http' } })
   useEffect(() => { if (settings.data) sform.setValues(settings.data) }, [settings.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const saveSettings = useMutation({ mutationFn: (v: Settings) => api.put('/api/settings', v), onSuccess: () => { toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['links'] }) }, onError: toast.err })
   const aform = useForm({ initialValues: { Username: me?.username ?? 'admin', Password: '', Confirm: '' }, validate: { Confirm: (v, all) => (v === all.Password ? null : t('settings.mismatch')) } })
@@ -38,6 +38,14 @@ export default function SettingsPage() {
           <form onSubmit={sform.onSubmit((v) => saveSettings.mutate(v))}><Stack gap="sm">
             <TextInput label={t('settings.publicHost')} description={t('settings.publicHostHint')} placeholder="node.example.com" {...sform.getInputProps('public_host')} />
             <TextInput label={t('settings.nodeName')} description={t('settings.nodeNameHint')} placeholder="JP-1" {...sform.getInputProps('node_name')} />
+            <Title order={6} mt="xs">{t('settings.certs')}</Title>
+            <Text size="xs" c="dimmed">{t('settings.certsHint')}</Text>
+            <TextInput label={t('settings.acmeEmail')} placeholder="you@example.com" {...sform.getInputProps('acme_email')} />
+            <PasswordInput label={t('settings.cfToken')} description={t('settings.cfTokenHint')} {...sform.getInputProps('cloudflare_token')} />
+            <Group grow align="flex-end">
+              <TextInput label={t('settings.panelDomain')} description={t('settings.panelDomainHint')} placeholder="node.example.com" {...sform.getInputProps('panel_domain')} />
+              <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...sform.getInputProps('panel_acme')} />
+            </Group>
             <Group justify="flex-end"><Button type="submit" size="xs" loading={saveSettings.isPending}>{t('common.save')}</Button></Group>
           </Stack></form>
         </Card>
@@ -82,6 +90,25 @@ export default function SettingsPage() {
           </Stack>
         )}
       </Card>
+
+      {s && s.certs && s.certs.length > 0 && (
+        <Card mb="lg">
+          <Title order={5} mb="xs">{t('settings.certList')}</Title>
+          <Table>
+            <Table.Thead><Table.Tr><Table.Th>{t('settings.domain')}</Table.Th><Table.Th>{t('inbounds.acme')}</Table.Th><Table.Th>{t('settings.expires')}</Table.Th><Table.Th>{t('settings.status')}</Table.Th></Table.Tr></Table.Thead>
+            <Table.Tbody>
+              {s.certs.map((c) => (
+                <Table.Tr key={c.domain}>
+                  <Table.Td><Text size="sm" ff="monospace">{c.domain}</Text></Table.Td>
+                  <Table.Td><Badge variant="outline" color="gray">{c.method}</Badge></Table.Td>
+                  <Table.Td><Text size="sm">{c.not_after && !c.not_after.startsWith('0001') ? when(c.not_after).split(',')[0] : '—'}</Text></Table.Td>
+                  <Table.Td>{c.error ? <Text size="xs" c="red">{c.error}</Text> : <Badge color="teal">{t('settings.certOk')}</Badge>}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Card>
+      )}
 
       <UpdateCard mb="lg" />
 

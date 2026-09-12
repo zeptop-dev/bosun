@@ -99,6 +99,26 @@ docker compose logs -f bosun
 docker compose pull && docker compose up -d   # upgrade; the panel shows this command when a release is out
 ```
 
+## Certificates
+
+Inbounds that need TLS (Hysteria2, Trojan, AnyTLS, VLESS/VMess over TLS) can
+tick "Automatic certificate": bosun obtains a Let's Encrypt certificate for the
+inbound's server name and renews it a month before expiry, then restarts the
+core so it picks the new files up. Two challenge types:
+
+- **HTTP** (default): port 80 on this machine must be reachable from the
+  internet for the few seconds of the challenge; bosun listens on it only then.
+- **DNS**: for wildcards and for boxes that only expose a port range (IPLC
+  entrances). Needs a Cloudflare API token with `Zone.DNS` edit permission,
+  entered once in Settings (or pushed by Captain).
+
+Set the Let's Encrypt account email in Settings. The same mechanism serves the
+panel over HTTPS: enter a panel domain in Settings and restart. Certificates and
+the ACME account live in `<data_dir>/certs/`. Certificates you manage yourself
+still work through `certs:` in config.yaml; an inbound whose certificate cannot
+be obtained is skipped (shown on the overview) and retried on the next pull,
+so one broken domain never takes the other inbounds down.
+
 ## Updating
 
 Settings → "Version and updates" checks GitHub Releases (cached 20 minutes; a

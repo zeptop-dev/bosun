@@ -15,7 +15,7 @@ const ciphers = ['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-bla
 export type Values = {
   tag: string; remark: string; protocol: string; listen: string; port: number; core: string; enabled: boolean
   display_host: string; display_port: number
-  tls: 'none' | 'tls' | 'reality'; server_name: string; reality_private: string; reality_public: string; reality_short: string; handshake_server: string; handshake_port: number
+  tls: 'none' | 'tls' | 'reality'; auto_cert: boolean; acme: string; server_name: string; reality_private: string; reality_public: string; reality_short: string; handshake_server: string; handshake_port: number
   transport: string; path: string; host: string; service_name: string; xhttp_mode: string
   flow: string; cipher: string; server_key: string; obfs: string; obfs_password: string; up_mbps: number; down_mbps: number
   congestion_control: string; mieru_transport: string; traffic_pattern: string
@@ -24,7 +24,7 @@ export type Values = {
 
 export const empty: Values = {
   tag: '', remark: '', protocol: 'vless', listen: '', port: 443, core: '', enabled: true, display_host: '', display_port: 0,
-  tls: 'none', server_name: '', reality_private: '', reality_public: '', reality_short: '', handshake_server: '', handshake_port: 443,
+  tls: 'none', auto_cert: false, acme: 'http', server_name: '', reality_private: '', reality_public: '', reality_short: '', handshake_server: '', handshake_port: 443,
   transport: 'tcp', path: '', host: '', service_name: '', xhttp_mode: '',
   flow: '', cipher: '2022-blake3-aes-128-gcm', server_key: '', obfs: '', obfs_password: '', up_mbps: 0, down_mbps: 0,
   congestion_control: 'bbr', mieru_transport: 'TCP', traffic_pattern: '', extra: '{}',
@@ -41,7 +41,7 @@ export function toValues(ib?: Inbound): Values {
     ...empty,
     tag: ib.tag, remark: ib.remark ?? '', protocol: ib.protocol, listen: ib.listen ?? '', port: ib.port, core: ib.core ?? '', enabled: ib.enabled,
     display_host: ib.display_host ?? '', display_port: ib.display_port ?? 0,
-    tls: tlsMode, server_name: ib.tls?.server_name ?? '', reality_private: ib.tls?.reality?.private_key ?? '', reality_public: ib.tls?.reality?.public_key ?? '',
+    tls: tlsMode, auto_cert: ib.tls?.auto_cert ?? false, acme: ib.tls?.acme || 'http', server_name: ib.tls?.server_name ?? '', reality_private: ib.tls?.reality?.private_key ?? '', reality_public: ib.tls?.reality?.public_key ?? '',
     reality_short: ib.tls?.reality?.short_ids?.[0] ?? '', handshake_server: ib.tls?.reality?.handshake_server ?? '', handshake_port: ib.tls?.reality?.handshake_port ?? 443,
     transport: ib.transport?.type ?? 'tcp', path: ib.transport?.path ?? '', host: ib.transport?.host ?? '', service_name: ib.transport?.service_name ?? '', xhttp_mode: ib.transport?.mode ?? '',
     flow: ib.flow ?? '', cipher: ib.cipher ?? empty.cipher, server_key: ib.server_key ?? '', obfs: ib.obfs ?? '', obfs_password: ib.obfs_password ?? '',
@@ -55,7 +55,7 @@ export function toInbound(v: Values): Record<string, unknown> {
   const stream = ['vless', 'vmess', 'trojan', 'shadowsocks', 'anytls', 'socks', 'http'].includes(v.protocol)
   const quic = ['hysteria2', 'tuic'].includes(v.protocol)
   if (v.tls === 'reality') out.tls = { mode: 2, server_name: v.server_name, reality: { private_key: v.reality_private, public_key: v.reality_public, short_ids: v.reality_short ? [v.reality_short] : [], handshake_server: v.handshake_server || v.server_name, handshake_port: v.handshake_port || 443 } }
-  else if (v.tls === 'tls' || quic) out.tls = { mode: 1, server_name: v.server_name }
+  else if (v.tls === 'tls' || quic) out.tls = { mode: 1, server_name: v.server_name, auto_cert: v.auto_cert, acme: v.auto_cert ? v.acme : '' }
   if (stream && v.transport !== 'tcp') out.transport = { type: v.transport, path: v.path, host: v.host, service_name: v.service_name, mode: v.xhttp_mode }
   if (v.protocol === 'vless' && v.flow) out.flow = v.flow
   if (v.protocol === 'shadowsocks') { out.cipher = v.cipher; if (v.cipher.startsWith('2022')) out.server_key = v.server_key }
@@ -67,11 +67,11 @@ export function toInbound(v: Values): Record<string, unknown> {
 
 const recipes: { key: string; values: Partial<Values> }[] = [
   { key: 'vlessReality', values: { protocol: 'vless', port: 443, tls: 'reality', server_name: 'www.apple.com', handshake_server: 'www.apple.com', flow: 'xtls-rprx-vision', transport: 'tcp' } },
-  { key: 'hysteria2', values: { protocol: 'hysteria2', port: 8443, tls: 'tls', obfs: 'salamander', up_mbps: 100, down_mbps: 500 } },
+  { key: 'hysteria2', values: { protocol: 'hysteria2', port: 8443, tls: 'tls', auto_cert: true, obfs: 'salamander', up_mbps: 100, down_mbps: 500 } },
   { key: 'mieru', values: { protocol: 'mieru', port: 24450, tls: 'none', mieru_transport: 'TCP' } },
   { key: 'ss2022', values: { protocol: 'shadowsocks', port: 8388, tls: 'none', cipher: '2022-blake3-aes-128-gcm' } },
-  { key: 'trojanWs', values: { protocol: 'trojan', port: 443, tls: 'tls', transport: 'ws', path: '/trojan' } },
-  { key: 'anytls', values: { protocol: 'anytls', port: 8444, tls: 'tls' } },
+  { key: 'trojanWs', values: { protocol: 'trojan', port: 443, tls: 'tls', auto_cert: true, transport: 'ws', path: '/trojan' } },
+  { key: 'anytls', values: { protocol: 'anytls', port: 8444, tls: 'tls', auto_cert: true } },
 ]
 
 export function InboundForm({ initial, onSubmit, busy, onCancel }: { initial: Values; onSubmit: (v: Record<string, unknown>) => void; busy: boolean; onCancel: () => void }) {
@@ -141,8 +141,14 @@ export function InboundForm({ initial, onSubmit, busy, onCancel }: { initial: Va
               {tlsCapable
                 ? <Select label={t('inbounds.tls')} data={[{ value: 'none', label: t('inbounds.tlsNone') }, { value: 'tls', label: 'TLS' }, { value: 'reality', label: 'REALITY' }]} allowDeselect={false} {...form.getInputProps('tls')} />
                 : <TextInput label={t('inbounds.tls')} value="TLS" disabled />}
-              {(v.tls !== 'none' || quic) && <TextInput label={t('inbounds.serverName')} description={v.tls === 'reality' ? t('inbounds.serverNameReality') : t('inbounds.serverNameTls')} {...form.getInputProps('server_name')} />}
+              {(v.tls !== 'none' || quic) && <TextInput label={t('inbounds.serverName')} description={v.tls === 'reality' ? t('inbounds.serverNameReality') : v.auto_cert ? t('inbounds.serverNameAuto') : t('inbounds.serverNameTls')} {...form.getInputProps('server_name')} />}
             </Group>
+            {(v.tls === 'tls' || quic) && (
+              <Group mt="sm" align="flex-end">
+                <Switch label={t('inbounds.autoCert')} description={t('inbounds.autoCertHint')} {...form.getInputProps('auto_cert', { type: 'checkbox' })} />
+                {v.auto_cert && <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...form.getInputProps('acme')} />}
+              </Group>
+            )}
             {v.tls === 'reality' && tlsCapable && (
               <Stack gap="xs" mt="sm">
                 <Group grow align="flex-end">

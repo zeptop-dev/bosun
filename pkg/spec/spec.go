@@ -39,6 +39,17 @@ type TLS struct {
 	KeyPath    string   `json:"key_path,omitempty"`
 	ALPN       []string `json:"alpn,omitempty"`
 	Reality    *Reality `json:"reality,omitempty"` // TLSReality only
+	// AutoCert asks the agent to obtain and renew a certificate for
+	// ServerName with ACME instead of using local files. ACME picks the
+	// challenge: "http" (port 80 on this machine) or "dns" (Cloudflare).
+	AutoCert bool   `json:"auto_cert,omitempty"`
+	ACME     string `json:"acme,omitempty"`
+}
+
+// ACME holds node-wide certificate automation settings.
+type ACME struct {
+	Email           string `json:"email,omitempty"`            // account contact
+	CloudflareToken string `json:"cloudflare_token,omitempty"` // enables DNS-01
 }
 
 // Reality holds REALITY server parameters.
@@ -164,6 +175,7 @@ type Node struct {
 	Outbounds []Outbound  `json:"outbounds,omitempty"`
 	Routes    []RouteRule `json:"routes,omitempty"`
 	Forwards  []Forward   `json:"forwards,omitempty"`
+	ACME      *ACME       `json:"acme,omitempty"`
 }
 
 // Traffic is a byte counter pair.
