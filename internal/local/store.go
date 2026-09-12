@@ -629,6 +629,9 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 		nodeUsers = append(nodeUsers, u.Spec())
 	}
 	node := &spec.Node{ID: "local", Forwards: append([]spec.Forward(nil), s.st.Forwards...)}
+	if s.st.Settings.ACMEEmail != "" || s.st.Settings.CloudflareToken != "" {
+		node.ACME = &spec.ACME{Email: s.st.Settings.ACMEEmail, CloudflareToken: s.st.Settings.CloudflareToken}
+	}
 	for _, ib := range s.st.Inbounds {
 		if !ib.Enabled {
 			continue

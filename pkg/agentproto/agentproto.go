@@ -8,7 +8,11 @@
 //	POST /api/agent/report  Report       -> ReportResponse
 package agentproto
 
-import "github.com/zeptop-dev/bosun/pkg/spec"
+import (
+	"time"
+
+	"github.com/zeptop-dev/bosun/pkg/spec"
+)
 
 // PairRequest redeems a one-time pairing code for a node token.
 type PairRequest struct {
@@ -44,7 +48,16 @@ type Report struct {
 	Online   map[string][]string   `json:"online,omitempty"` // user name -> client IPs
 	Forwards []ForwardStatus       `json:"forwards,omitempty"`
 	Cores    map[string]CoreStatus `json:"cores,omitempty"`
+	Certs    []CertStatus          `json:"certs,omitempty"`
 	Host     spec.SystemStatus     `json:"host"`
+}
+
+// CertStatus is one automatically managed certificate.
+type CertStatus struct {
+	Domain   string    `json:"domain"`
+	Method   string    `json:"method"`
+	NotAfter time.Time `json:"not_after"`
+	Error    string    `json:"error,omitempty"`
 }
 
 // ForwardStatus is one relay rule's health and counters.

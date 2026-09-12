@@ -18,6 +18,7 @@ import (
 
 	"github.com/zeptop-dev/bosun/internal/agent"
 	"github.com/zeptop-dev/bosun/internal/authutil"
+	"github.com/zeptop-dev/bosun/internal/certs"
 	"github.com/zeptop-dev/bosun/internal/config"
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/core/hysteria"
@@ -270,10 +271,31 @@ func cmdRun(args []string) error {
 	upd := newUpdater()
 	go watchUpdates(ctx, log, upd)
 
+	// Certificate automation for inbounds (and the panel). Renewals restart
+	// the cores through whichever agent is current.
+	var current struct {
+		sync.Mutex
+		ag *agent.Agent
+	}
+	cm, err := certs.New(certs.Options{Dir: filepath.Join(cfg.DataDir, "certs"), Log: log, OnChange: func(domain string) {
+		current.Lock()
+		ag := current.ag
+		current.Unlock()
+		if ag != nil {
+			ag.ReloadCerts(domain)
+		}
+	}})
+	if err != nil {
+		return err
+	}
+	defer cm.Stop()
+
 	// Headless managed mode without a web panel: the original single agent.
 	if e.driver != nil && cfg.Web == nil {
 		ag := agent.New(cfg, e.driver, e.reg, mreg, log)
 		ag.Upgrade = upgradeHook(log, upd)
+		ag.Certs = cm
+		current.ag = ag
 		return ag.Run(ctx)
 	}
 
@@ -284,19 +306,37 @@ func cmdRun(args []string) error {
 	if initialPassword != "" {
 		log.Warn("web panel login created; change it after signing in", "username", "admin", "password", initialPassword)
 	}
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd)}
+	settings := store.Settings()
+	panelTLS := cfg.Web.Cert != "" || settings.PanelDomain != ""
+	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm,
+		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
 		Fixed: fixedName(e.driver), Adopt: sup.adopt, Detach: sup.detach, ManagedState: sup.managedState,
-		Secure: cfg.Web.Cert != "", Updater: upd,
+		Secure: panelTLS, Updater: upd, Certs: cm,
 	})
 	sup.ui = panelUI
 	srv := &http.Server{Addr: cfg.Web.Listen, Handler: panelUI.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	if cfg.Web.Cert == "" && settings.PanelDomain != "" {
+		// Automatic certificate for the panel itself. Obtained in the
+		// background so a failed challenge does not block startup; until
+		// then TLS handshakes fail and the log says why.
+		cm.Configure(settings.ACMEEmail, settings.CloudflareToken)
+		srv.TLSConfig = cm.TLSConfig()
+		go func() {
+			if _, _, err := cm.Ensure(ctx, settings.PanelDomain, settings.PanelACME); err != nil {
+				log.Error("panel certificate", "domain", settings.PanelDomain, "err", err)
+			}
+		}()
+	}
 	go func() {
 		var err error
-		if cfg.Web.Cert != "" {
+		switch {
+		case cfg.Web.Cert != "":
 			err = srv.ListenAndServeTLS(cfg.Web.Cert, cfg.Web.Key)
-		} else {
+		case settings.PanelDomain != "":
+			err = srv.ListenAndServeTLS("", "")
+		default:
 			err = srv.ListenAndServe()
 		}
 		if err != nil && err != http.ErrServerClosed {
@@ -304,7 +344,7 @@ func cmdRun(args []string) error {
 		}
 	}()
 	defer srv.Close()
-	log.Info("web panel", "listen", cfg.Web.Listen, "tls", cfg.Web.Cert != "")
+	log.Info("web panel", "listen", cfg.Web.Listen, "tls", panelTLS, "domain", settings.PanelDomain)
 	return sup.run(ctx)
 }
 
@@ -327,6 +367,8 @@ type supervisor struct {
 	ui    *ui.Server
 	// upgrade handles a panel-requested release change.
 	upgrade func(string)
+	certs   *certs.Manager
+	onAgent func(*agent.Agent)
 
 	mu      sync.Mutex
 	captain *captain.Client // current managed driver, when any
@@ -376,6 +418,10 @@ func (s *supervisor) run(ctx context.Context) error {
 		}
 		ag := agent.New(s.cfg, d, s.reg, s.mreg, s.log)
 		ag.Upgrade = s.upgrade
+		ag.Certs = s.certs
+		if s.onAgent != nil {
+			s.onAgent(ag)
+		}
 		s.ui.SetAgent(ag)
 		actx, cancel := context.WithCancel(ctx)
 		done := make(chan error, 1)

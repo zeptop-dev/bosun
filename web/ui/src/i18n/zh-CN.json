@@ -146,7 +146,13 @@
       "trojanWsDesc": "可套 CDN，需要证书。",
       "anytls": "AnyTLS",
       "anytlsDesc": "新协议，抗流量分析，需要证书。"
-    }
+    },
+    "serverNameAuto": "证书对应的域名，DNS 要指向这台机器",
+    "autoCert": "自动证书",
+    "autoCertHint": "用 Let's Encrypt 自动申请并续期，不用手工配证书文件",
+    "acme": "验证方式",
+    "acmeHttp": "HTTP（需要本机 80 端口可从公网访问）",
+    "acmeDns": "DNS（Cloudflare，需在设置里填 token）"
   },
   "users": {
     "title": "用户",
@@ -216,7 +222,18 @@
     "version": "版本",
     "status": "状态",
     "note": "说明",
-    "installed": "已安装"
+    "installed": "已安装",
+    "certs": "自动证书",
+    "certsHint": "入站勾选“自动证书”后由这里的账号申请。HTTP 验证只要 80 端口能通；DNS 验证走 Cloudflare。",
+    "acmeEmail": "Let's Encrypt 邮箱",
+    "cfToken": "Cloudflare API Token",
+    "cfTokenHint": "仅 DNS 验证需要，权限 Zone.DNS 编辑",
+    "panelDomain": "面板域名",
+    "panelDomainHint": "填了就用自动证书给面板开 HTTPS，保存后重启生效",
+    "certList": "证书",
+    "domain": "域名",
+    "expires": "到期",
+    "certOk": "正常"
   },
   "logs": {
     "title": "日志",

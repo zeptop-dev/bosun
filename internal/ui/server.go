@@ -21,6 +21,7 @@ import (
 
 	"github.com/zeptop-dev/bosun/internal/agent"
 	"github.com/zeptop-dev/bosun/internal/authutil"
+	"github.com/zeptop-dev/bosun/internal/certs"
 	"github.com/zeptop-dev/bosun/internal/coreinstall"
 	"github.com/zeptop-dev/bosun/internal/local"
 	"github.com/zeptop-dev/bosun/internal/logring"
@@ -55,6 +56,8 @@ type Deps struct {
 	Secure       bool // cookies get the Secure flag
 	// Updater checks and applies bosun releases; nil disables the feature.
 	Updater *selfupdate.Client
+	// Certs reports automatic certificates; nil when disabled.
+	Certs *certs.Manager
 }
 
 // Server is the panel HTTP handler.
@@ -288,6 +291,10 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if forwards == nil {
 		forwards = []agentproto.ForwardStatus{}
 	}
+	certList := []certs.Status{}
+	if s.d.Certs != nil {
+		certList = s.d.Certs.Status()
+	}
 	users := s.d.Store.ListUsers()
 	var totalUp, totalDown int64
 	online := 0
@@ -304,6 +311,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		"agent": ag, "host": host, "forwards": forwards,
 		"online_users": online, "users": len(users), "inbounds": len(s.d.Store.Inbounds()),
 		"total_up": totalUp, "total_down": totalDown, "history": rt.History, "last_report": rt.LastReport,
+		"certs": certList,
 	})
 }
 
