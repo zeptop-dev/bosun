@@ -70,7 +70,9 @@ curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/ins
 The pair code comes from "Add node" in Captain and is used once. Either way the
 installer verifies the binary against the release checksums, writes
 `/etc/bosun/config.yaml`, and starts the `bosun` service; cores are downloaded on
-first start. Re-run without arguments to upgrade.
+first start. Re-run without arguments to upgrade; `... | sh -s -- uninstall`
+removes everything again (`--keep-data` keeps `/var/lib/bosun`). Piped through
+`sh` the script itself never lands on disk.
 
 ### Docker Compose
 

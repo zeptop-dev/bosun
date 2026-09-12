@@ -3,13 +3,17 @@
 #   sh install.sh                                   standalone: web panel on :2053
 #   sh install.sh --captain https://captain.example.com --pair ABCD-EFGH
 #   sh install.sh --version v0.4.0 [--web-listen 127.0.0.1:2053]
-# Re-running upgrades the binary and keeps /etc/bosun/config.yaml.
+#   sh install.sh uninstall [--keep-data]     remove the service, binary, config (and data)
+# Re-running upgrades the binary and keeps /etc/bosun/config.yaml. Piped
+# through sh the script never touches the disk.
 set -eu
 
 REPO="zeptop-dev/bosun"
-CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN=":2053"
+CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN=":2053" ACTION=install KEEP_DATA=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    uninstall) ACTION=uninstall; shift ;;
+    --keep-data) KEEP_DATA=1; shift ;;
     --captain) CAPTAIN="$2"; shift 2 ;;
     --pair) PAIR="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
@@ -20,6 +24,17 @@ done
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 command -v systemctl >/dev/null || { echo "systemd is required" >&2; exit 1; }
+
+if [ "$ACTION" = uninstall ]; then
+  echo "This stops bosun and its cores and removes /usr/local/bin/bosun, /etc/bosun$( [ "$KEEP_DATA" = 1 ] || echo ' and /var/lib/bosun (cores, certificates, local state)')."
+  if [ -r /dev/tty ]; then printf 'Type yes to continue: ' >/dev/tty; read -r ans </dev/tty; [ "$ans" = yes ] || { echo "aborted"; exit 1; }; fi
+  systemctl disable --now bosun 2>/dev/null || true
+  rm -f /etc/systemd/system/bosun.service; systemctl daemon-reload
+  rm -rf /usr/local/bin/bosun /usr/local/bin/bosun.backup /usr/local/bin/bosun.backup.version /etc/bosun
+  [ "$KEEP_DATA" = 1 ] || rm -rf /var/lib/bosun
+  echo "bosun removed."
+  exit 0
+fi
 
 case "$(uname -m)" in
   x86_64|amd64) ARCH=amd64 ;;
