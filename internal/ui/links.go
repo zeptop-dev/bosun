@@ -20,18 +20,23 @@ type Link struct {
 
 // linksFor renders share URIs for every enabled inbound the user may use.
 func linksFor(u local.User, inbounds []local.Inbound, settings local.Settings, fallbackHost string) []Link {
-	host := settings.PublicHost
-	if host == "" {
-		host = fallbackHost
-	}
 	out := []Link{}
 	for _, ib := range inbounds {
 		if !ib.Enabled || !userAllowed(u, ib.Tag) {
 			continue
 		}
-		h, p := host, ib.Port
+		// Connection address: the inbound's own override, else the node's
+		// public host, else the TLS domain (it must point here anyway),
+		// else whatever address the panel was reached on.
+		h, p := settings.PublicHost, ib.Port
 		if ib.DisplayHost != "" {
 			h = ib.DisplayHost
+		}
+		if h == "" && ib.TLS != nil && ib.TLS.Mode == spec.TLSStandard && ib.TLS.ServerName != "" {
+			h = ib.TLS.ServerName
+		}
+		if h == "" {
+			h = fallbackHost
 		}
 		if ib.DisplayPort != 0 {
 			p = ib.DisplayPort
