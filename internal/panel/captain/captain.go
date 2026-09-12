@@ -46,6 +46,59 @@ type Client struct {
 	usersSeen string // revision last returned by Users()
 	fwdSeen   string // revision last returned by Forwards()
 	upgradeTo string // from the last report response
+
+	// Long-poll watcher: keeps a GET /state?wait= request open so a change
+	// on the panel reaches the agent within a second or two.
+	changed   chan struct{}
+	watchOnce sync.Once
+	stop      chan struct{}
+}
+
+// Changed implements panel.Notifier; the first call starts the watcher.
+func (c *Client) Changed() <-chan struct{} {
+	c.watchOnce.Do(func() { go c.watch() })
+	return c.changed
+}
+
+// Close stops the watcher (the agent calls it when it shuts down).
+func (c *Client) Close() error {
+	c.watchOnce.Do(func() {}) // never start after Close
+	select {
+	case <-c.stop:
+	default:
+		close(c.stop)
+	}
+	return nil
+}
+
+// watch long-polls the panel and signals the agent on a new revision. The
+// panel answers 304 when nothing changed within the wait window.
+func (c *Client) watch() {
+	for {
+		select {
+		case <-c.stop:
+			return
+		default:
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		moved, err := c.fetchWait(ctx, "30s")
+		cancel()
+		if err != nil {
+			c.log.Debug("state watch", "err", err)
+			select {
+			case <-c.stop:
+				return
+			case <-time.After(5 * time.Second):
+			}
+			continue
+		}
+		if moved {
+			select {
+			case c.changed <- struct{}{}:
+			default:
+			}
+		}
+	}
 }
 
 // UpgradeRequested implements panel.UpgradeRequester.
@@ -68,7 +121,7 @@ func New(cfg Config, log *slog.Logger) (*Client, error) {
 		cfg.Timeout = 30 * time.Second
 	}
 	cfg.URL = strings.TrimRight(cfg.URL, "/")
-	c := &Client{cfg: cfg, http: &http.Client{Timeout: cfg.Timeout}, log: log.With("panel", "captain")}
+	c := &Client{cfg: cfg, http: &http.Client{Timeout: cfg.Timeout}, log: log.With("panel", "captain"), changed: make(chan struct{}, 1), stop: make(chan struct{})}
 	if b, err := os.ReadFile(cfg.TokenFile); err == nil {
 		c.token = strings.TrimSpace(string(b))
 	} else if cfg.PairCode == "" {
@@ -96,6 +149,18 @@ func (c *Client) Intervals() spec.Intervals {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body any, headers map[string]string) (int, []byte, http.Header, error) {
+	return c.doClient(ctx, c.http, method, path, body, headers)
+}
+
+// waitClient returns an HTTP client whose timeout covers a long-poll.
+func (c *Client) waitClient(wait string) *http.Client {
+	if wait == "" {
+		return c.http
+	}
+	return &http.Client{Timeout: 60 * time.Second, Transport: c.http.Transport}
+}
+
+func (c *Client) doClient(ctx context.Context, hc *http.Client, method, path string, body any, headers map[string]string) (int, []byte, http.Header, error) {
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -120,7 +185,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, headers 
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := c.http.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
 		return 0, nil, nil, err
 	}
@@ -161,7 +226,11 @@ func (c *Client) Pair(ctx context.Context) error {
 }
 
 // fetch refreshes the cached state. It returns whether the revision moved.
-func (c *Client) fetch(ctx context.Context) (bool, error) {
+func (c *Client) fetch(ctx context.Context) (bool, error) { return c.fetchWait(ctx, "") }
+
+// fetchWait is fetch with an optional long-poll window; the server holds
+// the request until the revision changes or the window ends.
+func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 	c.mu.Lock()
 	tok, etag := c.token, c.etag
 	c.mu.Unlock()
@@ -171,10 +240,14 @@ func (c *Client) fetch(ctx context.Context) (bool, error) {
 		}
 	}
 	headers := map[string]string{}
+	path := "/api/agent/state"
 	if etag != "" {
 		headers["If-None-Match"] = etag
+		if wait != "" {
+			path += "?wait=" + wait
+		}
 	}
-	code, body, h, err := c.do(ctx, http.MethodGet, "/api/agent/state", nil, headers)
+	code, body, h, err := c.doClient(ctx, c.waitClient(wait), http.MethodGet, path, nil, headers)
 	if err != nil {
 		return false, err
 	}
