@@ -30,12 +30,15 @@ const (
 	carrierInterval = 10 * time.Second
 	ringSize        = 30 // 5 minutes of carrier samples
 	dialTimeout     = 3 * time.Second
+	downloadWindow  = 8 * time.Second // like the speed-test tools: ~8s of transfer
 )
 
 // Runner owns the probe goroutines.
 type Runner struct {
 	// Dial overrides TCP dialing (tests).
 	Dial func(ctx context.Context, addr string) (time.Duration, error)
+	// Download overrides the throughput test (tests).
+	Download func(ctx context.Context, url string) (ttfbMs, mbps float64)
 
 	mu      sync.Mutex
 	cfg     spec.Probe
@@ -169,12 +172,20 @@ func (r *Runner) taskLoop(ctx context.Context, t spec.PingTask) {
 	if iv < 5*time.Second {
 		iv = 30 * time.Second
 	}
+	if strings.EqualFold(t.Type, "download") && iv < 10*time.Minute {
+		iv = 10 * time.Minute // throughput tests cost real traffic
+	}
 	tk := time.NewTicker(iv)
 	defer tk.Stop()
 	for {
-		ms := r.measure(ctx, t)
+		res := spec.PingResult{TaskID: t.ID, Name: t.Name, At: time.Now().Unix()}
+		if strings.EqualFold(t.Type, "download") {
+			res.LatencyMs, res.Mbps = r.download(ctx, t.Target)
+		} else {
+			res.LatencyMs = r.measure(ctx, t)
+		}
 		r.mu.Lock()
-		r.tasks[t.ID] = spec.PingResult{TaskID: t.ID, Name: t.Name, LatencyMs: ms, At: time.Now().Unix()}
+		r.tasks[t.ID] = res
 		r.mu.Unlock()
 		select {
 		case <-ctx.Done():
@@ -310,4 +321,44 @@ func (r *Runner) Results() []spec.PingResult {
 		out = append(out, r.tasks[id])
 	}
 	return out
+}
+
+// download fetches url for up to downloadWindow and reports time to first
+// byte and the average throughput in Mbps; -1/0 when it failed.
+func (r *Runner) download(ctx context.Context, url string) (ttfbMs, mbps float64) {
+	if r.Download != nil {
+		return r.Download(ctx, url)
+	}
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = "https://" + url
+	}
+	dctx, cancel := context.WithTimeout(ctx, downloadWindow+5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(dctx, http.MethodGet, url, nil)
+	if err != nil {
+		return -1, 0
+	}
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		return -1, 0
+	}
+	defer resp.Body.Close()
+	ttfb := time.Since(start)
+	buf := make([]byte, 64<<10)
+	var n int64
+	deadline := time.Now().Add(downloadWindow)
+	for time.Now().Before(deadline) {
+		k, err := resp.Body.Read(buf)
+		n += int64(k)
+		if err != nil {
+			break
+		}
+	}
+	elapsed := time.Since(start) - ttfb
+	if elapsed <= 0 || n == 0 {
+		return float64(ttfb.Microseconds()) / 1000, 0
+	}
+	return float64(ttfb.Microseconds()) / 1000, float64(n) * 8 / elapsed.Seconds() / 1e6
 }

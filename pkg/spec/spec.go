@@ -258,6 +258,7 @@ type PingResult struct {
 	Name      string  `json:"name"`           // "CT", "CU", "CM" or the task name
 	LatencyMs float64 `json:"latency_ms"`     // -1 = lost
 	Loss      float64 `json:"loss,omitempty"` // percent over the recent window (carrier probes)
+	Mbps      float64 `json:"mbps,omitempty"` // download tasks: measured throughput
 	At        int64   `json:"at,omitempty"`   // unix seconds of the sample
 }
 
@@ -273,8 +274,8 @@ type Probe struct {
 type PingTask struct {
 	ID              int64  `json:"id"`
 	Name            string `json:"name"`
-	Type            string `json:"type"`   // icmp | tcp | http
-	Target          string `json:"target"` // host, host:port or URL
+	Type            string `json:"type"`   // icmp | tcp | http | download
+	Target          string `json:"target"` // host, host:port or URL (download: a large file URL)
 	IntervalSeconds int    `json:"interval_seconds,omitempty"`
 }
 
