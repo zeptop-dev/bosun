@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -39,6 +40,8 @@ type Core struct {
 	mu   sync.Mutex
 	sup  *subprocess.Supervisor
 	conn *grpc.ClientConn
+
+	online *onlineTracker // client IPs per user, from the log (see online.go)
 }
 
 // New returns an adapter; the binary must exist but is not started.
@@ -61,7 +64,7 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
-	return &Core{opt: opt, log: log.With("core", "singbox")}, nil
+	return &Core{opt: opt, log: log.With("core", "singbox"), online: newOnlineTracker()}, nil
 }
 
 func (c *Core) Name() string { return "singbox" }
@@ -81,7 +84,16 @@ func (c *Core) Capabilities() core.Capabilities {
 }
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
-	cfg, err := render(node, inbounds, users, renderOptions{LogLevel: c.opt.LogLevel, StatsListen: c.opt.StatsListen})
+	// Device limits need the per-connection log lines, which only exist at
+	// level info; raise the level while any user carries a limit.
+	limited := false
+	for _, u := range users {
+		if u.DeviceLimit > 0 {
+			limited = true
+			break
+		}
+	}
+	cfg, err := render(node, inbounds, users, renderOptions{LogLevel: effectiveLogLevel(c.opt.LogLevel, limited), StatsListen: c.opt.StatsListen})
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +138,7 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.sup == nil {
-		c.sup = subprocess.New("sing-box", c.opt.Binary, []string{"run", "-c", path, "-D", c.opt.WorkDir, "--disable-color"}, c.opt.WorkDir, c.log)
+		c.sup = subprocess.New("sing-box", c.opt.Binary, []string{"run", "-c", path, "-D", c.opt.WorkDir, "--disable-color"}, c.opt.WorkDir, c.log).WithLineHook(c.online.feed)
 	}
 	return c.sup.Start(ctx)
 }
@@ -182,4 +194,22 @@ func (c *Core) Stats(ctx context.Context, reset bool) (map[string]spec.Traffic, 
 	conn := c.conn
 	c.mu.Unlock()
 	return queryUserStats(ctx, conn, reset)
+}
+
+// effectiveLogLevel returns the sing-box log level to run with: the
+// configured one, raised to info when device limits are in use.
+func effectiveLogLevel(configured string, limited bool) string {
+	if !limited {
+		return configured
+	}
+	switch strings.ToLower(configured) {
+	case "trace", "debug", "info":
+		return configured
+	}
+	return "info"
+}
+
+// Online implements core.OnlineTracker.
+func (c *Core) Online(_ context.Context) (map[string][]string, error) {
+	return c.online.online(), nil
 }

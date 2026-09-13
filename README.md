@@ -106,6 +106,15 @@ docker compose logs -f bosun
 docker compose pull && docker compose up -d   # upgrade; the panel shows this command when a release is out
 ```
 
+## Online devices
+
+Captain's device limit needs each node to report which client IPs a user is
+connected from. Xray (stats API), Hysteria (auth callback) and sing-box
+(joined from its per-connection log lines; the log level is raised to info
+automatically while any user carries a limit) report them. mieru (mita)
+exposes sessions without user names, so mieru inbounds do not count toward
+device limits.
+
 ## Certificates
 
 Inbounds that need TLS (Hysteria2, Trojan, AnyTLS, VLESS/VMess over TLS) can
