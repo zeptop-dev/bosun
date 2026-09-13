@@ -102,7 +102,19 @@ echo "bosun $VERSION installed. Logs: journalctl -u bosun -f"
 if [ -z "$CAPTAIN" ]; then
   echo
   echo "web panel: http://<this-server>${WEB_LISTEN}/"
-  echo "login:"
-  journalctl -u bosun --no-pager -o cat 2>/dev/null | grep -o 'username=[^ ]* password=[^ ]*' | tail -1 || true
-  echo "(lost it? run: bosun admin reset-password)"
+  # The login is logged once the cores are downloaded, which can take a
+  # while on first start; wait for it instead of printing an empty line.
+  LOGIN=""
+  for i in $(seq 1 60); do
+    LOGIN=$(journalctl -u bosun --no-pager -o cat 2>/dev/null | grep -o 'username=[^ ]* password=[^ ]*' | tail -1 || true)
+    [ -n "$LOGIN" ] && break
+    [ "$i" -eq 1 ] && echo "waiting for the first start (downloading cores)..."
+    sleep 2
+  done
+  if [ -n "$LOGIN" ]; then
+    echo "login: $LOGIN"
+  else
+    echo "login: not ready yet; run  journalctl -u bosun --no-pager -o cat | grep password  in a minute"
+  fi
+  echo "(lost it? run: bosun admin reset-password -c /etc/bosun/config.yaml)"
 fi
