@@ -121,8 +121,23 @@ When Captain's probe page is on, the node sends a light host sample every
 few seconds (`POST /api/agent/beat`): CPU, memory, swap, disk, load, network
 rate and totals, TCP/UDP/process counts, uptime, IPv4/IPv6 reachability,
 static host facts, plus latency results: TCP-connect checks against the
-CT/CU/CM probe points (no ICMP privileges needed) and panel-defined tasks
-(icmp, tcp, http). Nothing runs while the panel keeps probing off.
+carrier probe points (CT/CU/CM by default; Captain can name its own; no
+ICMP privileges needed) and panel-defined tasks (icmp, tcp, http,
+download). Nothing runs while the panel keeps probing off.
+
+Without Captain (local or Xboard driver) a `probe:` section in config.yaml
+runs the same checks and exposes them on `/metrics` as
+`bosun_probe_latency_seconds` / `bosun_probe_loss_ratio`:
+
+```yaml
+probe:
+  enabled: true
+  carriers:                      # omit for the default CT/CU/CM points
+    - { name: CT, addr: ct.tz.cloudcpp.com:80 }
+    - { name: HK, addr: www.hkix.net:443 }
+  tasks:
+    - { name: cf, type: tcp, target: 1.1.1.1:443, interval_seconds: 30 }
+```
 
 ## Certificates
 

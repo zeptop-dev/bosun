@@ -18,12 +18,14 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
-// Carrier probe points; they answer on :80 and a refused connection still
+// Carrier probe points are spec.DefaultCarriers unless the config names
+// its own; they answer on :80 and a refused connection still
 // proves reachability (ServerStatus counts ECONNREFUSED as success).
-var carriers = []struct{ name, addr string }{
-	{"CT", "ct.tz.cloudcpp.com:80"},
-	{"CU", "cu.tz.cloudcpp.com:80"},
-	{"CM", "cm.tz.cloudcpp.com:80"},
+func carriersOf(cfg spec.Probe) []spec.Carrier {
+	if len(cfg.Carriers) > 0 {
+		return cfg.Carriers
+	}
+	return spec.DefaultCarriers()
 }
 
 const (
@@ -114,11 +116,11 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 	ctx, cancel := context.WithCancel(parent)
 	r.cancel = cancel
 	if next.CarrierPing {
-		for _, c := range carriers {
-			if r.carrier[c.name] == nil {
-				r.carrier[c.name] = &ring{}
+		for _, c := range carriersOf(next) {
+			if r.carrier[c.Name] == nil {
+				r.carrier[c.Name] = &ring{}
 			}
-			go r.carrierLoop(ctx, c.name, c.addr)
+			go r.carrierLoop(ctx, c.Name, c.Addr)
 		}
 	}
 	for _, t := range next.Tasks {
@@ -127,8 +129,13 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 }
 
 func sameConfig(a, b spec.Probe) bool {
-	if a.Enabled != b.Enabled || a.CarrierPing != b.CarrierPing || len(a.Tasks) != len(b.Tasks) {
+	if a.Enabled != b.Enabled || a.CarrierPing != b.CarrierPing || len(a.Tasks) != len(b.Tasks) || len(a.Carriers) != len(b.Carriers) {
 		return false
+	}
+	for i := range a.Carriers {
+		if a.Carriers[i] != b.Carriers[i] {
+			return false
+		}
 	}
 	for i := range a.Tasks {
 		if a.Tasks[i] != b.Tasks[i] {
@@ -306,9 +313,9 @@ func (r *Runner) Results() []spec.PingResult {
 	defer r.mu.Unlock()
 	var out []spec.PingResult
 	if r.cfg.CarrierPing {
-		for _, c := range carriers {
-			if rg := r.carrier[c.name]; rg != nil && len(rg.samples) > 0 {
-				out = append(out, spec.PingResult{Name: c.name, LatencyMs: rg.last(), Loss: rg.loss(), At: time.Now().Unix()})
+		for _, c := range carriersOf(r.cfg) {
+			if rg := r.carrier[c.Name]; rg != nil && len(rg.samples) > 0 {
+				out = append(out, spec.PingResult{Name: c.Name, LatencyMs: rg.last(), Loss: rg.loss(), At: time.Now().Unix()})
 			}
 		}
 	}

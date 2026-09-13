@@ -86,3 +86,27 @@ func TestDownloadTask(t *testing.T) {
 	}
 	t.Fatalf("download result missing: %+v", r.Results())
 }
+
+func TestCustomCarriers(t *testing.T) {
+	r := &Runner{Dial: func(context.Context, string) (time.Duration, error) { return 5 * time.Millisecond, nil }}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r.Configure(ctx, &spec.Probe{Enabled: true, CarrierPing: true, Carriers: []spec.Carrier{{Name: "HK", Addr: "hk.test:80"}}})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(r.Results()) == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	res := r.Results()
+	if len(res) != 1 || res[0].Name != "HK" || res[0].LatencyMs != 5 {
+		t.Fatalf("results %+v", res)
+	}
+	// Going back to the default set reports the default names only.
+	r.Configure(ctx, &spec.Probe{Enabled: true, CarrierPing: true})
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(r.Results()) < 3 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if res := r.Results(); len(res) != 3 || res[0].Name != "CT" {
+		t.Fatalf("default results %+v", res)
+	}
+}

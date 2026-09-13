@@ -33,6 +33,11 @@ type Config struct {
 		Hysteria      *HysteriaCore `yaml:"hysteria"`
 	} `yaml:"cores"`
 
+	// Probe runs the latency checks on a node that is not managed by
+	// Captain (local or Xboard driver). Under Captain the panel's probe
+	// settings replace this section entirely.
+	Probe *ProbeConfig `yaml:"probe"`
+
 	Panel struct {
 		// Driver is "local" (standalone; the built-in web UI owns the
 		// config and can hand the node to Captain later), "captain" or
@@ -256,4 +261,27 @@ func (c *Config) CertFor(serverName string) (certPath, keyPath string, ok bool) 
 		return c.Certs[0].Cert, c.Certs[0].Key, true
 	}
 	return "", "", false
+}
+
+// ProbeConfig is the standalone probe section.
+type ProbeConfig struct {
+	Enabled     bool            `yaml:"enabled"`
+	CarrierPing *bool           `yaml:"carrier_ping"` // default true
+	Carriers    []spec.Carrier  `yaml:"carriers"`     // empty = the default CT/CU/CM points
+	Tasks       []spec.PingTask `yaml:"tasks"`
+}
+
+// Spec converts the section into what the probe runner takes.
+func (p *ProbeConfig) Spec() *spec.Probe {
+	if p == nil || !p.Enabled {
+		return nil
+	}
+	out := &spec.Probe{Enabled: true, CarrierPing: p.CarrierPing == nil || *p.CarrierPing, Carriers: p.Carriers}
+	for i, t := range p.Tasks {
+		if t.ID == 0 {
+			t.ID = int64(i + 1)
+		}
+		out.Tasks = append(out.Tasks, t)
+	}
+	return out
 }

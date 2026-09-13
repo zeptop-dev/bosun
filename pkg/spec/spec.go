@@ -277,17 +277,31 @@ type PingResult struct {
 type Probe struct {
 	Enabled     bool       `json:"enabled"`
 	BeatSeconds int        `json:"beat_seconds,omitempty"` // default 10
-	CarrierPing bool       `json:"carrier_ping,omitempty"` // TCP-connect latency to CT/CU/CM probe points
+	CarrierPing bool       `json:"carrier_ping,omitempty"` // TCP-connect latency to the carrier probe points
+	Carriers    []Carrier  `json:"carriers,omitempty"`     // empty = DefaultCarriers
 	Tasks       []PingTask `json:"tasks,omitempty"`
+}
+
+// Carrier is one always-on TCP-connect latency target, named after the
+// network it represents (CT/CU/CM by default).
+type Carrier struct {
+	Name string `json:"name" yaml:"name"`
+	Addr string `json:"addr" yaml:"addr"` // host:port
+}
+
+// DefaultCarriers are the three Chinese carriers' probe points used by
+// ServerStatus-style monitors; a refused connection still yields an RTT.
+func DefaultCarriers() []Carrier {
+	return []Carrier{{"CT", "ct.tz.cloudcpp.com:80"}, {"CU", "cu.tz.cloudcpp.com:80"}, {"CM", "cm.tz.cloudcpp.com:80"}}
 }
 
 // PingTask is a panel-defined latency check the node runs.
 type PingTask struct {
-	ID              int64  `json:"id"`
-	Name            string `json:"name"`
-	Type            string `json:"type"`   // icmp | tcp | http | download
-	Target          string `json:"target"` // host, host:port or URL (download: a large file URL)
-	IntervalSeconds int    `json:"interval_seconds,omitempty"`
+	ID              int64  `json:"id" yaml:"id"`
+	Name            string `json:"name" yaml:"name"`
+	Type            string `json:"type" yaml:"type"`     // icmp | tcp | http | download
+	Target          string `json:"target" yaml:"target"` // host, host:port or URL (download: a large file URL)
+	IntervalSeconds int    `json:"interval_seconds,omitempty" yaml:"interval_seconds"`
 }
 
 // Intervals are the panel-requested polling cadences.
