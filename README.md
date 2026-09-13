@@ -193,6 +193,23 @@ a notice every six hours when a newer release exists.
 cores are reconfigured or restarted as needed. Users get per-user quota and expiry,
 traffic counters, share links and a `/sub/<token>` subscription.
 
+The standalone panel carries the same node-side features as Captain's node
+page: line ingresses (IPLC / dedicated NICs: inbounds bind to the line
+address, share links advertise the provider's entry or its domain on the
+mapped port, and every line gets an RTT task from its NIC), landing
+outbounds and route rules (paste a share link, chain exits, pick a default
+exit), operator certificates (PEM pairs used ahead of ACME for the names
+they cover) and the probe (carrier latency targets, tasks with an optional
+source address; results on the overview and `/metrics`). In local mode the
+panel's probe settings win; the `probe:` section of config.yaml only applies
+to the Xboard driver.
+
+The installer asks for the panel username, password and port when run on a
+terminal (blank keeps `admin`, a generated password and `:2053`; `r` picks a
+random port); `--yes` skips the questions, `--user`, `--password` and
+`--web-listen` answer them up front. `bosun admin set -user U -password P`
+changes the login later; `bosun admin reset-password` generates a new one.
+
 Settings → Mode → "Hand over to Captain" takes a pair code, snapshots the local
 objects, and restarts the agent on the Captain driver; the panel turns read-only.
 "Detach" comes back to local mode, restoring the snapshot or keeping the last
