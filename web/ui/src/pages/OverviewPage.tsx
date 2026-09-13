@@ -6,6 +6,7 @@ import { IconAlertTriangle, IconDevices, IconPlugConnected, IconArrowsExchange, 
 import { api, type Status } from '../lib/api'
 import { ago, bytes } from '../lib/format'
 import { PageHeader } from '../components/PageHeader'
+import { PingList } from '../components/PingList'
 import { Stat } from '../components/Stat'
 
 function uptime(s: number) {
@@ -61,6 +62,12 @@ export default function OverviewPage() {
           </Table>
         </Card>
       </SimpleGrid>
+      {(s?.pings?.length ?? 0) > 0 && (
+        <Card mb="lg">
+          <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb="xs">{t('overview.latency')}</Text>
+          <PingList pings={s!.pings!} />
+        </Card>
+      )}
       <Card>
         <Text fw={600}>{t('overview.chart')}</Text>
         <Text size="xs" c="dimmed" mb="md">{t('overview.chartSub')}</Text>
