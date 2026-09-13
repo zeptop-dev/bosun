@@ -144,6 +144,15 @@ still work through `certs:` in config.yaml; an inbound whose certificate cannot
 be obtained is skipped (shown on the overview) and retried on the next pull,
 so one broken domain never takes the other inbounds down.
 
+### Pushed certificates
+
+Captain can push PEM pairs (uploaded by the operator or delivered by a
+certificate manager such as Certimate through Captain's webhook) in
+`node.certificates`. bosun validates each pair, writes it under
+`<data_dir>/certs/custom/<domain>/` and uses it for every standard-TLS
+inbound whose server name it covers (exact or `*.wildcard`), ahead of ACME
+and the local `certs:` config. They are reported with method `custom`.
+
 ## Updating
 
 Settings → "Version and updates" checks GitHub Releases (cached 20 minutes; a

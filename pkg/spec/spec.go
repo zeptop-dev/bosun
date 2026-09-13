@@ -46,6 +46,15 @@ type TLS struct {
 	ACME     string `json:"acme,omitempty"`
 }
 
+// Certificate is a PEM pair pushed by the panel (uploaded by the operator
+// or delivered by a certificate manager's webhook). Domain may be a
+// wildcard; it takes precedence over ACME for inbounds it covers.
+type Certificate struct {
+	Domain  string `json:"domain"`
+	CertPEM string `json:"cert_pem"`
+	KeyPEM  string `json:"key_pem"`
+}
+
 // ACME holds node-wide certificate automation settings.
 type ACME struct {
 	Email           string `json:"email,omitempty"`            // account contact
@@ -195,6 +204,8 @@ type Node struct {
 	Routes    []RouteRule `json:"routes,omitempty"`
 	Forwards  []Forward   `json:"forwards,omitempty"`
 	ACME      *ACME       `json:"acme,omitempty"`
+	// Certificates are operator-supplied PEM pairs; see Certificate.
+	Certificates []Certificate `json:"certificates,omitempty"`
 	// DefaultOutbound is the tag traffic takes when no route rule matches
 	// ("" = direct): the whole node exits through a landing server.
 	DefaultOutbound string `json:"default_outbound,omitempty"`
