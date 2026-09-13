@@ -1,0 +1,34 @@
+import { Group, NumberInput, TextInput } from '@mantine/core'
+import type { useForm } from '@mantine/form'
+import { useTranslation } from 'react-i18next'
+import type { Ingress, IngressInput } from '../lib/api'
+
+export type IngressValues = { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number | string; PortTo: number | string; PortOffset: number | string }
+export const emptyIngress: IngressValues = { Name: 'IPLC', BindIP: '', LineIP: '', EntryHost: '', EntryDomain: '', PortFrom: '', PortTo: '', PortOffset: 0 }
+export const ingressPayload = (v: IngressValues): IngressInput => ({ Name: v.Name, BindIP: v.BindIP, LineIP: v.LineIP, EntryHost: v.EntryHost, EntryDomain: v.EntryDomain, PortFrom: Number(v.PortFrom) || 0, PortTo: Number(v.PortTo) || 0, PortOffset: Number(v.PortOffset) || 0 })
+export const ingressValues = (g: Ingress): IngressValues => ({ Name: g.name, BindIP: g.bind_ip, LineIP: g.line_ip, EntryHost: g.entry_host, EntryDomain: g.entry_domain ?? '', PortFrom: g.port_from || '', PortTo: g.port_to || '', PortOffset: g.port_offset })
+// What share links advertise for a line: its domain when named, else the provider's entry.
+export const clientHost = (g: Ingress) => g.entry_domain || g.entry_host
+
+// The fields of one line ingress, shared by the page and the inbound recipe.
+export function IngressFields({ form }: { form: ReturnType<typeof useForm<IngressValues>> }) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <Group grow>
+        <TextInput label={t('ingress.name')} required {...form.getInputProps('Name')} />
+        <TextInput label={t('ingress.bindIP')} description={t('ingress.bindIPHint')} placeholder="10.10.0.2" {...form.getInputProps('BindIP')} />
+      </Group>
+      <Group grow>
+        <TextInput label={t('ingress.lineIP')} description={t('ingress.lineIPHint')} placeholder="198.51.100.20" {...form.getInputProps('LineIP')} />
+        <TextInput label={t('ingress.entryHost')} description={t('ingress.entryHostHint')} placeholder="203.0.113.30" {...form.getInputProps('EntryHost')} />
+      </Group>
+      <TextInput label={t('ingress.entryDomain')} description={t('ingress.entryDomainHint')} placeholder="iplc.node.example.com" {...form.getInputProps('EntryDomain')} />
+      <Group grow>
+        <NumberInput label={t('ingress.portFrom')} min={1} max={65535} placeholder="17701" {...form.getInputProps('PortFrom')} />
+        <NumberInput label={t('ingress.portTo')} min={1} max={65535} placeholder="17799" {...form.getInputProps('PortTo')} />
+        <NumberInput label={t('ingress.portOffset')} description={t('ingress.portOffsetHint')} {...form.getInputProps('PortOffset')} />
+      </Group>
+    </>
+  )
+}
