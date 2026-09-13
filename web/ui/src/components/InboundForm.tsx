@@ -82,6 +82,7 @@ export type InboundSubmit = { body: Record<string, unknown>; ingress?: IngressIn
 export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [], usedPorts = [] }: { initial: Values; onSubmit: (v: InboundSubmit) => void; busy: boolean; onCancel: () => void; ingresses?: Ingress[]; usedPorts?: number[] }) {
   const { t } = useTranslation()
   const [advanced, setAdvanced] = useState(false)
+  const [recipe, setRecipe] = useState<string | null>(null) // highlighted quick-setup card
   const form = useForm<Values>({
     initialValues: initial,
     validate: {
@@ -148,9 +149,9 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           <Text size="xs" c="dimmed" mb="xs">{t('inbounds.recipeHint')}</Text>
           <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs">
             {recipes.map((r) => (
-              <UnstyledButton key={r.key} onClick={() => apply(r)}>
-                <Card p="sm" style={{ height: '100%' }}>
-                  <Text size="sm" fw={600}>{t(`inbounds.recipes.${r.key}`)}</Text>
+              <UnstyledButton key={r.key} onClick={() => { setRecipe(r.key); apply(r) }} aria-pressed={recipe === r.key}>
+                <Card p="sm" withBorder style={{ height: '100%', borderColor: recipe === r.key ? 'var(--mantine-primary-color-filled)' : undefined, background: recipe === r.key ? 'var(--mantine-primary-color-light)' : undefined }}>
+                  <Text size="sm" fw={600} c={recipe === r.key ? 'var(--mantine-primary-color-light-color)' : undefined}>{t(`inbounds.recipes.${r.key}`)}</Text>
                   <Text size="xs" c="dimmed">{t(`inbounds.recipes.${r.key}Desc`)}</Text>
                 </Card>
               </UnstyledButton>
