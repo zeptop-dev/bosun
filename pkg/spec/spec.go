@@ -302,6 +302,9 @@ type PingTask struct {
 	Type            string `json:"type" yaml:"type"`     // icmp | tcp | http | download
 	Target          string `json:"target" yaml:"target"` // host, host:port or URL (download: a large file URL)
 	IntervalSeconds int    `json:"interval_seconds,omitempty" yaml:"interval_seconds"`
+	// SourceIP binds the probe to a local address (tcp, icmp): measure a
+	// dedicated line from its own NIC instead of the default route.
+	SourceIP string `json:"source_ip,omitempty" yaml:"source_ip"`
 }
 
 // Intervals are the panel-requested polling cadences.

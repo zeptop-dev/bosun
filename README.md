@@ -137,6 +137,8 @@ probe:
     - { name: HK, addr: www.hkix.net:443 }
   tasks:
     - { name: cf, type: tcp, target: 1.1.1.1:443, interval_seconds: 30 }
+    # a dedicated line measured from its own NIC (tcp/icmp honour source_ip)
+    - { name: IPLC, type: tcp, target: 198.51.100.20:17701, source_ip: 10.10.0.2 }
 ```
 
 ## Certificates
