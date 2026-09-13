@@ -144,6 +144,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/update/rollback", auth(s.updateRollback))
 	m.HandleFunc("POST /api/restart", auth(s.restart))
 
+	s.extraRoutes()
 	m.Handle("/", web.UI())
 }
 
@@ -311,7 +312,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		"agent": ag, "host": host, "forwards": forwards,
 		"online_users": online, "users": len(users), "inbounds": len(s.d.Store.Inbounds()),
 		"total_up": totalUp, "total_down": totalDown, "history": rt.History, "last_report": rt.LastReport,
-		"certs": certList,
+		"certs": certList, "pings": s.probeResults(),
 	})
 }
 
@@ -499,7 +500,7 @@ func (s *Server) userLinks(w http.ResponseWriter, r *http.Request) {
 		scheme = "https"
 	}
 	ok(w, map[string]any{
-		"links":   linksFor(u, s.d.Store.Inbounds(), s.d.Store.Settings(), requestHost(r)),
+		"links":   linksFor(u, s.d.Store.Inbounds(), s.d.Store.Settings(), requestHost(r), s.d.Store.ListIngresses()...),
 		"sub_url": fmt.Sprintf("%s://%s/sub/%s", scheme, r.Host, u.SubToken),
 	})
 }
@@ -512,7 +513,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	links := linksFor(u, s.d.Store.Inbounds(), s.d.Store.Settings(), requestHost(r))
+	links := linksFor(u, s.d.Store.Inbounds(), s.d.Store.Settings(), requestHost(r), s.d.Store.ListIngresses()...)
 	var lines []string
 	for _, l := range links {
 		lines = append(lines, l.URI)

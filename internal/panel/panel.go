@@ -30,6 +30,12 @@ type Beater interface {
 	Beat(ctx context.Context, b agentproto.Beat) error
 }
 
+// ProbeSource is implemented by drivers that decide the probe configuration
+// without receiving beats (the local store): results stay on the node.
+type ProbeSource interface {
+	Probe() *spec.Probe
+}
+
 // ForwardSource is implemented by drivers whose panel manages forwarding
 // rules. Drivers without it (Xboard) leave forwards to the local config.
 type ForwardSource interface {

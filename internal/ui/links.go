@@ -19,16 +19,24 @@ type Link struct {
 }
 
 // linksFor renders share URIs for every enabled inbound the user may use.
-func linksFor(u local.User, inbounds []local.Inbound, settings local.Settings, fallbackHost string) []Link {
+func linksFor(u local.User, inbounds []local.Inbound, settings local.Settings, fallbackHost string, ingresses ...local.Ingress) []Link {
 	out := []Link{}
+	byID := map[string]local.Ingress{}
+	for _, g := range ingresses {
+		byID[g.ID] = g
+	}
 	for _, ib := range inbounds {
 		if !ib.Enabled || !userAllowed(u, ib.Tag) {
 			continue
 		}
-		// Connection address: the inbound's own override, else the node's
-		// public host, else the TLS domain (it must point here anyway),
-		// else whatever address the panel was reached on.
+		// Connection address: the inbound's own override, else the line
+		// ingress it sits behind, else the node's public host, else the
+		// TLS domain (it must point here anyway), else whatever address
+		// the panel was reached on.
 		h, p := settings.PublicHost, ib.Port
+		if g, has := byID[ib.IngressID]; has && ib.DisplayHost == "" && g.ClientHost() != "" {
+			h, p = g.ClientHost(), g.EntryPort(ib.Port)
+		}
 		if ib.DisplayHost != "" {
 			h = ib.DisplayHost
 		}
