@@ -161,9 +161,14 @@ func (a *Agent) Run(ctx context.Context) error {
 	beatEvery := time.Duration(0)
 	reconfigureBeat := func() {
 		if beater == nil {
-			// Standalone: the config file decides; results only show up
-			// on /metrics and in the local UI.
-			a.probes.Configure(ctx, a.cfg.Probe.Spec())
+			// Standalone: the local store decides when it can, else the
+			// config file; results only show up on /metrics and in the
+			// local UI.
+			if src, ok := a.driver.(panel.ProbeSource); ok {
+				a.probes.Configure(ctx, src.Probe())
+			} else {
+				a.probes.Configure(ctx, a.cfg.Probe.Spec())
+			}
 			return
 		}
 		cfg := beater.Probe()
@@ -622,6 +627,9 @@ func (a *Agent) applyForwards(ctx context.Context) error {
 	}
 	return a.fwd.Apply(rules)
 }
+
+// ProbeResults returns the latest carrier and task measurements.
+func (a *Agent) ProbeResults() []spec.PingResult { return a.probes.Results() }
 
 func (a *Agent) registerMetrics() {
 	m := a.metrics
