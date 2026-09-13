@@ -148,6 +148,25 @@ type Outbound struct {
 	Protocol string         `json:"protocol,omitempty"`
 	Settings map[string]any `json:"settings,omitempty"`
 	ProxyTag string         `json:"proxy_tag,omitempty"` // chain: dial through this outbound
+	// Remote is the core-agnostic form: bosun renders it in each core's
+	// dialect. When set, Protocol/Settings are ignored.
+	Remote *Remote `json:"remote,omitempty"`
+}
+
+// Remote is a proxy server to dial out through (a "landing" node), in the
+// same vocabulary as Inbound so a share link maps onto it directly.
+type Remote struct {
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	UUID        string `json:"uuid,omitempty"`        // vless/vmess/tuic
+	Password    string `json:"password,omitempty"`    // trojan/ss/hysteria2/tuic/anytls/socks/http
+	Username    string `json:"username,omitempty"`    // socks/http
+	Insecure    bool   `json:"insecure,omitempty"`    // skip certificate verification
+	Fingerprint string `json:"fingerprint,omitempty"` // uTLS fingerprint, default "chrome" when TLS is on
+	// Settings carries Protocol, TLS (ServerName, Mode, Reality.PublicKey +
+	// ShortIDs), Transport, Multiplex, Flow, Cipher, Obfs..., i.e. the
+	// client-relevant subset of an Inbound.
+	Settings Inbound `json:"settings"`
 }
 
 // RouteRule directs matched traffic to an action.
@@ -176,6 +195,9 @@ type Node struct {
 	Routes    []RouteRule `json:"routes,omitempty"`
 	Forwards  []Forward   `json:"forwards,omitempty"`
 	ACME      *ACME       `json:"acme,omitempty"`
+	// DefaultOutbound is the tag traffic takes when no route rule matches
+	// ("" = direct): the whole node exits through a landing server.
+	DefaultOutbound string `json:"default_outbound,omitempty"`
 }
 
 // Traffic is a byte counter pair.
