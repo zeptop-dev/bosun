@@ -41,7 +41,19 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 
 	outs := []any{m{"type": "direct", "tag": "direct"}}
 	for _, o := range node.Outbounds {
+		if o.Remote != nil {
+			ro, err := renderRemote(o)
+			if err != nil {
+				return nil, err
+			}
+			outs = append(outs, ro)
+			continue
+		}
 		outs = append(outs, renderOutbound(o))
+	}
+	final := "direct"
+	if node.DefaultOutbound != "" {
+		final = node.DefaultOutbound
 	}
 
 	cfg := m{
@@ -54,7 +66,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		},
 		"inbounds":  ins,
 		"outbounds": outs,
-		"route":     m{"rules": renderRoutes(node.Routes), "final": "direct"},
+		"route":     m{"rules": renderRoutes(node.Routes), "final": final},
 	}
 	return json.MarshalIndent(cfg, "", "  ")
 }
@@ -297,6 +309,8 @@ func addMatch(rule m, match string) {
 		return
 	}
 	switch key {
+	case "inbound":
+		rule["inbound"] = appendStr(rule["inbound"], val)
 	case "domain":
 		rule["domain_suffix"] = appendStr(rule["domain_suffix"], val)
 	case "full":

@@ -65,13 +65,34 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	sum := sha256.Sum256([]byte(strings.Join(keyParts, "\n")))
 	st.inboundsKey = hex.EncodeToString(sum[:8])
 
-	outs := []any{
-		m{"tag": "direct", "protocol": "freedom"},
-		m{"tag": "block", "protocol": "blackhole"},
-	}
+	// Xray routes unmatched traffic to the first outbound, so the default
+	// outbound (a landing server) goes first when one is set.
+	direct := m{"tag": "direct", "protocol": "freedom"}
+	block := m{"tag": "block", "protocol": "blackhole"}
+	var custom []any
+	var def m
 	for _, o := range node.Outbounds {
-		outs = append(outs, renderOutbound(o))
+		var ro m
+		if o.Remote != nil {
+			var err error
+			if ro, err = renderRemote(o); err != nil {
+				return nil, nil, err
+			}
+		} else {
+			ro = renderOutbound(o)
+		}
+		if node.DefaultOutbound != "" && o.Tag == node.DefaultOutbound {
+			def = ro
+			continue
+		}
+		custom = append(custom, ro)
 	}
+	outs := []any{}
+	if def != nil {
+		outs = append(outs, def)
+	}
+	outs = append(outs, direct, block)
+	outs = append(outs, custom...)
 
 	cfg := m{
 		"log": m{"loglevel": opt.LogLevel},
@@ -288,6 +309,8 @@ func addMatch(rule m, match string) {
 		return
 	}
 	switch key {
+	case "inbound":
+		rule["inboundTag"] = appendStr(rule["inboundTag"], val)
 	case "domain":
 		rule["domain"] = appendStr(rule["domain"], "domain:"+val)
 	case "full":

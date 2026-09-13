@@ -232,9 +232,14 @@ the client ecosystem catches up, pin Xray at 26.3.x for REALITY nodes or let
 sing-box serve them. This is the reason bosun keeps a tested version list per
 core instead of tracking the newest upstream release blindly.
 
-Custom outbounds are passed to the serving core in that core's own dialect
-(sing-box flat fields, or Xray `settings` / `streamSettings`); bosun does not
-translate between the two yet.
+Outbounds come in two forms. `remote` is core-agnostic (host, port,
+credentials and the same TLS/transport vocabulary as inbounds, e.g. parsed
+from a share link) and bosun renders it in each core's dialect: sing-box takes
+every protocol, Xray takes vless/vmess/trojan/shadowsocks/socks/http. Raw
+`settings` are passed through untranslated in the serving core's own layout.
+Route rules match `inbound:<tag>` besides domain/ip/protocol/port, and
+`default_outbound` on the node sends unmatched traffic through a landing
+server (sing-box `route.final`; Xray puts it first).
 
 ## mita binary
 
