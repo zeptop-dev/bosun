@@ -180,6 +180,14 @@ func Load(path string) (*Config, error) {
 	if c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil && c.Cores.Hysteria == nil {
 		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita, cores.hysteria)")
 	}
+	// BOSUN_CAPTAIN / BOSUN_PAIR (the docker one-liner Captain prints) select
+	// the Captain driver without editing the baked-in config. The pair code is
+	// only used until a token is stored, so leaving the variables set is fine.
+	if u := os.Getenv("BOSUN_CAPTAIN"); u != "" {
+		c.Panel.Driver = "captain"
+		c.Panel.Captain = &CaptainPanel{URL: u, PairCode: os.Getenv("BOSUN_PAIR")}
+		c.Web = nil
+	}
 	if c.Panel.Driver == "" {
 		c.Panel.Driver = "local"
 	}

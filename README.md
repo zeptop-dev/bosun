@@ -67,7 +67,12 @@ curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/ins
   --captain https://captain.example.com --pair ABCD-EFGH
 ```
 
-The pair code comes from "Add node" in Captain and is used once. Either way the
+"Add node" in Captain prints this ready to paste as
+`curl -fsSL https://<captain>/api/agent/install.sh?pair=CODE | sh`, and a Docker
+one-liner: `docker run -d --network host -v bosun-data:/var/lib/bosun
+-e BOSUN_CAPTAIN=https://<captain> -e BOSUN_PAIR=CODE zeptop/bosun:latest`
+(the two variables select the Captain driver without editing the config; the
+code is only used until the token is stored). The pair code is used once. Either way the
 installer verifies the binary against the release checksums, writes
 `/etc/bosun/config.yaml`, and starts the `bosun` service; cores are downloaded on
 first start. Re-run without arguments to upgrade; `... | sh -s -- uninstall`
