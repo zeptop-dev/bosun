@@ -22,6 +22,14 @@ type Driver interface {
 	Intervals() spec.Intervals
 }
 
+// Beater is implemented by drivers whose panel takes frequent host beats
+// (Captain's probe page). Probe returns the current configuration (nil =
+// off) and Beat delivers one sample.
+type Beater interface {
+	Probe() *spec.Probe
+	Beat(ctx context.Context, b agentproto.Beat) error
+}
+
 // ForwardSource is implemented by drivers whose panel manages forwarding
 // rules. Drivers without it (Xboard) leave forwards to the local config.
 type ForwardSource interface {

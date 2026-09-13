@@ -351,6 +351,30 @@ func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error
 	return resp.StateChanged, nil
 }
 
+// Probe returns the panel's monitoring configuration (nil when off).
+func (c *Client) Probe() *spec.Probe {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state == nil || c.state.Probe == nil {
+		return nil
+	}
+	p := *c.state.Probe
+	return &p
+}
+
+// Beat posts one host sample to the probe endpoint.
+func (c *Client) Beat(ctx context.Context, b agentproto.Beat) error {
+	b.Version = c.cfg.Version
+	code, body, _, err := c.do(ctx, http.MethodPost, "/api/agent/beat", b, nil)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK && code != http.StatusNoContent {
+		return fmt.Errorf("captain: POST beat: %s: %s", http.StatusText(code), truncate(body))
+	}
+	return nil
+}
+
 // PushTraffic and PushStatus exist to satisfy panel.Driver; the agent uses
 // Report when a driver provides it, so these only run as fallbacks.
 func (c *Client) PushTraffic(ctx context.Context, traffic []spec.UserTraffic) error {

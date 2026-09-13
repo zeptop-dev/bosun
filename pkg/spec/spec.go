@@ -200,6 +200,58 @@ type SystemStatus struct {
 	SwapUsed   uint64  `json:"swap_used,omitempty"`
 	DiskTotal  uint64  `json:"disk_total,omitempty"`
 	DiskUsed   uint64  `json:"disk_used,omitempty"`
+
+	// Probe fields (bosun >= 0.11); zero when the agent is older.
+	Load1, Load5, Load15 float64      `json:"load1,omitempty"`
+	NetUp                uint64       `json:"net_up,omitempty"`         // bytes/s averaged since the previous sample
+	NetDown              uint64       `json:"net_down,omitempty"`       //
+	NetTotalUp           uint64       `json:"net_total_up,omitempty"`   // interface counters since boot (all non-loopback)
+	NetTotalDown         uint64       `json:"net_total_down,omitempty"` //
+	TCP                  int          `json:"tcp,omitempty"`
+	UDP                  int          `json:"udp,omitempty"`
+	Processes            int          `json:"processes,omitempty"`
+	Uptime               uint64       `json:"uptime,omitempty"` // seconds
+	IPv4                 bool         `json:"ipv4,omitempty"`
+	IPv6                 bool         `json:"ipv6,omitempty"`
+	Info                 *HostInfo    `json:"info,omitempty"`  // static facts, sent with every beat (cheap)
+	Pings                []PingResult `json:"pings,omitempty"` // carrier probes and panel-defined tasks
+}
+
+// HostInfo is what does not change between reboots.
+type HostInfo struct {
+	CPUModel string `json:"cpu_model,omitempty"`
+	CPUCores int    `json:"cpu_cores,omitempty"`
+	OS       string `json:"os,omitempty"` // "Ubuntu 24.04"
+	Kernel   string `json:"kernel,omitempty"`
+	Arch     string `json:"arch,omitempty"`
+	Virt     string `json:"virt,omitempty"` // kvm, lxc, docker, ...
+	BootTime uint64 `json:"boot_time,omitempty"`
+}
+
+// PingResult is the latest measurement of one probe target.
+type PingResult struct {
+	TaskID    int64   `json:"task_id"`        // 0 = built-in carrier probe
+	Name      string  `json:"name"`           // "CT", "CU", "CM" or the task name
+	LatencyMs float64 `json:"latency_ms"`     // -1 = lost
+	Loss      float64 `json:"loss,omitempty"` // percent over the recent window (carrier probes)
+	At        int64   `json:"at,omitempty"`   // unix seconds of the sample
+}
+
+// Probe is the panel's monitoring configuration for a node.
+type Probe struct {
+	Enabled     bool       `json:"enabled"`
+	BeatSeconds int        `json:"beat_seconds,omitempty"` // default 10
+	CarrierPing bool       `json:"carrier_ping,omitempty"` // TCP-connect latency to CT/CU/CM probe points
+	Tasks       []PingTask `json:"tasks,omitempty"`
+}
+
+// PingTask is a panel-defined latency check the node runs.
+type PingTask struct {
+	ID              int64  `json:"id"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`   // icmp | tcp | http
+	Target          string `json:"target"` // host, host:port or URL
+	IntervalSeconds int    `json:"interval_seconds,omitempty"`
 }
 
 // Intervals are the panel-requested polling cadences.

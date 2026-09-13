@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/zeptop-dev/bosun/internal/probe"
 	"log/slog"
 	"sync"
 	"time"
@@ -48,6 +49,11 @@ type Agent struct {
 	// kick re-applies the current state (after a certificate renewal).
 	kick         chan struct{}
 	forceRestart bool
+
+	// Probe beats: host sampler and latency runner, driven by the panel's
+	// probe config when the driver is a panel.Beater.
+	sampler sysinfo.Sampler
+	probes  probe.Runner
 	// skipped are inbounds left out of the last apply (no certificate yet).
 	skipped map[string]string
 }
@@ -143,6 +149,41 @@ func (a *Agent) Run(ctx context.Context) error {
 	defer push.Stop()
 	a.log.Info("running", "pull", iv.Pull, "push", iv.Push)
 
+	// Beats run on their own ticker so the panel can ask for 5-10s host
+	// samples without touching the traffic report cadence.
+	beater, _ := a.driver.(panel.Beater)
+	beat := time.NewTicker(time.Hour)
+	beat.Stop()
+	defer beat.Stop()
+	defer a.probes.Stop()
+	beatEvery := time.Duration(0)
+	reconfigureBeat := func() {
+		if beater == nil {
+			return
+		}
+		cfg := beater.Probe()
+		a.probes.Configure(ctx, cfg)
+		want := time.Duration(0)
+		if cfg != nil && cfg.Enabled {
+			want = 10 * time.Second
+			if cfg.BeatSeconds >= 3 {
+				want = time.Duration(cfg.BeatSeconds) * time.Second
+			}
+		}
+		if want == beatEvery {
+			return
+		}
+		beatEvery = want
+		if want == 0 {
+			beat.Stop()
+			a.log.Info("probe beats off")
+			return
+		}
+		beat.Reset(want)
+		a.log.Info("probe beats on", "every", want)
+	}
+	reconfigureBeat()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -151,11 +192,22 @@ func (a *Agent) Run(ctx context.Context) error {
 			// Coalesce bursts of edits before rendering.
 			time.Sleep(300 * time.Millisecond)
 			a.pullApply(ctx)
+			reconfigureBeat()
 		case <-a.kick:
 			if a.node != nil {
 				if err := a.apply(ctx); err != nil {
 					a.log.Error("apply failed", "err", err)
 				}
+			}
+		case <-beat.C:
+			if beater != nil {
+				bctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+				host := a.sampler.Sample(bctx)
+				host.Pings = a.probes.Results()
+				if err := beater.Beat(bctx, agentproto.Beat{Host: host}); err != nil {
+					a.log.Warn("beat failed", "err", err)
+				}
+				cancel()
 			}
 		case <-pull.C:
 			if changed, err := a.pull(ctx); err != nil {
@@ -174,6 +226,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				push.Reset(iv.Push)
 				a.log.Info("intervals updated", "pull", iv.Pull, "push", iv.Push)
 			}
+			reconfigureBeat()
 		case <-push.C:
 			if a.report(ctx) {
 				// The panel says newer state exists: pull now instead of
