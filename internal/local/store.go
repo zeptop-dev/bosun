@@ -60,6 +60,9 @@ func Open(path string, log *slog.Logger) (*Store, string, error) {
 	initial := ""
 	switch {
 	case err == nil:
+		// Carrier pings default on; a file written before the probe
+		// section existed has no way to say so.
+		s.st.Probe.CarrierPing = true
 		if err := json.Unmarshal(raw, &s.st); err != nil {
 			return nil, "", fmt.Errorf("local: %s: %w", path, err)
 		}
@@ -69,7 +72,7 @@ func Open(path string, log *slog.Logger) (*Store, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
-		s.st = State{Admin: Admin{Username: "admin", PasswordHash: hash}, Mode: ModeLocal}
+		s.st = State{Admin: Admin{Username: "admin", PasswordHash: hash}, Mode: ModeLocal, Probe: ProbeSettings{CarrierPing: true}}
 		if err := s.saveLocked(); err != nil {
 			return nil, "", err
 		}
@@ -271,6 +274,15 @@ func (s *Store) PutInbound(ib Inbound, prevTag string) error {
 	}
 	if prevTag != "" && idx < 0 {
 		return ErrNotFound
+	}
+	if ib.IngressID != "" {
+		g, found := s.ingressLocked(ib.IngressID)
+		if !found {
+			return errors.New("ingress not found")
+		}
+		if !g.AllowsPort(ib.Port) {
+			return fmt.Errorf("port %d is outside the %s line's range %d-%d", ib.Port, g.Name, g.PortFrom, g.PortTo)
+		}
 	}
 	if idx < 0 {
 		s.st.Inbounds = append(s.st.Inbounds, ib)
@@ -525,8 +537,10 @@ func (s *Store) Adopt(url string) error {
 	if s.st.Mode == ModeManaged {
 		return errors.New("already managed")
 	}
-	s.st.Snapshot = &Snapshot{TakenAt: time.Now(), Inbounds: s.st.Inbounds, Users: s.st.Users, Forwards: s.st.Forwards}
+	s.st.Snapshot = &Snapshot{TakenAt: time.Now(), Inbounds: s.st.Inbounds, Users: s.st.Users, Forwards: s.st.Forwards,
+		Ingresses: s.st.Ingresses, Outbounds: s.st.Outbounds, Routes: s.st.Routes, DefaultOutbound: s.st.DefaultOutbound, Certificates: s.st.Certificates, Probe: s.st.Probe}
 	s.st.Inbounds, s.st.Users, s.st.Forwards = nil, nil, nil
+	s.st.Ingresses, s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.Certificates = nil, nil, nil, "", nil
 	s.st.Mode = ModeManaged
 	s.st.Managed = &Managed{URL: url, PairedAt: time.Now()}
 	if err := s.commit(); err != nil {
@@ -548,10 +562,17 @@ func (s *Store) Detach(keep *agentproto.State) error {
 	switch {
 	case keep != nil:
 		s.st.Inbounds, s.st.Users, s.st.Forwards = FromManaged(keep)
+		// The panel's exits and certificates come along; its probe config
+		// and ingresses are panel-side concepts and stay behind.
+		s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound = keep.Node.Outbounds, keep.Node.Routes, keep.Node.DefaultOutbound
+		s.st.Certificates = keep.Node.Certificates
 	case s.st.Snapshot != nil:
-		s.st.Inbounds, s.st.Users, s.st.Forwards = s.st.Snapshot.Inbounds, s.st.Snapshot.Users, s.st.Snapshot.Forwards
+		snap := s.st.Snapshot
+		s.st.Inbounds, s.st.Users, s.st.Forwards = snap.Inbounds, snap.Users, snap.Forwards
+		s.st.Ingresses, s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.Certificates, s.st.Probe = snap.Ingresses, snap.Outbounds, snap.Routes, snap.DefaultOutbound, snap.Certificates, snap.Probe
 	default:
 		s.st.Inbounds, s.st.Users, s.st.Forwards = nil, nil, nil
+		s.st.Ingresses, s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.Certificates = nil, nil, nil, "", nil
 	}
 	s.st.Snapshot = nil
 	s.st.Managed = nil
@@ -628,15 +649,26 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	for _, u := range usable {
 		nodeUsers = append(nodeUsers, u.Spec())
 	}
-	node := &spec.Node{ID: "local", Forwards: append([]spec.Forward(nil), s.st.Forwards...)}
+	node := &spec.Node{ID: "local", Forwards: append([]spec.Forward(nil), s.st.Forwards...),
+		Outbounds: append([]spec.Outbound(nil), s.st.Outbounds...), Routes: append([]spec.RouteRule(nil), s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound,
+		Certificates: append([]spec.Certificate(nil), s.st.Certificates...)}
 	if s.st.Settings.ACMEEmail != "" || s.st.Settings.CloudflareToken != "" {
 		node.ACME = &spec.ACME{Email: s.st.Settings.ACMEEmail, CloudflareToken: s.st.Settings.CloudflareToken}
+	}
+	bindFor := map[string]string{}
+	for _, g := range s.st.Ingresses {
+		bindFor[g.ID] = g.BindIP
 	}
 	for _, ib := range s.st.Inbounds {
 		if !ib.Enabled {
 			continue
 		}
 		si := ib.Inbound
+		// A line ingress with its own NIC address: bind there so replies
+		// leave through the line, unless the inbound sets a listen itself.
+		if ib.IngressID != "" && si.Listen == "" {
+			si.Listen = bindFor[ib.IngressID]
+		}
 		var scoped []spec.User
 		restricted := false
 		for _, u := range usable {

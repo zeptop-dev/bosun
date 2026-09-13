@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -107,6 +108,7 @@ func usage() {
   bosun core list    [-c config.yaml]            show known core releases and what is installed
   bosun core install [-c config.yaml] <core> [version]   install a release (default: newest tested)
   bosun admin reset-password [-c config.yaml]   set a new random password for the local web panel
+  bosun admin set [-c config.yaml] -user U -password P   set the web panel login (blank password = generated)
   bosun version`)
 }
 
@@ -591,15 +593,18 @@ func cmdCore(args []string) error {
 	return fmt.Errorf("core: unknown subcommand %q", sub)
 }
 
-// cmdAdmin implements `bosun admin reset-password`: a way back in when the
-// web panel password is lost.
+// cmdAdmin implements `bosun admin reset-password` (a way back in when the
+// web panel password is lost) and `bosun admin set -user U -password P`
+// (the installer's way to seed the login before the first start).
 func cmdAdmin(args []string) error {
-	if len(args) == 0 || args[0] != "reset-password" {
+	if len(args) == 0 || (args[0] != "reset-password" && args[0] != "set") {
 		usage()
 		return fmt.Errorf("admin: unknown subcommand")
 	}
 	fs := flag.NewFlagSet("bosun admin", flag.ContinueOnError)
 	cfgPath := fs.String("c", "/etc/bosun/config.yaml", "config file")
+	user := fs.String("user", "", "panel username (set)")
+	password := fs.String("password", "", "panel password (set; blank = generate)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -614,6 +619,21 @@ func cmdAdmin(args []string) error {
 	store, initial, err := local.Open(cfg.Web.StateFile, log)
 	if err != nil {
 		return err
+	}
+	if args[0] == "set" {
+		name := strings.TrimSpace(*user)
+		if name == "" {
+			name = store.Username()
+		}
+		pw := *password
+		if pw == "" {
+			pw = authutil.Password(16)
+		}
+		if err := store.SetAdmin(name, pw); err != nil {
+			return err
+		}
+		fmt.Printf("username: %s\npassword: %s\n", name, pw)
+		return nil
 	}
 	if initial == "" {
 		initial = authutil.Password(16)

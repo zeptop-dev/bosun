@@ -39,6 +39,59 @@ type State struct {
 	Inbounds []Inbound      `json:"inbounds"`
 	Users    []User         `json:"users"`
 	Forwards []spec.Forward `json:"forwards"`
+
+	// Ingresses are lines (IPLC) in front of the node; see Ingress.
+	Ingresses []Ingress `json:"ingresses,omitempty"`
+	// Outbounds/Routes/DefaultOutbound are the landing exits and rules,
+	// the same objects Captain pushes in spec.Node.
+	Outbounds       []spec.Outbound  `json:"outbounds,omitempty"`
+	Routes          []spec.RouteRule `json:"routes,omitempty"`
+	DefaultOutbound string           `json:"default_outbound,omitempty"`
+	// Certificates are operator-supplied PEM pairs used ahead of ACME.
+	Certificates []spec.Certificate `json:"certificates,omitempty"`
+	// Probe is the standalone monitoring configuration.
+	Probe ProbeSettings `json:"probe"`
+}
+
+// Ingress is a way into the node other than its public address: an IPLC
+// or dedicated line with its own NIC address, the far-end address relays
+// forward to, an optional provider-supplied public entry and a port range.
+type Ingress struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	BindIP      string `json:"bind_ip"`      // local NIC address inbounds bind to ("" = all)
+	LineIP      string `json:"line_ip"`      // far-end address a relay forwards to
+	EntryHost   string `json:"entry_host"`   // provider's public entry clients dial ("" = none)
+	EntryDomain string `json:"entry_domain"` // name for the public entry, advertised instead of the IP
+	PortFrom    int    `json:"port_from"`    // usable port range (0 = any)
+	PortTo      int    `json:"port_to"`
+	PortOffset  int    `json:"port_offset"` // entry port = local port + offset
+}
+
+// ClientHost is what share links advertise: the entry domain when set,
+// else the provider's entry address.
+func (g Ingress) ClientHost() string {
+	if g.EntryDomain != "" {
+		return g.EntryDomain
+	}
+	return g.EntryHost
+}
+
+// EntryPort maps a local inbound port to the port clients dial.
+func (g Ingress) EntryPort(local int) int { return local + g.PortOffset }
+
+// AllowsPort reports whether a local port fits the line's range.
+func (g Ingress) AllowsPort(p int) bool {
+	return g.PortFrom == 0 || (p >= g.PortFrom && p <= g.PortTo)
+}
+
+// ProbeSettings is the standalone probe configuration (the UI edits it;
+// config.yaml's probe section only applies to headless drivers).
+type ProbeSettings struct {
+	Enabled     bool            `json:"enabled"`
+	CarrierPing bool            `json:"carrier_ping"`
+	Carriers    []spec.Carrier  `json:"carriers"`
+	Tasks       []spec.PingTask `json:"tasks"`
 }
 
 // Admin is the single local login.
@@ -55,10 +108,16 @@ type Managed struct {
 
 // Snapshot is the local objects before a takeover.
 type Snapshot struct {
-	TakenAt  time.Time      `json:"taken_at"`
-	Inbounds []Inbound      `json:"inbounds"`
-	Users    []User         `json:"users"`
-	Forwards []spec.Forward `json:"forwards"`
+	TakenAt         time.Time          `json:"taken_at"`
+	Inbounds        []Inbound          `json:"inbounds"`
+	Users           []User             `json:"users"`
+	Forwards        []spec.Forward     `json:"forwards"`
+	Ingresses       []Ingress          `json:"ingresses,omitempty"`
+	Outbounds       []spec.Outbound    `json:"outbounds,omitempty"`
+	Routes          []spec.RouteRule   `json:"routes,omitempty"`
+	DefaultOutbound string             `json:"default_outbound,omitempty"`
+	Certificates    []spec.Certificate `json:"certificates,omitempty"`
+	Probe           ProbeSettings      `json:"probe"`
 }
 
 // Settings are node-wide values the UI edits.
@@ -88,6 +147,8 @@ type Inbound struct {
 	// entrances that forward to this node (an IPLC provider's front door).
 	DisplayHost string `json:"display_host,omitempty"`
 	DisplayPort int    `json:"display_port,omitempty"`
+	// IngressID picks a line ingress; "" = the node's direct entry.
+	IngressID string `json:"ingress_id,omitempty"`
 }
 
 // User is a local subscriber with its own accounting.
