@@ -71,3 +71,18 @@ func TestConfigureResults(t *testing.T) {
 		t.Fatal("disabled runner still reports")
 	}
 }
+
+func TestDownloadTask(t *testing.T) {
+	r := &Runner{Download: func(context.Context, string) (float64, float64) { return 42, 87.5 }}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r.Configure(ctx, &spec.Probe{Enabled: true, Tasks: []spec.PingTask{{ID: 3, Name: "dl", Type: "download", Target: "https://x/100MB", IntervalSeconds: 60}}})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if res := r.Results(); len(res) == 1 && res[0].Mbps == 87.5 && res[0].LatencyMs == 42 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("download result missing: %+v", r.Results())
+}
