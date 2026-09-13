@@ -28,12 +28,13 @@ const (
 
 // Supervisor runs one command and keeps it alive.
 type Supervisor struct {
-	name string
-	path string
-	args []string
-	dir  string
-	env  []string
-	log  *slog.Logger
+	lineHook func(string)
+	name     string
+	path     string
+	args     []string
+	dir      string
+	env      []string
+	log      *slog.Logger
 
 	mu       sync.Mutex
 	cmd      *exec.Cmd
@@ -45,6 +46,13 @@ type Supervisor struct {
 // New prepares a supervisor; nothing runs until Start.
 func New(name, path string, args []string, dir string, log *slog.Logger) *Supervisor {
 	return &Supervisor{name: name, path: path, args: args, dir: dir, log: log.With("proc", name), backoff: minBackoff}
+}
+
+// WithLineHook passes every stdout/stderr line to fn as well as the log
+// (cores whose only per-connection signal is their log output).
+func (s *Supervisor) WithLineHook(fn func(string)) *Supervisor {
+	s.lineHook = fn
+	return s
 }
 
 // WithEnv adds environment variables (KEY=VALUE) on top of the parent's.
@@ -143,7 +151,11 @@ func (s *Supervisor) pipe(r io.Reader, level slog.Level) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
-		s.log.Log(context.Background(), level, sc.Text())
+		line := sc.Text()
+		s.log.Log(context.Background(), level, line)
+		if s.lineHook != nil {
+			s.lineHook(line)
+		}
 	}
 }
 
