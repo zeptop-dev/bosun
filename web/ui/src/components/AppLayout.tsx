@@ -1,6 +1,7 @@
 import { ActionIcon, AppShell, Badge, Box, Burger, Group, Menu, NavLink, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconArrowsRightLeft, IconSettings, IconLogout, IconLanguage, IconFileText } from '@tabler/icons-react'
+import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconArrowsRightLeft, IconSettings, IconLogout, IconLanguage, IconFileText, IconRoute, IconCertificate, IconActivity, IconTopologyStar } from '@tabler/icons-react'
+import { languages } from '../i18n'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../lib/auth'
@@ -13,6 +14,10 @@ const items = [
   { to: '/inbounds', key: 'inbounds', icon: IconPlugConnected },
   { to: '/users', key: 'users', icon: IconUsers },
   { to: '/forwards', key: 'forwards', icon: IconArrowsRightLeft },
+  { to: '/ingresses', key: 'ingresses', icon: IconTopologyStar },
+  { to: '/routing', key: 'routing', icon: IconRoute },
+  { to: '/certificates', key: 'certificates', icon: IconCertificate },
+  { to: '/probe', key: 'probe', icon: IconActivity },
   { to: '/settings', key: 'settings', icon: IconSettings },
   { to: '/logs', key: 'logs', icon: IconFileText },
 ]
@@ -48,8 +53,7 @@ export function AppLayout() {
             <Menu shadow="md">
               <Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="language"><IconLanguage size={18} /></ActionIcon></Menu.Target>
               <Menu.Dropdown>
-                <Menu.Item onClick={() => i18n.changeLanguage('zh-CN')}>中文</Menu.Item>
-                <Menu.Item onClick={() => i18n.changeLanguage('en')}>English</Menu.Item>
+                {languages.map((l) => <Menu.Item key={l.code} fw={i18n.language === l.code ? 700 : undefined} onClick={() => i18n.changeLanguage(l.code)}>{l.label}</Menu.Item>)}
               </Menu.Dropdown>
             </Menu>
             <Text size="sm" c="dimmed">{me?.username}</Text>

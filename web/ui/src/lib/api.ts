@@ -38,7 +38,7 @@ export interface Inbound {
   flow?: string; cipher?: string; server_key?: string; obfs?: string; obfs_password?: string; up_mbps?: number; down_mbps?: number
   congestion_control?: string; mieru_transport?: string; traffic_pattern?: string
   remark?: string; enabled: boolean; display_host?: string; display_port?: number
-  assigned_core?: string
+  assigned_core?: string; ingress_id?: string
 }
 export interface User {
   id: number; name: string; uuid: string; password: string; sub_token: string; enabled: boolean
@@ -53,7 +53,7 @@ export interface Status {
   version: string; uptime_seconds: number; mode: Mode; fixed: string; managed: { url: string; paired_at: string } | null; has_snapshot: boolean
   agent: AgentStatus | null; host: Host; forwards: ForwardStatus[]; online_users: number; users: number; inbounds: number
   total_up: number; total_down: number; history: { day: number; up: number; down: number }[]; last_report: string
-  certs: CertStatus[]
+  certs: CertStatus[]; pings?: Ping[]
 }
 export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string }
 export interface CertStatus { domain: string; method: string; not_after: string; error?: string; updated: string }
@@ -65,3 +65,20 @@ export interface UpdateInfo {
   has_backup: boolean; backup_version?: string
 }
 export interface LogEntry { time: string; level: string; msg: string; attrs?: string }
+
+// Line ingresses: an IPLC / dedicated line in front of this node.
+export interface Ingress { id: string; name: string; bind_ip: string; line_ip: string; entry_host: string; entry_domain: string; port_from: number; port_to: number; port_offset: number }
+export interface IngressInput { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number; PortTo: number; PortOffset: number }
+// Outbounds and routing (landing servers, relay chains).
+export interface Remote { host: string; port: number; uuid?: string; password?: string; username?: string; settings: { protocol: string } }
+export interface Outbound { tag: string; protocol?: string; settings?: Record<string, unknown>; proxy_tag?: string; remote?: Remote }
+export interface Rule { match: string[]; action: string; value?: string }
+export interface Routing { outbounds: Outbound[]; routes: Rule[]; default_outbound: string }
+// Operator-supplied certificates handed to the cores.
+export interface Certificate { domain: string; names: string[]; not_after: string; issuer: string }
+// Probe: carrier latency, tasks and line RTT.
+export interface Ping { task_id: number; name: string; latency_ms: number; loss?: number; mbps?: number; at?: number }
+export interface Carrier { name: string; addr: string }
+export interface ProbeTask { id: number; name: string; type: string; target: string; interval_seconds: number; source_ip: string }
+export interface ProbeSettings { enabled: boolean; carrier_ping: boolean; carriers: Carrier[]; tasks: ProbeTask[] }
+export interface ProbeInfo { settings: ProbeSettings; results: Ping[]; defaults: Carrier[] }

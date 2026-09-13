@@ -91,25 +91,6 @@ export default function SettingsPage() {
         )}
       </Card>
 
-      {s && s.certs && s.certs.length > 0 && (
-        <Card mb="lg">
-          <Title order={5} mb="xs">{t('settings.certList')}</Title>
-          <Table>
-            <Table.Thead><Table.Tr><Table.Th>{t('settings.domain')}</Table.Th><Table.Th>{t('inbounds.acme')}</Table.Th><Table.Th>{t('settings.expires')}</Table.Th><Table.Th>{t('settings.status')}</Table.Th></Table.Tr></Table.Thead>
-            <Table.Tbody>
-              {s.certs.map((c) => (
-                <Table.Tr key={c.domain}>
-                  <Table.Td><Text size="sm" ff="monospace">{c.domain}</Text></Table.Td>
-                  <Table.Td><Badge variant="outline" color="gray">{c.method}</Badge></Table.Td>
-                  <Table.Td><Text size="sm">{c.not_after && !c.not_after.startsWith('0001') ? when(c.not_after).split(',')[0] : '—'}</Text></Table.Td>
-                  <Table.Td>{c.error ? <Text size="xs" c="red">{c.error}</Text> : <Badge color="teal">{t('settings.certOk')}</Badge>}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Card>
-      )}
-
       <UpdateCard mb="lg" />
 
       <Card>
