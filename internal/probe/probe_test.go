@@ -110,3 +110,25 @@ func TestCustomCarriers(t *testing.T) {
 		t.Fatalf("default results %+v", res)
 	}
 }
+
+func TestSourceBoundTask(t *testing.T) {
+	var got string
+	r := &Runner{
+		Dial: func(context.Context, string) (time.Duration, error) { return 30 * time.Millisecond, nil },
+		DialFrom: func(_ context.Context, src, _ string) (time.Duration, error) {
+			got = src
+			return 28 * time.Millisecond, nil
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r.Configure(ctx, &spec.Probe{Enabled: true, Tasks: []spec.PingTask{{ID: -1, Name: "IPLC", Type: "tcp", Target: "198.51.100.20:17701", IntervalSeconds: 60, SourceIP: "10.10.0.2"}}})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(r.Results()) == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	res := r.Results()
+	if len(res) != 1 || res[0].Name != "IPLC" || res[0].LatencyMs != 28 || got != "10.10.0.2" {
+		t.Fatalf("results %+v src=%q", res, got)
+	}
+}

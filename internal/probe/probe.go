@@ -39,6 +39,8 @@ const (
 type Runner struct {
 	// Dial overrides TCP dialing (tests).
 	Dial func(ctx context.Context, addr string) (time.Duration, error)
+	// DialFrom is Dial with a bound source address (tests).
+	DialFrom func(ctx context.Context, src, addr string) (time.Duration, error)
 	// Download overrides the throughput test (tests).
 	Download func(ctx context.Context, url string) (ttfbMs, mbps float64)
 
@@ -214,11 +216,11 @@ func (r *Runner) measure(ctx context.Context, t spec.PingTask) float64 {
 			if _, _, err := net.SplitHostPort(addr); err != nil {
 				addr = net.JoinHostPort(addr, "80")
 			}
-			ms = r.tcpMs(ctx, addr)
+			ms = r.tcpMsFrom(ctx, t.SourceIP, addr)
 		case "http":
 			ms = httpMs(ctx, t.Target)
 		default:
-			ms = icmpMs(ctx, t.Target)
+			ms = icmpMs(ctx, t.Target, t.SourceIP)
 		}
 		if ms >= 0 && (best < 0 || ms < best) {
 			best = ms
@@ -232,7 +234,17 @@ func (r *Runner) measure(ctx context.Context, t spec.PingTask) float64 {
 
 // tcpMs times a TCP connect to a pre-resolved address; a refused
 // connection counts as reachable.
-func (r *Runner) tcpMs(ctx context.Context, addr string) float64 {
+func (r *Runner) tcpMs(ctx context.Context, addr string) float64 { return r.tcpMsFrom(ctx, "", addr) }
+
+// tcpMsFrom is tcpMs with an optional bound source address.
+func (r *Runner) tcpMsFrom(ctx context.Context, src, addr string) float64 {
+	if src != "" && r.DialFrom != nil {
+		d, err := r.DialFrom(ctx, src, addr)
+		if err != nil {
+			return -1
+		}
+		return float64(d.Microseconds()) / 1000
+	}
 	if r.Dial != nil {
 		d, err := r.Dial(ctx, addr)
 		if err != nil {
@@ -251,8 +263,12 @@ func (r *Runner) tcpMs(ctx context.Context, addr string) float64 {
 		return -1
 	}
 	target := net.JoinHostPort(ips[0].IP.String(), port)
+	dialer := &net.Dialer{Timeout: dialTimeout}
+	if ip := net.ParseIP(src); ip != nil {
+		dialer.LocalAddr = &net.TCPAddr{IP: ip}
+	}
 	start := time.Now()
-	c, err := (&net.Dialer{Timeout: dialTimeout}).DialContext(rctx, "tcp", target)
+	c, err := dialer.DialContext(rctx, "tcp", target)
 	elapsed := time.Since(start)
 	if err == nil {
 		c.Close()
@@ -285,10 +301,13 @@ func httpMs(ctx context.Context, url string) float64 {
 	return float64(time.Since(start).Microseconds()) / 1000
 }
 
-func icmpMs(ctx context.Context, target string) float64 {
+func icmpMs(ctx context.Context, target, src string) float64 {
 	p, err := probing.NewPinger(target)
 	if err != nil {
 		return -1
+	}
+	if src != "" {
+		p.Source = src
 	}
 	p.Count = 1
 	p.Timeout = dialTimeout
