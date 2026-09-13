@@ -161,6 +161,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	beatEvery := time.Duration(0)
 	reconfigureBeat := func() {
 		if beater == nil {
+			// Standalone: the config file decides; results only show up
+			// on /metrics and in the local UI.
+			a.probes.Configure(ctx, a.cfg.Probe.Spec())
 			return
 		}
 		cfg := beater.Probe()
@@ -629,8 +632,21 @@ func (a *Agent) registerMetrics() {
 	m.Describe("bosun_forward_connections_active", "gauge", "open relayed connections or udp sessions")
 	m.Describe("bosun_forward_connections_total", "counter", "relayed connections or udp sessions since start")
 	m.Describe("bosun_forward_bytes_total", "counter", "relayed bytes by direction (in = client to target)")
+	m.Describe("bosun_probe_latency_seconds", "gauge", "last latency of a carrier probe or panel task (-1 = lost)")
+	m.Describe("bosun_probe_loss_ratio", "gauge", "recent loss ratio of a carrier probe")
 	m.Add(func() []metrics.Sample {
 		var out []metrics.Sample
+		for _, p := range a.probes.Results() {
+			l := map[string]string{"name": p.Name}
+			lat := p.LatencyMs / 1000
+			if p.LatencyMs < 0 {
+				lat = -1
+			}
+			out = append(out, metrics.Sample{Name: "bosun_probe_latency_seconds", Labels: l, Value: lat})
+			if p.TaskID == 0 {
+				out = append(out, metrics.Sample{Name: "bosun_probe_loss_ratio", Labels: l, Value: p.Loss / 100})
+			}
+		}
 		for _, name := range a.reg.Names() {
 			c, _ := a.reg.Get(name)
 			v := 0.0
