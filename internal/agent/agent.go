@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/zeptop-dev/bosun/internal/probe"
 	"log/slog"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -55,7 +56,8 @@ type Agent struct {
 	sampler sysinfo.Sampler
 	probes  probe.Runner
 	// skipped are inbounds left out of the last apply (no certificate yet).
-	skipped map[string]string
+	customCerts map[string]agentproto.CertStatus // pushed certificates by domain
+	skipped     map[string]string
 }
 
 // ReloadCerts asks the agent to restart the cores so renewed certificate
@@ -364,6 +366,34 @@ func (a *Agent) resolveCerts(ctx context.Context, node *spec.Node) {
 	if a.Certs != nil && node.ACME != nil {
 		a.Certs.Configure(node.ACME.Email, node.ACME.CloudflareToken)
 	}
+	// Pushed certificates win over ACME and local config for the names
+	// they cover.
+	custom := map[string]agentproto.CertStatus{}
+	customDir := filepath.Join(a.cfg.DataDir, "certs")
+	for i := range node.Inbounds {
+		ib := &node.Inbounds[i]
+		t := ib.TLS
+		if t == nil || t.Mode != spec.TLSStandard {
+			continue
+		}
+		c := certs.Pick(node.Certificates, t.ServerName)
+		if c == nil {
+			continue
+		}
+		certPath, keyPath, notAfter, err := certs.Install(customDir, *c)
+		st := agentproto.CertStatus{Domain: c.Domain, Method: "custom", NotAfter: notAfter}
+		if err != nil {
+			st.Error = err.Error()
+			skipped[ib.Tag] = "pushed certificate for " + c.Domain + ": " + err.Error()
+			custom[c.Domain] = st
+			continue
+		}
+		custom[c.Domain] = st
+		t.CertPath, t.KeyPath, t.AutoCert = certPath, keyPath, false
+	}
+	a.statusMu.Lock()
+	a.customCerts = custom
+	a.statusMu.Unlock()
 	for i := range node.Inbounds {
 		ib := &node.Inbounds[i]
 		t := ib.TLS
@@ -559,6 +589,11 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 			rep.Certs = append(rep.Certs, agentproto.CertStatus{Domain: st.Domain, Method: st.Method, NotAfter: st.NotAfter, Error: st.Error})
 		}
 	}
+	a.statusMu.Lock()
+	for _, st := range a.customCerts {
+		rep.Certs = append(rep.Certs, st)
+	}
+	a.statusMu.Unlock()
 	for _, s := range a.fwd.Snapshot() {
 		rep.Forwards = append(rep.Forwards, agentproto.ForwardStatus{
 			Tag: s.Tag, Up: s.Up, RTTMillis: s.RTT.Milliseconds(), LastError: s.LastError,
