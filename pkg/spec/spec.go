@@ -202,19 +202,21 @@ type SystemStatus struct {
 	DiskUsed   uint64  `json:"disk_used,omitempty"`
 
 	// Probe fields (bosun >= 0.11); zero when the agent is older.
-	Load1, Load5, Load15 float64      `json:"load1,omitempty"`
-	NetUp                uint64       `json:"net_up,omitempty"`         // bytes/s averaged since the previous sample
-	NetDown              uint64       `json:"net_down,omitempty"`       //
-	NetTotalUp           uint64       `json:"net_total_up,omitempty"`   // interface counters since boot (all non-loopback)
-	NetTotalDown         uint64       `json:"net_total_down,omitempty"` //
-	TCP                  int          `json:"tcp,omitempty"`
-	UDP                  int          `json:"udp,omitempty"`
-	Processes            int          `json:"processes,omitempty"`
-	Uptime               uint64       `json:"uptime,omitempty"` // seconds
-	IPv4                 bool         `json:"ipv4,omitempty"`
-	IPv6                 bool         `json:"ipv6,omitempty"`
-	Info                 *HostInfo    `json:"info,omitempty"`  // static facts, sent with every beat (cheap)
-	Pings                []PingResult `json:"pings,omitempty"` // carrier probes and panel-defined tasks
+	Load1        float64      `json:"load1,omitempty"`
+	Load5        float64      `json:"load5,omitempty"`
+	Load15       float64      `json:"load15,omitempty"`
+	NetUp        uint64       `json:"net_up,omitempty"`         // bytes/s averaged since the previous sample
+	NetDown      uint64       `json:"net_down,omitempty"`       //
+	NetTotalUp   uint64       `json:"net_total_up,omitempty"`   // interface counters since boot (all non-loopback)
+	NetTotalDown uint64       `json:"net_total_down,omitempty"` //
+	TCP          int          `json:"tcp,omitempty"`
+	UDP          int          `json:"udp,omitempty"`
+	Processes    int          `json:"processes,omitempty"`
+	Uptime       uint64       `json:"uptime,omitempty"` // seconds
+	IPv4         bool         `json:"ipv4,omitempty"`
+	IPv6         bool         `json:"ipv6,omitempty"`
+	Info         *HostInfo    `json:"info,omitempty"`  // static facts, sent with every beat (cheap)
+	Pings        []PingResult `json:"pings,omitempty"` // carrier probes and panel-defined tasks
 }
 
 // HostInfo is what does not change between reboots.
