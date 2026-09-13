@@ -115,6 +115,15 @@ automatically while any user carries a limit) report them. mieru (mita)
 exposes sessions without user names, so mieru inbounds do not count toward
 device limits.
 
+## Probe beats
+
+When Captain's probe page is on, the node sends a light host sample every
+few seconds (`POST /api/agent/beat`): CPU, memory, swap, disk, load, network
+rate and totals, TCP/UDP/process counts, uptime, IPv4/IPv6 reachability,
+static host facts, plus latency results: TCP-connect checks against the
+CT/CU/CM probe points (no ICMP privileges needed) and panel-defined tasks
+(icmp, tcp, http). Nothing runs while the panel keeps probing off.
+
 ## Certificates
 
 Inbounds that need TLS (Hysteria2, Trojan, AnyTLS, VLESS/VMess over TLS) can

@@ -38,6 +38,15 @@ type State struct {
 	// Intervals the agent should use, in seconds.
 	PullSeconds int `json:"pull_seconds,omitempty"`
 	PushSeconds int `json:"push_seconds,omitempty"`
+	// Probe configures host monitoring beats; nil/disabled = only the
+	// coarse host snapshot inside Report.
+	Probe *spec.Probe `json:"probe,omitempty"`
+}
+
+// Beat is the light, frequent host sample sent while probing is enabled.
+type Beat struct {
+	Version string            `json:"version"`
+	Host    spec.SystemStatus `json:"host"`
 }
 
 // Report is what bosun pushes every push interval.
