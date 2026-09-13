@@ -15,7 +15,7 @@ export default function LoginPage() {
   const form = useForm({ initialValues: { Username: '', Password: '' } })
   const submit = form.onSubmit(async (v) => {
     setBusy(true); setError('')
-    try { await api.post('/api/login', v); refresh(); nav('/') } catch (e) { setError(e instanceof Error ? e.message : t('login.failed')) } finally { setBusy(false) }
+    try { await api.post('/api/login', v); await refresh(); nav('/') } catch (e) { setError(e instanceof Error ? e.message : t('login.failed')) } finally { setBusy(false) }
   })
   return (
     <Center h="100vh" p="md">
