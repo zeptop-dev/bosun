@@ -51,6 +51,7 @@ var Binary = map[string]string{
 	"xray":     "xray",
 	"mita":     "mita",
 	"hysteria": "hysteria",
+	"snell":    "snell-server",
 }
 
 var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2ray_api", "with_gvisor", "with_acme"}
@@ -100,6 +101,24 @@ var Manifest = []Release{
 			"linux/arm64": {URL: "https://github.com/enfein/mieru/releases/download/v3.36.1/mita_3.36.1_linux_arm64.tar.gz", SHA256: "cbdae447b5bcf0ebc1c41c46b6638ce91c5d61b35eb43bc3bdc288a11e6ded81", Archive: "tar.gz", Member: "mita"},
 		},
 		Build: &Build{Package: "github.com/enfein/mieru/v3/cmd/mita", Version: "v3.36.1"},
+	},
+	{
+		// Surge's snell-server is closed source; the zips are Surge's official
+		// downloads and the digests were computed from them on 2026-09-14.
+		Core: "snell", Version: "5.0.0", Status: StatusCaution,
+		Note: "Surge snell-server v5 (closed source); one shared PSK, no per-user accounting; not yet verified end to end",
+		Assets: map[string]Asset{
+			"linux/amd64": {URL: "https://dl.nssurge.com/snell/snell-server-v5.0.0-linux-amd64.zip", SHA256: "893a7be4fc5e695b97acb80af9a4a99b99867f8cb476784725a3f89fa23940e1", Archive: "zip", Member: "snell-server"},
+			"linux/arm64": {URL: "https://dl.nssurge.com/snell/snell-server-v5.0.0-linux-aarch64.zip", SHA256: "76709032a8d1043fa6f01e1fbbb727148d77534a83293d73564a5692c3967292", Archive: "zip", Member: "snell-server"},
+		},
+	},
+	{
+		Core: "snell", Version: "4.1.1", Status: StatusCaution,
+		Note: "Surge snell-server v4 for clients without v5 support",
+		Assets: map[string]Asset{
+			"linux/amd64": {URL: "https://dl.nssurge.com/snell/snell-server-v4.1.1-linux-amd64.zip", SHA256: "cc2271b79c7506888b34e651e8741b3aa7fc7d5f60aa65ef8bb096f3313a193b", Archive: "zip", Member: "snell-server"},
+			"linux/arm64": {URL: "https://dl.nssurge.com/snell/snell-server-v4.1.1-linux-aarch64.zip", SHA256: "38d4cdc03dcdb3608af8594df83e1795265167fafc5d802f815148908902d758", Archive: "zip", Member: "snell-server"},
+		},
 	},
 	{
 		Core: "hysteria", Version: "2.12.2", Status: StatusTested,
