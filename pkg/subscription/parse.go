@@ -1,6 +1,4 @@
-// Package sharelink decodes share links into bosun's spec vocabulary: the
-// inverse of a share URI, used for landing outbounds and node imports.
-package sharelink
+package subscription
 
 import (
 	"encoding/base64"
