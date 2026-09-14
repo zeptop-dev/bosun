@@ -166,7 +166,15 @@
     "acme": "驗證方式",
     "acmeHttp": "HTTP（需要本機 80 連接埠可從公網存取）",
     "acmeDns": "DNS（Cloudflare，需在設定裡填 token）",
-    "lineOnlyHint": "這台節點沒有填對外位址，只能透過專線入口存取：請選一個入口，否則分享連結裡沒有可用位址。"
+    "lineOnlyHint": "這台節點沒有填對外位址，只能透過專線入口存取：請選一個入口，否則分享連結裡沒有可用位址。",
+    "mieruStrategy": "mieru 策略",
+    "mieruStrategyHint": "同 nobrand-oneclick 的三檔預設：專線不偽裝，公網保守偽裝，強化偽裝加分片和填充；自訂則直接填 traffic_pattern。",
+    "mieru": {
+      "iplc": "IPLC / 專線效能（不偽裝）",
+      "balanced": "一般公網（保守偽裝）",
+      "stealth": "強化偽裝",
+      "custom": "自訂"
+    }
   },
   "ingress": {
     "title": "專線入口",

@@ -66,6 +66,27 @@ export function toInbound(v: Values): Record<string, unknown> {
   return out
 }
 
+// mieru strategies, the same presets as nobrand-oneclick and Captain: all
+// TCP, the difference is mita's trafficPattern (off / conservative / aggressive).
+const mieruPatterns: Record<string, unknown> = {
+  iplc: undefined,
+  balanced: { seed: 0, unlockAll: false, nonce: { type: 'NONCE_TYPE_PRINTABLE', applyToAllUDPPacket: true, minLen: 4, maxLen: 8 }, padding: { maxMiddlePaddingLen: 0, maxEndPaddingLen: 128 } },
+  stealth: { seed: 0, unlockAll: false, tcpFragment: { enable: true, maxSleepMs: 8 }, nonce: { type: 'NONCE_TYPE_PRINTABLE', applyToAllUDPPacket: true, minLen: 6, maxLen: 12 }, padding: { maxMiddlePaddingLen: 64, maxEndPaddingLen: 255 } },
+}
+function mieruStrategyOf(pattern: string): string {
+  if (!pattern.trim()) return 'iplc'
+  try {
+    const tp = JSON.parse(pattern)
+    for (const k of ['balanced', 'stealth']) if (JSON.stringify(tp) === JSON.stringify(mieruPatterns[k])) return k
+  } catch { /* free-form */ }
+  return 'custom'
+}
+function mieruPatternFor(strategy: string, current: string): string {
+  if (strategy === 'custom') return current
+  const tp = mieruPatterns[strategy]
+  return tp ? JSON.stringify(tp) : ''
+}
+
 const recipes: { key: string; values: Partial<Values> }[] = [
   { key: 'vlessReality', values: { protocol: 'vless', port: 443, tls: 'reality', server_name: 'www.apple.com', handshake_server: 'www.apple.com', flow: 'xtls-rprx-vision', transport: 'tcp' } },
   { key: 'hysteria2', values: { protocol: 'hysteria2', port: 8443, tls: 'tls', auto_cert: true, obfs: 'salamander', up_mbps: 100, down_mbps: 500 } },
@@ -237,10 +258,15 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
         )}
         {v.protocol === 'tuic' && <Select label={t('inbounds.congestion')} data={['bbr', 'cubic', 'new_reno']} allowDeselect={false} {...form.getInputProps('congestion_control')} />}
         {v.protocol === 'mieru' && (
-          <Group grow>
+          <Group grow align="flex-end">
+            <Select label={t('inbounds.mieruStrategy')} description={t('inbounds.mieruStrategyHint')} allowDeselect={false}
+              data={[{ value: 'iplc', label: t('inbounds.mieru.iplc') }, { value: 'balanced', label: t('inbounds.mieru.balanced') }, { value: 'stealth', label: t('inbounds.mieru.stealth') }, { value: 'custom', label: t('inbounds.mieru.custom') }]}
+              value={mieruStrategyOf(v.traffic_pattern)} onChange={(k) => k && form.setFieldValue('traffic_pattern', mieruPatternFor(k, v.traffic_pattern))} />
             <Select label={t('inbounds.mieruTransport')} data={['TCP', 'UDP']} allowDeselect={false} {...form.getInputProps('mieru_transport')} />
-            <TextInput label={t('inbounds.trafficPattern')} placeholder={t('inbounds.trafficPatternHint')} {...form.getInputProps('traffic_pattern')} />
           </Group>
+        )}
+        {v.protocol === 'mieru' && mieruStrategyOf(v.traffic_pattern) === 'custom' && (
+          <TextInput label={t('inbounds.trafficPattern')} placeholder={t('inbounds.trafficPatternHint')} {...form.getInputProps('traffic_pattern')} />
         )}
 
         {!selectedIngress && !newIngress && (

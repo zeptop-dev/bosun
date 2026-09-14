@@ -166,7 +166,15 @@
     "acme": "Challenge",
     "acmeHttp": "HTTP (port 80 here must be reachable from the internet)",
     "acmeDns": "DNS (Cloudflare, token in Settings)",
-    "lineOnlyHint": "This node has no public address and is reached only through a line ingress: pick one, or share links have no usable address."
+    "lineOnlyHint": "This node has no public address and is reached only through a line ingress: pick one, or share links have no usable address.",
+    "mieruStrategy": "mieru strategy",
+    "mieruStrategyHint": "The three nobrand-oneclick presets: dedicated line = no obfuscation, public = conservative, stealth adds fragmentation and padding; custom edits traffic_pattern directly.",
+    "mieru": {
+      "iplc": "IPLC / dedicated line (no obfuscation)",
+      "balanced": "Public network (conservative)",
+      "stealth": "Enhanced camouflage",
+      "custom": "Custom"
+    }
   },
   "ingress": {
     "title": "Line ingresses",
