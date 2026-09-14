@@ -48,7 +48,7 @@ export interface User {
 }
 export interface Forward { tag: string; listen?: string; port: number; protocol: string; target: string; backend?: string; preserve_source?: boolean; status: ForwardStatus | null }
 export interface DoctorCheck { id: string; name: string; status: 'ok' | 'warn' | 'fail' | 'skip'; detail?: string }
-export interface DoctorReport { at: string; checks: DoctorCheck[]; summary: { OK: number; Warn: number; Fail: number; Skip: number } }
+export interface DoctorReport { at: string; checks: DoctorCheck[]; summary: { ok: number; warn: number; fail: number; skip: number } }
 export interface RestoreResult { inbounds: number; users: number; forwards: number; ingresses: number; admin_changed: boolean }
 export interface ForwardStatus { tag: string; up: boolean; rtt_ms: number; last_error?: string; active_conn: number; total_conn: number; bytes_in: number; bytes_out: number }
 export interface Host { cpu_percent?: number; mem_total?: number; mem_used?: number; swap_total?: number; swap_used?: number; disk_total?: number; disk_used?: number }

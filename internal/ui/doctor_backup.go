@@ -26,7 +26,8 @@ const doctorCache = 30 * time.Second
 
 func (s *Server) getDoctor(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	if s.doctorAt.Add(doctorCache).After(time.Now()) && s.doctorRep != nil {
+	// ?fresh=1 (the UI's "run again") bypasses the cache.
+	if r.URL.Query().Get("fresh") == "" && s.doctorAt.Add(doctorCache).After(time.Now()) && s.doctorRep != nil {
 		rep := *s.doctorRep
 		s.mu.Unlock()
 		ok(w, rep)

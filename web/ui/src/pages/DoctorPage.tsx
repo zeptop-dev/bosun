@@ -24,10 +24,10 @@ export default function DoctorPage() {
       <Card p={0}>
         <Group p="sm" gap="xs" justify="space-between">
           <Group gap="xs">
-            <Badge color="teal" variant="light">{t('doctor.ok')} {sum?.OK ?? 0}</Badge>
-            <Badge color="orange" variant="light">{t('doctor.warn')} {sum?.Warn ?? 0}</Badge>
-            <Badge color="red" variant="light">{t('doctor.fail')} {sum?.Fail ?? 0}</Badge>
-            <Badge color="gray" variant="light">{t('doctor.skip')} {sum?.Skip ?? 0}</Badge>
+            <Badge color="teal" variant="light">{t('doctor.ok')} {sum?.ok ?? 0}</Badge>
+            <Badge color="orange" variant="light">{t('doctor.warn')} {sum?.warn ?? 0}</Badge>
+            <Badge color="red" variant="light">{t('doctor.fail')} {sum?.fail ?? 0}</Badge>
+            <Badge color="gray" variant="light">{t('doctor.skip')} {sum?.skip ?? 0}</Badge>
           </Group>
           {r?.at && <Text size="xs" c="dimmed">{t('doctor.ranAt', { at: when(r.at) })}</Text>}
         </Group>
