@@ -166,7 +166,15 @@
     "acme": "验证方式",
     "acmeHttp": "HTTP（需要本机 80 端口可从公网访问）",
     "acmeDns": "DNS（Cloudflare，需在设置里填 token）",
-    "lineOnlyHint": "这台节点没有填对外地址，只能通过专线入口访问：请选一个入口，否则分享链接里没有可用地址。"
+    "lineOnlyHint": "这台节点没有填对外地址，只能通过专线入口访问：请选一个入口，否则分享链接里没有可用地址。",
+    "mieruStrategy": "mieru 策略",
+    "mieruStrategyHint": "同 nobrand-oneclick 的三档预设：专线不伪装，公网保守伪装，强化伪装加分片和填充；自定义则直接填 traffic_pattern。",
+    "mieru": {
+      "iplc": "IPLC / 专线性能（不伪装）",
+      "balanced": "普通公网（保守伪装）",
+      "stealth": "强化伪装",
+      "custom": "自定义"
+    }
   },
   "ingress": {
     "title": "专线入口",

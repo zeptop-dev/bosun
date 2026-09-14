@@ -166,7 +166,15 @@
     "acme": "검증 방식",
     "acmeHttp": "HTTP (이 머신의 80 포트가 인터넷에서 접근 가능해야 함)",
     "acmeDns": "DNS (Cloudflare, 토큰은 설정에서)",
-    "lineOnlyHint": "이 노드는 공개 주소가 없어 전용선 입구로만 접근할 수 있습니다. 입구를 선택하지 않으면 공유 링크에 사용할 주소가 없습니다."
+    "lineOnlyHint": "이 노드는 공개 주소가 없어 전용선 입구로만 접근할 수 있습니다. 입구를 선택하지 않으면 공유 링크에 사용할 주소가 없습니다.",
+    "mieruStrategy": "mieru 전략",
+    "mieruStrategyHint": "nobrand-oneclick 의 3단계 프리셋: 전용선은 위장 없음, 공용망은 보수적 위장, 강화는 분할과 패딩 추가; 사용자 정의는 traffic_pattern 을 직접 입력.",
+    "mieru": {
+      "iplc": "IPLC / 전용선 (위장 없음)",
+      "balanced": "공용망 (보수적 위장)",
+      "stealth": "강화 위장",
+      "custom": "사용자 정의"
+    }
   },
   "ingress": {
     "title": "전용선 입구",
