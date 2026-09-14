@@ -3,14 +3,12 @@
     "overview": "개요",
     "inbounds": "인바운드",
     "users": "사용자",
-    "forwards": "포워딩",
-    "ingresses": "전용선 입구",
-    "routing": "아웃바운드와 랜딩",
     "certificates": "인증서",
     "probe": "프로브",
     "settings": "설정",
     "logs": "로그",
-    "doctor": "진단"
+    "doctor": "진단",
+    "outbound": "아웃바운드"
   },
   "login": {
     "title": "bosun 로그인",
@@ -197,7 +195,9 @@
     "snellPsk": "PSK",
     "snellVersion": "버전",
     "snellObfs": "난독화",
-    "snellObfsHost": "난독화 Host"
+    "snellObfsHost": "난독화 Host",
+    "ingressSectionCount": "전용선 {{count}}개",
+    "ingressSectionHint": "노드 앞에 IPLC / 전용선이 있을 때만 필요; 대부분의 노드는 쓰지 않음"
   },
   "ingress": {
     "title": "전용선 입구",
@@ -456,5 +456,11 @@
     "summary": "복원: 인바운드 {{inbounds}}, 사용자 {{users}}, 포워딩 {{forwards}}, 입구 {{ingresses}}",
     "adminChanged": "관리자 로그인이 변경되어 다시 로그인해야 합니다",
     "managedHint": "Captain이 관리 중이라 설정은 패널에 있습니다. 다운로드만 가능하고 복원은 비활성화됩니다."
+  },
+  "outbound": {
+    "title": "아웃바운드",
+    "subtitle": "이 노드의 트래픽이 가는 곳: 포트를 그대로 다른 서버로 전달(프런트)하거나 랜딩 서버로 나갑니다(중계).",
+    "tabForwards": "포트 포워딩",
+    "tabRouting": "랜딩 아웃바운드와 분기"
   }
 }

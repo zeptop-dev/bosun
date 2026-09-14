@@ -1,6 +1,6 @@
 import { ActionIcon, AppShell, Badge, Box, Burger, Group, Menu, NavLink, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconArrowsRightLeft, IconSettings, IconLogout, IconLanguage, IconFileText, IconRoute, IconCertificate, IconActivity, IconTopologyStar, IconStethoscope } from '@tabler/icons-react'
+import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconSettings, IconLogout, IconLanguage, IconFileText, IconRoute, IconCertificate, IconActivity, IconStethoscope } from '@tabler/icons-react'
 import { languages } from '../i18n'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -13,9 +13,7 @@ const items = [
   { to: '/', key: 'overview', icon: IconLayoutDashboard },
   { to: '/inbounds', key: 'inbounds', icon: IconPlugConnected },
   { to: '/users', key: 'users', icon: IconUsers },
-  { to: '/forwards', key: 'forwards', icon: IconArrowsRightLeft },
-  { to: '/ingresses', key: 'ingresses', icon: IconTopologyStar },
-  { to: '/routing', key: 'routing', icon: IconRoute },
+  { to: '/forwards', key: 'outbound', icon: IconRoute },
   { to: '/certificates', key: 'certificates', icon: IconCertificate },
   { to: '/probe', key: 'probe', icon: IconActivity },
   { to: '/doctor', key: 'doctor', icon: IconStethoscope },

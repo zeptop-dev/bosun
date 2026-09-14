@@ -10,7 +10,7 @@ import { PageHeader } from '../components/PageHeader'
 
 // Landing outbounds and route rules: paste a share link to add an exit, then
 // send everything (default) or specific inbounds to it.
-export default function RoutingPage() {
+export default function RoutingPage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation()
   const { me } = useAuth()
   const qc = useQueryClient()
@@ -35,7 +35,7 @@ export default function RoutingPage() {
   const describe = (o: Outbound) => o.remote ? `${o.remote.settings.protocol} ${o.remote.host}:${o.remote.port}` : `${o.protocol} (${t('routing.raw')})`
   return (
     <>
-      <PageHeader title={t('routing.title')} subtitle={t('routing.hint')} />
+      {embedded ? <Text size="xs" c="dimmed" mb="sm" maw={720}>{t('routing.hint')}</Text> : <PageHeader title={t('routing.title')} subtitle={t('routing.hint')} />}
       <Card>
         <Stack gap="xs">
           <Text size="sm" fw={600}>{t('routing.outbounds')}</Text>

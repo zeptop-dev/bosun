@@ -3,14 +3,12 @@
     "overview": "Overview",
     "inbounds": "Inbounds",
     "users": "Users",
-    "forwards": "Forwards",
-    "ingresses": "Line ingresses",
-    "routing": "Outbounds & landing",
     "certificates": "Certificates",
     "probe": "Probe",
     "settings": "Settings",
     "logs": "Logs",
-    "doctor": "Doctor"
+    "doctor": "Doctor",
+    "outbound": "Outbound"
   },
   "login": {
     "title": "Sign in to bosun",
@@ -197,7 +195,9 @@
     "snellPsk": "PSK",
     "snellVersion": "Version",
     "snellObfs": "Obfuscation",
-    "snellObfsHost": "Obfs host"
+    "snellObfsHost": "Obfs host",
+    "ingressSectionCount": "{{count}} lines",
+    "ingressSectionHint": "Only for an IPLC / dedicated line in front of the node; most nodes never need it"
   },
   "ingress": {
     "title": "Line ingresses",
@@ -456,5 +456,11 @@
     "summary": "Restored: {{inbounds}} inbounds, {{users}} users, {{forwards}} forwards, {{ingresses}} ingresses",
     "adminChanged": "admin login changed, sign in again",
     "managedHint": "Managed by Captain: the panel holds the configuration. Download only; restore is disabled."
+  },
+  "outbound": {
+    "title": "Outbound",
+    "subtitle": "Where this node's traffic goes: forward ports as-is to another machine (a front relay), or exit through a landing server (a relay).",
+    "tabForwards": "Port forwards",
+    "tabRouting": "Landing exits & rules"
   }
 }

@@ -3,14 +3,12 @@
     "overview": "概览",
     "inbounds": "入站",
     "users": "用户",
-    "forwards": "转发",
-    "ingresses": "专线入口",
-    "routing": "出站与落地",
     "certificates": "证书",
     "probe": "探针",
     "settings": "设置",
     "logs": "日志",
-    "doctor": "体检"
+    "doctor": "体检",
+    "outbound": "出站"
   },
   "login": {
     "title": "登录 bosun",
@@ -197,7 +195,9 @@
     "snellPsk": "PSK",
     "snellVersion": "版本",
     "snellObfs": "混淆",
-    "snellObfsHost": "混淆 Host"
+    "snellObfsHost": "混淆 Host",
+    "ingressSectionCount": "{{count}} 条专线",
+    "ingressSectionHint": "IPLC / 专线在节点前面时才需要；大多数节点用不到"
   },
   "ingress": {
     "title": "专线入口",
@@ -456,5 +456,11 @@
     "summary": "已恢复：{{inbounds}} 个入站，{{users}} 个用户，{{forwards}} 条转发，{{ingresses}} 个入口",
     "adminChanged": "管理员登录已变更，请重新登录",
     "managedHint": "Captain 托管中，配置由面板保存；只能下载，不能恢复。"
+  },
+  "outbound": {
+    "title": "出站",
+    "subtitle": "这台节点的流量往哪走：把端口原样转发到别的机器（做前置），或者从落地服务器出去（做中转）。",
+    "tabForwards": "端口转发",
+    "tabRouting": "落地出站与分流"
   }
 }

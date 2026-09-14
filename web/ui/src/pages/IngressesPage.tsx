@@ -13,7 +13,7 @@ import { IngressFields, emptyIngress, ingressPayload, ingressValues, type Ingres
 
 // Line ingresses of this node (IPLC / dedicated NICs). Inbounds pick one;
 // share links and relay forwards derive their addresses from it.
-export default function IngressesPage() {
+export default function IngressesPage({ embedded }: { embedded?: boolean }) {
   const { t } = useTranslation()
   const { me } = useAuth()
   const qc = useQueryClient()
@@ -29,7 +29,9 @@ export default function IngressesPage() {
   const uses = (id: string) => (inbounds.data ?? []).filter((ib) => ib.ingress_id === id).length
   return (
     <>
-      <PageHeader title={t('ingress.title')} subtitle={t('ingress.hint')} actions={!readOnly && <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>{t('ingress.add')}</Button>} />
+      {embedded
+        ? <Group justify="space-between" align="flex-start" mb="sm"><Text size="xs" c="dimmed" maw={720}>{t('ingress.hint')}</Text>{!readOnly && <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => open('new')}>{t('ingress.add')}</Button>}</Group>
+        : <PageHeader title={t('ingress.title')} subtitle={t('ingress.hint')} actions={!readOnly && <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>{t('ingress.add')}</Button>} />}
       <Card p={0}>
         <Table>
           <Table.Thead><Table.Tr><Table.Th>{t('ingress.name')}</Table.Th><Table.Th>{t('ingress.bindIP')}</Table.Th><Table.Th>{t('ingress.lineIP')}</Table.Th><Table.Th>{t('ingress.entryHost')}</Table.Th><Table.Th>{t('ingress.ports')}</Table.Th><Table.Th>{t('ingress.inbounds')}</Table.Th><Table.Th /></Table.Tr></Table.Thead>
