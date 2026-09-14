@@ -42,7 +42,8 @@ export default function UsersPage() {
     form.setValues(u === 'new' ? empty : { name: u.name, uuid: u.uuid, password: u.password, enabled: u.enabled, quota_gib: u.quota_bytes / 2 ** 30, expires_at: u.expires_at ? new Date(u.expires_at) : null, inbound_tags: u.inbound_tags ?? [] })
     setEditing(u)
   }
-  const tagOptions = (inbounds.data ?? []).map((ib) => ({ value: ib.tag, label: ib.remark ? `${ib.tag} · ${ib.remark}` : ib.tag }))
+  // Snell has one shared PSK, so a per-user restriction cannot apply to it.
+  const tagOptions = (inbounds.data ?? []).filter((ib) => ib.protocol !== 'snell').map((ib) => ({ value: ib.tag, label: ib.remark ? `${ib.tag} · ${ib.remark}` : ib.tag }))
   return (
     <>
       <PageHeader title={t('users.title')} subtitle={t('users.subtitle')} actions={!readOnly && <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>{t('users.create')}</Button>} />

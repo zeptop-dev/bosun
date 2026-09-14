@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Card, Group, Modal, NumberInput, Select, Stack, Table, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Badge, Button, Card, Group, Modal, NumberInput, Select, Stack, Switch, Table, Text, TextInput } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -11,8 +11,8 @@ import { bytes } from '../lib/format'
 import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
 
-type Values = { tag: string; listen: string; port: number; protocol: string; target: string }
-const empty: Values = { tag: '', listen: '', port: 10000, protocol: 'tcp', target: '' }
+type Values = { tag: string; listen: string; port: number; protocol: string; target: string; backend: string; preserve_source: boolean }
+const empty: Values = { tag: '', listen: '', port: 10000, protocol: 'tcp', target: '', backend: '', preserve_source: false }
 
 export default function ForwardsPage() {
   const { t } = useTranslation()
@@ -28,7 +28,7 @@ export default function ForwardsPage() {
     onSuccess: () => { toast.ok(t('common.saved')); setEditing(null); invalidate() }, onError: toast.err,
   })
   const del = useMutation({ mutationFn: (tag: string) => api.del(`/api/forwards/${encodeURIComponent(tag)}`), onSuccess: () => { toast.ok(t('common.deleted')); invalidate() }, onError: toast.err })
-  const open = (f: Forward | 'new') => { form.setValues(f === 'new' ? empty : { tag: f.tag, listen: f.listen ?? '', port: f.port, protocol: f.protocol, target: f.target }); setEditing(f) }
+  const open = (f: Forward | 'new') => { form.setValues(f === 'new' ? empty : { tag: f.tag, listen: f.listen ?? '', port: f.port, protocol: f.protocol, target: f.target, backend: f.backend ?? '', preserve_source: !!f.preserve_source }); setEditing(f) }
   return (
     <>
       <PageHeader title={t('forwards.title')} subtitle={t('forwards.subtitle')} actions={!readOnly && <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>{t('forwards.create')}</Button>} />
@@ -42,7 +42,7 @@ export default function ForwardsPage() {
               <Table.Tr key={f.tag}>
                 <Table.Td><Text fw={600} size="sm">{f.tag}</Text></Table.Td>
                 <Table.Td><Text size="sm">{f.listen || '0.0.0.0'}:{f.port} <Badge variant="outline" color="gray" ml={4}>{f.protocol}</Badge></Text></Table.Td>
-                <Table.Td><Text size="sm" ff="monospace">{f.target}</Text></Table.Td>
+                <Table.Td><Text size="sm" ff="monospace">{f.target}</Text>{f.backend === 'nft' && <Badge size="xs" variant="light" color="grape" ml={4}>nft{f.preserve_source ? ' · ' + t('forwards.preserveShort') : ''}</Badge>}</Table.Td>
                 <Table.Td>{f.status ? <Badge color={f.status.up ? 'teal' : 'red'} title={f.status.last_error}>{f.status.up ? `${f.status.rtt_ms} ms` : t('forwards.down')}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
                 <Table.Td><Text size="sm">{f.status ? `${f.status.active_conn} / ${f.status.total_conn}` : '—'}</Text></Table.Td>
                 <Table.Td><Text size="sm">{f.status ? `↑ ${bytes(f.status.bytes_in)} ↓ ${bytes(f.status.bytes_out)}` : '—'}</Text></Table.Td>
@@ -64,7 +64,9 @@ export default function ForwardsPage() {
             <NumberInput label={t('forwards.port')} min={1} max={65535} required {...form.getInputProps('port')} />
             <Select label={t('forwards.protocol')} data={['tcp', 'udp', 'both']} allowDeselect={false} {...form.getInputProps('protocol')} />
           </Group>
-          <TextInput label={t('forwards.target')} description={t('forwards.targetHint')} placeholder="203.0.113.10:443" required {...form.getInputProps('target')} />
+          <TextInput label={t('forwards.target')} description={form.values.backend === 'nft' ? t('forwards.targetNftHint') : t('forwards.targetHint')} placeholder="203.0.113.30:443" required {...form.getInputProps('target')} />
+          <Select label={t('forwards.backend')} description={form.values.backend === 'nft' ? t('forwards.backendNftHint') : t('forwards.backendRelayHint')} data={[{ value: '', label: t('forwards.backendRelay') }, { value: 'nft', label: t('forwards.backendNft') }]} allowDeselect={false} {...form.getInputProps('backend')} />
+          {form.values.backend === 'nft' && <Switch label={t('forwards.preserveSource')} description={t('forwards.preserveSourceHint')} {...form.getInputProps('preserve_source', { type: 'checkbox' })} />}
           <Group justify="flex-end"><Button variant="default" onClick={() => setEditing(null)}>{t('common.cancel')}</Button><Button type="submit" loading={save.isPending}>{t('common.save')}</Button></Group>
         </Stack></form>
       </Modal>

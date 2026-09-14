@@ -13,6 +13,7 @@ import IngressesPage from './pages/IngressesPage'
 import RoutingPage from './pages/RoutingPage'
 import CertificatesPage from './pages/CertificatesPage'
 import ProbePage from './pages/ProbePage'
+import DoctorPage from './pages/DoctorPage'
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { me, loading } = useAuth()
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/routing" element={<RoutingPage />} />
           <Route path="/certificates" element={<CertificatesPage />} />
           <Route path="/probe" element={<ProbePage />} />
+          <Route path="/doctor" element={<DoctorPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/logs" element={<LogsPage />} />
         </Route>

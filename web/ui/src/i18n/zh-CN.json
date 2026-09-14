@@ -9,7 +9,8 @@
     "certificates": "证书",
     "probe": "探针",
     "settings": "设置",
-    "logs": "日志"
+    "logs": "日志",
+    "doctor": "体检"
   },
   "login": {
     "title": "登录 bosun",
@@ -158,7 +159,9 @@
       "trojanWs": "Trojan + WS + TLS",
       "trojanWsDesc": "可套 CDN，需要证书。",
       "anytls": "AnyTLS",
-      "anytlsDesc": "新协议，抗流量分析，需要证书。"
+      "anytlsDesc": "新协议，抗流量分析，需要证书。",
+      "snell5": "Snell v5",
+      "snell5Desc": "Surge 官方 snell-server，共享 PSK，自动生成密钥。"
     },
     "serverNameAuto": "证书对应的域名，DNS 要指向这台机器",
     "autoCert": "自动证书",
@@ -174,7 +177,27 @@
       "balanced": "普通公网（保守伪装）",
       "stealth": "强化伪装",
       "custom": "自定义"
-    }
+    },
+    "mieruBoth": "TCP + UDP",
+    "mieruBothHint": "TCP 用本端口，UDP 用 {{port}}（本端口 +1），两个端口都要放行",
+    "mieruMtu": "MTU",
+    "mieruMtuHint": "留空 = 1400；只对 UDP 传输有意义，1280–1500",
+    "mieruMux": "多路复用",
+    "mieruMuxHint": "写进分享链接的客户端参数；默认由客户端决定（通常 LOW）",
+    "mieruHandshake": "握手模式",
+    "mieruHandshakeHint": "no-wait 为 0-RTT，延迟更低；standard 更稳",
+    "clientDefault": "客户端默认",
+    "muxOff": "关闭",
+    "muxLow": "低",
+    "muxMiddle": "中",
+    "muxHigh": "高",
+    "handshakeNoWait": "no-wait（0-RTT）",
+    "handshakeStandard": "standard",
+    "snellHint": "Snell 只有一个共享 PSK，所有用户用同一把密钥，无法按用户限制或计费；分享文本是 Surge 格式的一行。",
+    "snellPsk": "PSK",
+    "snellVersion": "版本",
+    "snellObfs": "混淆",
+    "snellObfsHost": "混淆 Host"
   },
   "ingress": {
     "title": "专线入口",
@@ -325,7 +348,16 @@
     "health": "健康",
     "down": "不通",
     "conns": "连接 活跃/累计",
-    "bytes": "流量"
+    "bytes": "流量",
+    "backend": "后端",
+    "backendRelay": "内置转发（用户态）",
+    "backendNft": "nftables（内核 DNAT）",
+    "backendRelayHint": "bosun 自己中转，支持域名目标，有连接数和流量统计。",
+    "backendNftHint": "内核 DNAT，性能最好；需要机器上有 nft 命令，目标必须是 IPv4 地址，没有流量统计。",
+    "targetNftHint": "IPv4 地址:端口（nftables 不解析域名）",
+    "preserveSource": "保留源 IP",
+    "preserveSourceHint": "不做 MASQUERADE，目标看到的是客户端真实 IP；目标服务器必须把回包路由回本机，否则不通。",
+    "preserveShort": "保留源 IP"
   },
   "settings": {
     "title": "设置",
@@ -398,5 +430,31 @@
     "uuid": "UUID",
     "lastReport": "最近上报 {{at}}，共 {{n}} 次",
     "noReport": "还没有上报"
+  },
+  "doctor": {
+    "title": "体检",
+    "subtitle": "只读检查：内核、监听端口、证书、转发、防火墙、磁盘、面板连接。不改任何配置。",
+    "run": "重新检查",
+    "ok": "正常",
+    "warn": "警告",
+    "fail": "失败",
+    "skip": "跳过",
+    "ranAt": "检查时间 {{at}}",
+    "status": "状态",
+    "check": "检查项",
+    "detail": "说明",
+    "empty": "还没有检查结果。"
+  },
+  "backup": {
+    "title": "备份与恢复",
+    "hint": "下载这台节点的全部配置（入站、用户、转发、专线入口、推送的证书、Komari 注册）为一个压缩包；恢复会用压缩包内容整体替换当前配置。",
+    "download": "下载备份",
+    "file": "备份文件",
+    "restore": "恢复",
+    "restoreConfirm": "当前的入站、用户、转发和入口会被压缩包里的内容整体替换，内核随即重启。如果压缩包里的管理员登录不同，你会被登出。继续？",
+    "restored": "已恢复",
+    "summary": "已恢复：{{inbounds}} 个入站，{{users}} 个用户，{{forwards}} 条转发，{{ingresses}} 个入口",
+    "adminChanged": "管理员登录已变更，请重新登录",
+    "managedHint": "Captain 托管中，配置由面板保存；只能下载，不能恢复。"
   }
 }
