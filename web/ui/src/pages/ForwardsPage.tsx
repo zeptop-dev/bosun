@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Card, Group, Modal, NumberInput, Select, Stack, Switch, Table, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Badge, Button, Card, Group, Modal, NumberInput, Select, Stack, Switch, Table, Tabs, Text, TextInput } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -10,12 +10,14 @@ import { useAuth } from '../lib/auth'
 import { bytes } from '../lib/format'
 import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
+import RoutingPage from './RoutingPage'
 
 type Values = { tag: string; listen: string; port: number; protocol: string; target: string; backend: string; preserve_source: boolean }
 const empty: Values = { tag: '', listen: '', port: 10000, protocol: 'tcp', target: '', backend: '', preserve_source: false }
 
 export default function ForwardsPage() {
   const { t } = useTranslation()
+  const [tab, setTab] = useState<string | null>('forwards')
   const { me } = useAuth()
   const qc = useQueryClient()
   const readOnly = me?.mode !== 'local' || !!me?.fixed
@@ -31,7 +33,12 @@ export default function ForwardsPage() {
   const open = (f: Forward | 'new') => { form.setValues(f === 'new' ? empty : { tag: f.tag, listen: f.listen ?? '', port: f.port, protocol: f.protocol, target: f.target, backend: f.backend ?? '', preserve_source: !!f.preserve_source }); setEditing(f) }
   return (
     <>
-      <PageHeader title={t('forwards.title')} subtitle={t('forwards.subtitle')} actions={!readOnly && <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>{t('forwards.create')}</Button>} />
+      <PageHeader title={t('outbound.title')} subtitle={t('outbound.subtitle')} actions={tab === 'forwards' && !readOnly && <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>{t('forwards.create')}</Button>} />
+      <Tabs value={tab} onChange={setTab} mb="md">
+        <Tabs.List><Tabs.Tab value="forwards">{t('outbound.tabForwards')}</Tabs.Tab><Tabs.Tab value="routing">{t('outbound.tabRouting')}</Tabs.Tab></Tabs.List>
+      </Tabs>
+      {tab === 'routing' && <RoutingPage embedded />}
+      {tab === 'forwards' && <>
       <Card p={0}>
         <Table>
           <Table.Thead><Table.Tr>
@@ -70,6 +77,7 @@ export default function ForwardsPage() {
           <Group justify="flex-end"><Button variant="default" onClick={() => setEditing(null)}>{t('common.cancel')}</Button><Button type="submit" loading={save.isPending}>{t('common.save')}</Button></Group>
         </Stack></form>
       </Modal>
+      </>}
     </>
   )
 }

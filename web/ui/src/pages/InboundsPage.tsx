@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Card, Group, Modal, Table, Text } from '@mantine/core'
+import { Accordion, ActionIcon, Badge, Button, Card, Group, Modal, Table, Text } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconPencil, IconPlus, IconTrash } from '@tabler/icons-react'
@@ -10,6 +10,7 @@ import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
 import { InboundForm, toValues, type InboundSubmit } from '../components/InboundForm'
 import { clientHost } from '../components/IngressFields'
+import IngressesPage from './IngressesPage'
 
 export function tlsLabel(ib: Inbound) {
   if (!ib.tls || ib.tls.mode === 0) return ''
@@ -71,6 +72,11 @@ export default function InboundsPage() {
             {(q.data ?? []).length === 0 && <Table.Tr><Table.Td colSpan={7}><Text c="dimmed" ta="center" py="lg">{readOnly ? t('common.empty') : t('inbounds.emptyHint')}</Text></Table.Td></Table.Tr>}
           </Table.Tbody>
         </Table>
+      </Card>
+      <Card mt="lg" p={0}>
+        <Accordion chevronPosition="right" variant="default">
+          <Accordion.Item value="ingress"><Accordion.Control><Text size="sm" fw={600}>{t('ingress.title')}</Text><Text size="xs" c="dimmed">{(ingresses.data ?? []).length > 0 ? t('inbounds.ingressSectionCount', { count: (ingresses.data ?? []).length }) : t('inbounds.ingressSectionHint')}</Text></Accordion.Control><Accordion.Panel><IngressesPage embedded /></Accordion.Panel></Accordion.Item>
+        </Accordion>
       </Card>
       <Modal opened={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? t('inbounds.create') : t('common.edit')} size="xl">
         {editing !== null && <InboundForm lineOnly={!settingsQ.data?.public_host && (ingresses.data ?? []).length > 0} initial={toValues(editing === 'new' ? undefined : editing)} ingresses={ingresses.data ?? []} usedPorts={usedPorts} busy={save.isPending} onSubmit={(s) => save.mutate(s)} onCancel={() => setEditing(null)} />}

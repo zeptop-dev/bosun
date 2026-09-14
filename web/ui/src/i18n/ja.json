@@ -3,14 +3,12 @@
     "overview": "概要",
     "inbounds": "インバウンド",
     "users": "ユーザー",
-    "forwards": "転送",
-    "ingresses": "専用線入口",
-    "routing": "アウトバウンドと着地",
     "certificates": "証明書",
     "probe": "プローブ",
     "settings": "設定",
     "logs": "ログ",
-    "doctor": "診断"
+    "doctor": "診断",
+    "outbound": "アウトバウンド"
   },
   "login": {
     "title": "bosun にサインイン",
@@ -197,7 +195,9 @@
     "snellPsk": "PSK",
     "snellVersion": "バージョン",
     "snellObfs": "難読化",
-    "snellObfsHost": "難読化 Host"
+    "snellObfsHost": "難読化 Host",
+    "ingressSectionCount": "専用線 {{count}} 本",
+    "ingressSectionHint": "ノードの前に IPLC / 専用線がある場合のみ。ほとんどのノードでは不要"
   },
   "ingress": {
     "title": "専用線入口",
@@ -456,5 +456,11 @@
     "summary": "復元: インバウンド {{inbounds}}、ユーザー {{users}}、転送 {{forwards}}、入口 {{ingresses}}",
     "adminChanged": "管理者ログインが変更されました。再ログインしてください",
     "managedHint": "Captain 管理中のため設定はパネル側にあります。ダウンロードのみ可能で、復元はできません。"
+  },
+  "outbound": {
+    "title": "アウトバウンド",
+    "subtitle": "このノードのトラフィックの行き先：ポートをそのまま別マシンへ転送する（前置）か、着地サーバーから出る（中継）か。",
+    "tabForwards": "ポート転送",
+    "tabRouting": "着地アウトバウンドと振り分け"
   }
 }
