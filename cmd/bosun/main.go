@@ -25,6 +25,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/core/hysteria"
 	"github.com/zeptop-dev/bosun/internal/core/mita"
 	"github.com/zeptop-dev/bosun/internal/core/singbox"
+	"github.com/zeptop-dev/bosun/internal/core/snell"
 	"github.com/zeptop-dev/bosun/internal/core/xray"
 	"github.com/zeptop-dev/bosun/internal/coreinstall"
 	"github.com/zeptop-dev/bosun/internal/local"
@@ -232,6 +233,17 @@ func setup(args []string) (*env, error) {
 				WorkDir:  filepath.Join(cfg.DataDir, "mita"),
 				LogLevel: mt.LogLevel,
 			}, log)
+		},
+		"snell": func() (core.Core, error) {
+			sn := cfg.Cores.Snell
+			if sn == nil {
+				return nil, nil
+			}
+			bin, err := binaryFor("snell", sn.Binary, sn.Version)
+			if err != nil {
+				return nil, err
+			}
+			return snell.New(snell.Options{Binary: bin, WorkDir: filepath.Join(cfg.DataDir, "snell")}, log)
 		},
 	}
 	for _, name := range cfg.CoreOrder() {

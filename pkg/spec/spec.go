@@ -17,6 +17,7 @@ const (
 	TUIC        Protocol = "tuic"
 	AnyTLS      Protocol = "anytls"
 	Mieru       Protocol = "mieru"
+	Snell       Protocol = "snell" // Surge snell-server; one shared PSK, no per-user accounting
 	SOCKS       Protocol = "socks"
 	HTTP        Protocol = "http"
 	Naive       Protocol = "naive"
@@ -122,8 +123,15 @@ type Inbound struct {
 	DownMbps          int      `json:"down_mbps,omitempty"`          // hysteria2
 	CongestionControl string   `json:"congestion_control,omitempty"` // tuic
 	PaddingScheme     []string `json:"padding_scheme,omitempty"`     // anytls
-	MieruTransport    string   `json:"mieru_transport,omitempty"`    // mieru: "TCP" or "UDP"
+	MieruTransport    string   `json:"mieru_transport,omitempty"`    // mieru: "TCP", "UDP" or "BOTH" (TCP at Port, UDP at Port+1)
 	TrafficPattern    string   `json:"traffic_pattern,omitempty"`    // mieru
+	MieruMTU          int      `json:"mieru_mtu,omitempty"`          // mieru: server mtu and client link mtu; 0 = mita default
+	MieruMultiplexing string   `json:"mieru_multiplexing,omitempty"` // mieru client: MULTIPLEXING_OFF|LOW|MIDDLE|HIGH ("" = client default)
+	MieruHandshake    string   `json:"mieru_handshake,omitempty"`    // mieru client: HANDSHAKE_NO_WAIT|HANDSHAKE_STANDARD ("" = client default)
+	SnellPSK          string   `json:"snell_psk,omitempty"`          // snell: shared pre-shared key
+	SnellVersion      int      `json:"snell_version,omitempty"`      // snell: 4 or 5 (0 = 5)
+	SnellObfs         string   `json:"snell_obfs,omitempty"`         // snell: "", "http" or "tls"
+	SnellObfsHost     string   `json:"snell_obfs_host,omitempty"`    // snell: obfs host header
 
 	// Users restricts who may use this inbound. When ScopedUsers is false the
 	// node-level user list applies; when true only Users are provisioned,
@@ -194,6 +202,12 @@ type Forward struct {
 	Port     int    `json:"port"`
 	Protocol string `json:"protocol,omitempty"` // "tcp", "udp" or "both"
 	Target   string `json:"target,omitempty"`   // host:port of the next hop
+	// Backend is "" for bosun's userspace relay or "nft" for kernel DNAT
+	// through nftables (IPv4 targets, needs the nft binary).
+	Backend string `json:"backend,omitempty"`
+	// PreserveSource skips masquerading on the nft backend so the target
+	// sees the client's address; the target must route replies back here.
+	PreserveSource bool `json:"preserve_source,omitempty"`
 }
 
 // Node is the complete desired state for this server.

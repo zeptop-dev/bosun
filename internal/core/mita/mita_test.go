@@ -37,6 +37,27 @@ func TestRender(t *testing.T) {
 		t.Fatalf("users: %v", cfg["users"])
 	}
 
+	// BOTH: TCP at the port, UDP at port+1; mtu lands at the top level.
+	b, err = render([]spec.Inbound{{Tag: "c", Protocol: spec.Mieru, Port: 17701, MieruTransport: "BOTH", MieruMTU: 1400}}, users, "info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg = map[string]any{}
+	_ = json.Unmarshal(b, &cfg)
+	pb = cfg["portBindings"].([]any)
+	if len(pb) != 2 || pb[0].(map[string]any)["port"] != float64(17701) || pb[0].(map[string]any)["protocol"] != "TCP" || pb[1].(map[string]any)["port"] != float64(17702) || pb[1].(map[string]any)["protocol"] != "UDP" || cfg["mtu"] != float64(1400) {
+		t.Fatalf("BOTH/mtu: %v", cfg)
+	}
+	if _, err := render([]spec.Inbound{{Tag: "c", Protocol: spec.Mieru, Port: 65535, MieruTransport: "BOTH"}}, users, ""); err == nil {
+		t.Fatal("BOTH at 65535 accepted")
+	}
+	if _, err := render([]spec.Inbound{{Tag: "c", Protocol: spec.Mieru, Port: 1, MieruMTU: 900}}, users, ""); err == nil {
+		t.Fatal("bad mtu accepted")
+	}
+	if bindingsKey([]spec.Inbound{{Port: 1, MieruTransport: "TCP", MieruMTU: 1400}}) == bindingsKey([]spec.Inbound{{Port: 1, MieruTransport: "TCP"}}) {
+		t.Fatal("mtu change must cycle the proxy")
+	}
+
 	if _, err := render([]spec.Inbound{{Tag: "x", Protocol: spec.VLESS, Port: 1}}, nil, ""); err == nil {
 		t.Fatal("expected error for non-mieru inbound")
 	}

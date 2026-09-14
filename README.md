@@ -13,7 +13,8 @@ Working vertical slice, verified end to end against sing-box 1.14.0:
 - sing-box adapter: renders VLESS, VMess, Trojan, Shadowsocks (incl. 2022), Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive; TLS, REALITY, ws/grpc/httpupgrade/http transports, multiplex, custom outbounds with chaining, route rules.
 - Xray adapter: VLESS, VMess, Trojan, Shadowsocks (AEAD), SOCKS, HTTP over raw/ws/grpc/httpupgrade/xhttp, TLS and REALITY; **hot user add/remove** on VLESS/VMess/Trojan through HandlerService, restart otherwise; per-user stats via StatsService; config validated with `xray run -test`. Verified e2e: REALITY traffic, hot add and hot remove, per-user push.
 - Hysteria adapter (official Hysteria 2 server): users live in bosun, not in the config. Hysteria calls bosun's HTTP auth endpoint per connection, so adds are instant and removals are enforced with a kick through the traffic stats API; only listener changes restart the process. Per-user stats from `/traffic?clear=1`. One hysteria2 inbound per node with this core; sing-box serves several. Verified e2e with the official client.
-- mita adapter (official mieru server): config file + `mita run` as a child, gRPC over a unix socket for hot user reload, proxy restart on port change, and per-user counters (deltas computed by bosun). Verified with the official mieru client.
+- mita adapter (official mieru server): config file + `mita run` as a child, gRPC over a unix socket for hot user reload, proxy restart on port change, and per-user counters (deltas computed by bosun). Verified with the official mieru client. Inbounds carry the client knobs too: `mieru_mtu` (server `mtu` and the link's `mtu=`), `mieru_multiplexing` (`MULTIPLEXING_OFF|LOW|MIDDLE|HIGH`), `mieru_handshake` (`HANDSHAKE_NO_WAIT|STANDARD`), and `mieru_transport: BOTH` binds TCP at the port and UDP at port+1 in one inbound (the `mierus://` link lists both).
+- Snell adapter (Surge's closed-source `snell-server`, v5 default, v4 selectable): one process per inbound, `snell-server.conf` with the shared `psk`, optional `obfs` http/tls and `obfs-host`. Snell has no users, so every client shares the PSK and traffic cannot be attributed per user; the share "link" is a Surge proxy line (`NAME = snell, host, port, psk=…, version=5`), which Surge, Loon and mihomo import.
 - Per-user traffic via each core's own control plane, hand-encoded protobuf, no generated stubs (`internal/core/grpcraw`).
 - Built-in relay (`internal/forward`): TCP and UDP port forwarding to the next hop with per-rule byte and connection counters and a TCP probe of the target (5 s retry while down, 30 s while up). Rules come from the config file with Xboard; a panel that manages forwarding supplies them through the `panel.ForwardSource` interface. Verified e2e: mihomo connecting to the relay port reaches an Xray REALITY landing behind it.
 - Online devices: cores that know which IPs a user connects from report them (Xray via its online-IP stats API, Hysteria from auth callbacks); the panel uses them for device limits. Upstream sing-box and mita expose no per-user connection info, so inbounds on those cores do not count toward device limits.
@@ -250,6 +251,8 @@ Current manifest:
 | xray | 26.9.9 | broken | REALITY rejects mihomo/sing-box clients |
 | mita | 3.36.1 | tested | official mieru server |
 | hysteria | 2.12.2 | tested | official Hysteria 2 server |
+| snell | 5.0.0 | caution | Surge snell-server v5 (official zip, digest pinned); not verified end to end |
+| snell | 4.1.1 | caution | Surge snell-server v4 for older clients |
 
 ## sing-box binary and CI
 
@@ -320,3 +323,17 @@ each hop, pointing at the next hop. The landing node serves the real protocol
 front of it relay raw bytes and report bytes, connections and probe results.
 Clients get the landing node's protocol settings with the entry host and port,
 which Xboard's separate `host`/`port` vs `server_port` fields already express.
+
+### nftables backend
+
+A forward rule with `backend: nft` is relayed by the kernel instead of
+bosun's userspace relay: bosun writes one nftables table (`inet bosun_fwd`,
+regenerated on every apply and deleted when the last nft rule goes) with a
+prerouting `dnat` per tcp/udp port, a postrouting `masquerade` toward the
+target, a `ct status dnat accept` forward rule, and sets
+`net.ipv4.ip_forward=1`. `preserve_source: true` drops the masquerade so
+the target sees the client's address, which only works when the target
+routes its replies back through this node. Targets must be IPv4 (host names
+are resolved once at apply); the `nft` binary must be installed, otherwise
+the rule shows "nftables not installed" and stays down. Byte and connection
+counters are not collected for nft rules; the target probe still is.
