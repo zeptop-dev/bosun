@@ -40,23 +40,25 @@ func (s *Server) extraRoutes() {
 // ingressInput accepts the PascalCase keys the forms send and the
 // snake_case keys of the stored object.
 type ingressInput struct {
-	Name        string `json:"Name"`
-	BindIP      string `json:"BindIP"`
-	LineIP      string `json:"LineIP"`
-	EntryHost   string `json:"EntryHost"`
-	EntryDomain string `json:"EntryDomain"`
-	PortFrom    int    `json:"PortFrom"`
-	PortTo      int    `json:"PortTo"`
-	PortOffset  int    `json:"PortOffset"`
+	Name          string `json:"Name"`
+	BindIP        string `json:"BindIP"`
+	LineIP        string `json:"LineIP"`
+	EntryHost     string `json:"EntryHost"`
+	EntryDomain   string `json:"EntryDomain"`
+	PortFrom      int    `json:"PortFrom"`
+	PortTo        int    `json:"PortTo"`
+	PortOffset    int    `json:"PortOffset"`
+	ReservedPorts []int  `json:"ReservedPorts"`
 
-	SName        string `json:"name"`
-	SBindIP      string `json:"bind_ip"`
-	SLineIP      string `json:"line_ip"`
-	SEntryHost   string `json:"entry_host"`
-	SEntryDomain string `json:"entry_domain"`
-	SPortFrom    int    `json:"port_from"`
-	SPortTo      int    `json:"port_to"`
-	SPortOffset  int    `json:"port_offset"`
+	SName          string `json:"name"`
+	SBindIP        string `json:"bind_ip"`
+	SLineIP        string `json:"line_ip"`
+	SEntryHost     string `json:"entry_host"`
+	SEntryDomain   string `json:"entry_domain"`
+	SPortFrom      int    `json:"port_from"`
+	SPortTo        int    `json:"port_to"`
+	SPortOffset    int    `json:"port_offset"`
+	SReservedPorts []int  `json:"reserved_ports"`
 }
 
 func (in ingressInput) ingress() local.Ingress {
@@ -76,6 +78,19 @@ func (in ingressInput) ingress() local.Ingress {
 		Name: pick(in.Name, in.SName), BindIP: pick(in.BindIP, in.SBindIP), LineIP: pick(in.LineIP, in.SLineIP),
 		EntryHost: pick(in.EntryHost, in.SEntryHost), EntryDomain: pick(in.EntryDomain, in.SEntryDomain),
 		PortFrom: pickInt(in.PortFrom, in.SPortFrom), PortTo: pickInt(in.PortTo, in.SPortTo), PortOffset: pickInt(in.PortOffset, in.SPortOffset),
+		ReservedPorts: func() []int {
+			src := in.ReservedPorts
+			if len(src) == 0 {
+				src = in.SReservedPorts
+			}
+			out := []int{}
+			for _, p := range src {
+				if p > 0 && p < 65536 {
+					out = append(out, p)
+				}
+			}
+			return out
+		}(),
 	}
 }
 

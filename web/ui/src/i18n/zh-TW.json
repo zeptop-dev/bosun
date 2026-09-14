@@ -167,7 +167,8 @@
     "autoCertHint": "用 Let's Encrypt 自動申請並續期，不必手動設定憑證檔",
     "acme": "驗證方式",
     "acmeHttp": "HTTP（需要本機 80 連接埠可從公網存取）",
-    "acmeDns": "DNS（Cloudflare，需在設定裡填 token）"
+    "acmeDns": "DNS（Cloudflare，需在設定裡填 token）",
+    "lineOnlyHint": "這台節點沒有填對外位址，只能透過專線入口存取：請選一個入口，否則分享連結裡沒有可用位址。"
   },
   "ingress": {
     "title": "專線入口",
@@ -193,7 +194,9 @@
     "noEntry": "無公網入口",
     "noEntryHint": "這條線沒有公網入口：在能連通它的前置機上加一條連接埠轉發到外部連線 IP，分享連結寫前置的位址。",
     "deleteHint": "刪除後用它的入站會變回直連，分享連結隨之改變。",
-    "empty": "沒有專線入口。只有 IPLC 或專線在本機前面時才需要。"
+    "empty": "沒有專線入口。只有 IPLC 或專線在本機前面時才需要。",
+    "reserved": "保留連接埠",
+    "reservedHint": "連接埠段裡被服務商佔用的連接埠（一般是 SSH 對應的那個），逗號分隔；配方選連接埠時跳過，入站也不能用"
   },
   "routing": {
     "title": "出站與落地",

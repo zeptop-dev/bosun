@@ -385,7 +385,7 @@ func (s *Store) Probe() *spec.Probe {
 		if g.BindIP == "" || g.LineIP == "" {
 			continue
 		}
-		port := g.PortFrom
+		port := 0
 		for _, ib := range s.st.Inbounds {
 			if ib.IngressID == g.ID {
 				port = ib.Port
@@ -393,7 +393,7 @@ func (s *Store) Probe() *spec.Probe {
 			}
 		}
 		if port == 0 {
-			port = 80
+			port = g.ProbePort()
 		}
 		p.Tasks = append(p.Tasks, spec.PingTask{ID: -int64(i + 1), Name: g.Name, Type: "tcp", Target: net.JoinHostPort(g.LineIP, strconv.Itoa(port)), IntervalSeconds: 30, SourceIP: g.BindIP})
 	}

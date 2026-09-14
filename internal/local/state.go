@@ -68,6 +68,8 @@ type Ingress struct {
 	PortFrom    int    `json:"port_from"`    // usable port range (0 = any)
 	PortTo      int    `json:"port_to"`
 	PortOffset  int    `json:"port_offset"` // entry port = local port + offset
+	// ReservedPorts are mapped ports the provider keeps (SSH); inbounds skip them.
+	ReservedPorts []int `json:"reserved_ports,omitempty"`
 }
 
 // ClientHost is what share links advertise: the entry domain when set,
@@ -82,9 +84,27 @@ func (g Ingress) ClientHost() string {
 // EntryPort maps a local inbound port to the port clients dial.
 func (g Ingress) EntryPort(local int) int { return local + g.PortOffset }
 
-// AllowsPort reports whether a local port fits the line's range.
+// AllowsPort reports whether a local port fits the line's range and is not reserved.
 func (g Ingress) AllowsPort(p int) bool {
+	for _, r := range g.ReservedPorts {
+		if r == p {
+			return false
+		}
+	}
 	return g.PortFrom == 0 || (p >= g.PortFrom && p <= g.PortTo)
+}
+
+// ProbePort is the far-end port the line RTT task uses when no inbound
+// is on the line: a reserved (provider, e.g. SSH) port answers, else the
+// range start, else 80.
+func (g Ingress) ProbePort() int {
+	if len(g.ReservedPorts) > 0 {
+		return g.ReservedPorts[0]
+	}
+	if g.PortFrom > 0 {
+		return g.PortFrom
+	}
+	return 80
 }
 
 // ProbeSettings is the standalone probe configuration (the UI edits it;

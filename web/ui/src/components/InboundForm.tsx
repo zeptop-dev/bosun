@@ -1,7 +1,7 @@
 import { ActionIcon, Button, Card, Collapse, Group, JsonInput, NumberInput, Select, SimpleGrid, Stack, Switch, Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { IconRefresh } from '@tabler/icons-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type Inbound, type Ingress, type IngressInput } from '../lib/api'
 import { toast } from '../lib/notify'
@@ -79,7 +79,7 @@ const recipes: { key: string; values: Partial<Values> }[] = [
 
 export type InboundSubmit = { body: Record<string, unknown>; ingress?: IngressInput }
 
-export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [], usedPorts = [] }: { initial: Values; onSubmit: (v: InboundSubmit) => void; busy: boolean; onCancel: () => void; ingresses?: Ingress[]; usedPorts?: number[] }) {
+export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [], usedPorts = [], lineOnly }: { initial: Values; onSubmit: (v: InboundSubmit) => void; busy: boolean; onCancel: () => void; ingresses?: Ingress[]; usedPorts?: number[]; lineOnly?: boolean }) {
   const { t } = useTranslation()
   const [advanced, setAdvanced] = useState(false)
   const [recipe, setRecipe] = useState<string | null>(null) // highlighted quick-setup card
@@ -95,10 +95,12 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   })
   // A new line ingress described inline; created before the inbound on save.
   const [newIngress, setNewIngress] = useState(false)
+  // A node reachable only through a line (no public address set) defaults new inbounds to its first ingress.
   const ingressForm = useForm<IngressValues>({ initialValues: emptyIngress, validate: { Name: (v) => (v.trim() ? null : t('form.required')) } })
   const v = form.values
   const selectedIngress = ingresses.find((g) => g.id === v.ingress_id)
-  const firstFree = (g?: { port_from: number; port_to: number }) => { if (!g || !g.port_from) return 0; for (let p = g.port_from; p <= g.port_to; p++) if (!usedPorts.includes(p)) return p; return 0 }
+  const firstFree = (g?: { port_from: number; port_to: number; reserved_ports?: number[] }) => { if (!g || !g.port_from) return 0; for (let p = g.port_from; p <= g.port_to; p++) if (!usedPorts.includes(p) && !(g.reserved_ports ?? []).includes(p)) return p; return 0 }
+  useEffect(() => { if (lineOnly && !initial.ingress_id && !initial.tag && ingresses[0]) form.setValues({ ingress_id: ingresses[0].id, port: firstFree(ingresses[0]) || form.values.port }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const onIngress = (val: string | null) => {
     if (val === 'new') { setNewIngress(true); ingressForm.setValues(emptyIngress); form.setFieldValue('ingress_id', ''); return }
     setNewIngress(false)
@@ -168,6 +170,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           allowDeselect={false}
           data={[{ value: '', label: t('inbounds.ingressDirect') }, ...ingresses.map((g) => ({ value: g.id, label: ingressLabel(g) })), { value: 'new', label: t('inbounds.ingressNew') }]}
           value={newIngress ? 'new' : v.ingress_id} onChange={onIngress} />
+        {lineOnly && !v.ingress_id && !newIngress && <Text size="xs" c="orange">{t('inbounds.lineOnlyHint')}</Text>}
         {newIngress && (
           <Stack gap="xs" p="sm" style={{ border: '1px dashed var(--mantine-color-default-border)', borderRadius: 8 }}>
             <Text size="xs" c="dimmed">{t('inbounds.ingressNewFields')}</Text>
