@@ -70,6 +70,9 @@ type Server struct {
 	agent    *agent.Agent
 	sessions map[string]time.Time
 	failed   map[string]failure
+	// doctorRep is the last on-demand self-check, served again for 30 s.
+	doctorRep *agentproto.DoctorReport
+	doctorAt  time.Time
 }
 
 type failure struct {
@@ -145,6 +148,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/restart", auth(s.restart))
 
 	s.extraRoutes()
+	s.doctorBackupRoutes()
 	m.Handle("/", web.UI())
 }
 

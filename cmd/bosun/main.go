@@ -89,6 +89,10 @@ func main() {
 		err = cmdCore(os.Args[2:])
 	case "admin":
 		err = cmdAdmin(os.Args[2:])
+	case "doctor":
+		err = cmdDoctor(os.Args[2:])
+	case "backup":
+		err = cmdBackup(os.Args[2:])
 	case "version":
 		fmt.Println("bosun", version)
 	default:
@@ -109,6 +113,9 @@ func usage() {
   bosun core install [-c config.yaml] <core> [version]   install a release (default: newest tested)
   bosun admin reset-password [-c config.yaml]   set a new random password for the local web panel
   bosun admin set [-c config.yaml] -user U -password P   set the web panel login (blank password = generated)
+  bosun doctor [-c config.yaml]                  read-only health checks (listeners, certs, disk, firewall); exit 1 on failure
+  bosun backup create [-c config.yaml] [-o FILE]  archive the standalone configuration (default: bosun-backup-<date>.tar.gz)
+  bosun backup restore [-c config.yaml] [--force] FILE   replace it from an archive (service must be stopped)
   bosun version`)
 }
 
