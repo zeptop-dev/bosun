@@ -9,7 +9,8 @@
     "certificates": "Certificates",
     "probe": "Probe",
     "settings": "Settings",
-    "logs": "Logs"
+    "logs": "Logs",
+    "doctor": "Doctor"
   },
   "login": {
     "title": "Sign in to bosun",
@@ -158,7 +159,9 @@
       "trojanWs": "Trojan + WS + TLS",
       "trojanWsDesc": "CDN friendly; needs a certificate.",
       "anytls": "AnyTLS",
-      "anytlsDesc": "New protocol resisting traffic analysis; needs a certificate."
+      "anytlsDesc": "New protocol resisting traffic analysis; needs a certificate.",
+      "snell5": "Snell v5",
+      "snell5Desc": "Surge's official snell-server, one shared PSK generated for you."
     },
     "serverNameAuto": "Domain of the certificate; its DNS must point at this machine",
     "autoCert": "Automatic certificate",
@@ -174,7 +177,27 @@
       "balanced": "Public network (conservative)",
       "stealth": "Enhanced camouflage",
       "custom": "Custom"
-    }
+    },
+    "mieruBoth": "TCP + UDP",
+    "mieruBothHint": "TCP on this port, UDP on {{port}} (port + 1); open both",
+    "mieruMtu": "MTU",
+    "mieruMtuHint": "Blank = 1400; only matters for the UDP transport, 1280–1500",
+    "mieruMux": "Multiplexing",
+    "mieruMuxHint": "Client parameter written into share links; blank leaves it to the client (usually LOW)",
+    "mieruHandshake": "Handshake",
+    "mieruHandshakeHint": "no-wait is 0-RTT (lower latency); standard is the safer choice",
+    "clientDefault": "Client default",
+    "muxOff": "Off",
+    "muxLow": "Low",
+    "muxMiddle": "Middle",
+    "muxHigh": "High",
+    "handshakeNoWait": "no-wait (0-RTT)",
+    "handshakeStandard": "standard",
+    "snellHint": "Snell has one shared PSK: every user connects with the same key, so per-user restrictions and accounting do not apply. The share text is a Surge line.",
+    "snellPsk": "PSK",
+    "snellVersion": "Version",
+    "snellObfs": "Obfuscation",
+    "snellObfsHost": "Obfs host"
   },
   "ingress": {
     "title": "Line ingresses",
@@ -325,7 +348,16 @@
     "health": "Health",
     "down": "down",
     "conns": "Conns active/total",
-    "bytes": "Bytes"
+    "bytes": "Bytes",
+    "backend": "Backend",
+    "backendRelay": "Built-in relay (userspace)",
+    "backendNft": "nftables (kernel DNAT)",
+    "backendRelayHint": "bosun relays the bytes itself: domain targets, connection and byte counters.",
+    "backendNftHint": "Kernel DNAT, fastest; needs the nft binary, an IPv4 literal target, and reports no byte counters.",
+    "targetNftHint": "IPv4 address:port (nftables does not resolve names)",
+    "preserveSource": "Preserve source IP",
+    "preserveSourceHint": "No MASQUERADE: the target sees the real client address, so it must route replies back through this node or nothing connects.",
+    "preserveShort": "source kept"
   },
   "settings": {
     "title": "Settings",
@@ -398,5 +430,31 @@
     "uuid": "UUID",
     "lastReport": "last report {{at}}, {{n}} total",
     "noReport": "no report yet"
+  },
+  "doctor": {
+    "title": "Doctor",
+    "subtitle": "Read-only checks: cores, listeners, certificates, forwards, firewall, disk, panel link. Nothing is changed.",
+    "run": "Run again",
+    "ok": "ok",
+    "warn": "warn",
+    "fail": "fail",
+    "skip": "skip",
+    "ranAt": "run at {{at}}",
+    "status": "Status",
+    "check": "Check",
+    "detail": "Detail",
+    "empty": "No results yet."
+  },
+  "backup": {
+    "title": "Backup and restore",
+    "hint": "Download this node's whole configuration (inbounds, users, forwards, line ingresses, pushed certificates, Komari registration) as one archive; restoring replaces the current configuration with the archive's.",
+    "download": "Download backup",
+    "file": "Backup file",
+    "restore": "Restore",
+    "restoreConfirm": "The current inbounds, users, forwards and ingresses are replaced by the archive's and the cores restart. If the archive carries a different admin login you will be signed out. Continue?",
+    "restored": "Restored",
+    "summary": "Restored: {{inbounds}} inbounds, {{users}} users, {{forwards}} forwards, {{ingresses}} ingresses",
+    "adminChanged": "admin login changed, sign in again",
+    "managedHint": "Managed by Captain: the panel holds the configuration. Download only; restore is disabled."
   }
 }

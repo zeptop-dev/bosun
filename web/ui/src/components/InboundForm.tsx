@@ -7,8 +7,8 @@ import { api, type Inbound, type Ingress, type IngressInput } from '../lib/api'
 import { toast } from '../lib/notify'
 import { IngressFields, clientHost, emptyIngress, ingressPayload, type IngressValues } from './IngressFields'
 
-const protocols = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'mieru', 'socks', 'http']
-const cores = ['', 'singbox', 'xray', 'mita', 'hysteria']
+const protocols = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'mieru', 'snell', 'socks', 'http']
+const cores = ['', 'singbox', 'xray', 'mita', 'hysteria', 'snell']
 const transports = ['tcp', 'ws', 'grpc', 'httpupgrade', 'http', 'xhttp']
 const ciphers = ['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305', 'aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'none']
 
@@ -19,7 +19,8 @@ export type Values = {
   tls: 'none' | 'tls' | 'reality'; auto_cert: boolean; acme: string; server_name: string; reality_private: string; reality_public: string; reality_short: string; handshake_server: string; handshake_port: number
   transport: string; path: string; host: string; service_name: string; xhttp_mode: string
   flow: string; cipher: string; server_key: string; obfs: string; obfs_password: string; up_mbps: number; down_mbps: number
-  congestion_control: string; mieru_transport: string; traffic_pattern: string
+  congestion_control: string; mieru_transport: string; traffic_pattern: string; mieru_mtu: number | string; mieru_multiplexing: string; mieru_handshake: string
+  snell_psk: string; snell_version: number; snell_obfs: string; snell_obfs_host: string
   extra: string
 }
 
@@ -28,10 +29,11 @@ export const empty: Values = {
   tls: 'none', auto_cert: false, acme: 'http', server_name: '', reality_private: '', reality_public: '', reality_short: '', handshake_server: '', handshake_port: 443,
   transport: 'tcp', path: '', host: '', service_name: '', xhttp_mode: '',
   flow: '', cipher: '2022-blake3-aes-128-gcm', server_key: '', obfs: '', obfs_password: '', up_mbps: 0, down_mbps: 0,
-  congestion_control: 'bbr', mieru_transport: 'TCP', traffic_pattern: '', extra: '{}',
+  congestion_control: 'bbr', mieru_transport: 'TCP', traffic_pattern: '', mieru_mtu: '', mieru_multiplexing: '', mieru_handshake: '',
+  snell_psk: '', snell_version: 5, snell_obfs: '', snell_obfs_host: '', extra: '{}',
 }
 
-const known = new Set(['tag', 'remark', 'protocol', 'listen', 'port', 'core', 'enabled', 'display_host', 'display_port', 'ingress_id', 'tls', 'transport', 'flow', 'cipher', 'server_key', 'obfs', 'obfs_password', 'up_mbps', 'down_mbps', 'congestion_control', 'mieru_transport', 'traffic_pattern', 'assigned_core', 'scoped_users', 'users'])
+const known = new Set(['tag', 'remark', 'protocol', 'listen', 'port', 'core', 'enabled', 'display_host', 'display_port', 'ingress_id', 'tls', 'transport', 'flow', 'cipher', 'server_key', 'obfs', 'obfs_password', 'up_mbps', 'down_mbps', 'congestion_control', 'mieru_transport', 'traffic_pattern', 'assigned_core', 'scoped_users', 'users', 'mieru_mtu', 'mieru_multiplexing', 'mieru_handshake', 'snell_psk', 'snell_version', 'snell_obfs', 'snell_obfs_host'])
 
 export function toValues(ib?: Inbound): Values {
   if (!ib) return empty
@@ -46,7 +48,8 @@ export function toValues(ib?: Inbound): Values {
     reality_short: ib.tls?.reality?.short_ids?.[0] ?? '', handshake_server: ib.tls?.reality?.handshake_server ?? '', handshake_port: ib.tls?.reality?.handshake_port ?? 443,
     transport: ib.transport?.type ?? 'tcp', path: ib.transport?.path ?? '', host: ib.transport?.host ?? '', service_name: ib.transport?.service_name ?? '', xhttp_mode: ib.transport?.mode ?? '',
     flow: ib.flow ?? '', cipher: ib.cipher ?? empty.cipher, server_key: ib.server_key ?? '', obfs: ib.obfs ?? '', obfs_password: ib.obfs_password ?? '',
-    up_mbps: ib.up_mbps ?? 0, down_mbps: ib.down_mbps ?? 0, congestion_control: ib.congestion_control ?? 'bbr', mieru_transport: ib.mieru_transport ?? 'TCP', traffic_pattern: ib.traffic_pattern ?? '',
+    up_mbps: ib.up_mbps ?? 0, down_mbps: ib.down_mbps ?? 0, congestion_control: ib.congestion_control ?? 'bbr', mieru_transport: ib.mieru_transport ?? 'TCP', traffic_pattern: ib.traffic_pattern ?? '', mieru_mtu: ib.mieru_mtu || '', mieru_multiplexing: ib.mieru_multiplexing ?? '', mieru_handshake: ib.mieru_handshake ?? '',
+    snell_psk: ib.snell_psk ?? '', snell_version: ib.snell_version || 5, snell_obfs: ib.snell_obfs ?? '', snell_obfs_host: ib.snell_obfs_host ?? '',
     extra: JSON.stringify(extra, null, 2),
   }
 }
@@ -62,7 +65,18 @@ export function toInbound(v: Values): Record<string, unknown> {
   if (v.protocol === 'shadowsocks') { out.cipher = v.cipher; if (v.cipher.startsWith('2022')) out.server_key = v.server_key }
   if (v.protocol === 'hysteria2') { if (v.obfs) { out.obfs = v.obfs; out.obfs_password = v.obfs_password } if (v.up_mbps) out.up_mbps = v.up_mbps; if (v.down_mbps) out.down_mbps = v.down_mbps }
   if (v.protocol === 'tuic') out.congestion_control = v.congestion_control
-  if (v.protocol === 'mieru') { out.mieru_transport = v.mieru_transport; if (v.traffic_pattern) out.traffic_pattern = v.traffic_pattern }
+  if (v.protocol === 'mieru') {
+    out.mieru_transport = v.mieru_transport
+    if (v.traffic_pattern) out.traffic_pattern = v.traffic_pattern
+    if (Number(v.mieru_mtu)) out.mieru_mtu = Number(v.mieru_mtu)
+    if (v.mieru_multiplexing) out.mieru_multiplexing = v.mieru_multiplexing
+    if (v.mieru_handshake) out.mieru_handshake = v.mieru_handshake
+  }
+  if (v.protocol === 'snell') {
+    out.snell_psk = v.snell_psk
+    out.snell_version = Number(v.snell_version) || 5
+    if (v.snell_obfs) { out.snell_obfs = v.snell_obfs; out.snell_obfs_host = v.snell_obfs_host }
+  }
   return out
 }
 
@@ -100,6 +114,7 @@ const recipes: { key: string; values: Partial<Values> }[] = [
   { key: 'ss2022', values: { protocol: 'shadowsocks', port: 8388, tls: 'none', cipher: '2022-blake3-aes-128-gcm' } },
   { key: 'trojanWs', values: { protocol: 'trojan', port: 443, tls: 'tls', auto_cert: true, transport: 'ws', path: '/trojan' } },
   { key: 'anytls', values: { protocol: 'anytls', port: 8444, tls: 'tls', auto_cert: true } },
+  { key: 'snell5', values: { protocol: 'snell', port: 6160, tls: 'none', snell_version: 5, snell_obfs: '' } },
 ]
 
 export type InboundSubmit = { body: Record<string, unknown>; ingress?: IngressInput }
@@ -116,6 +131,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
       extra: (v) => { try { JSON.parse(v || '{}'); return null } catch { return t('form.json') } },
       reality_private: (v, all) => (all.tls === 'reality' && !v ? t('form.required') : null),
       server_key: (v, all) => (all.protocol === 'shadowsocks' && all.cipher.startsWith('2022') && !v ? t('form.required') : null),
+      snell_psk: (v, all) => (all.protocol === 'snell' && !v ? t('form.required') : null),
     },
   })
   // A new line ingress described inline; created before the inbound on save.
@@ -144,6 +160,9 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   const genPassword = async () => {
     try { const k = await api.post<{ password: string }>('/api/keys/password'); form.setFieldValue('obfs_password', k.password) } catch (e) { toast.err(e) }
   }
+  const genPSK = async () => {
+    try { const k = await api.post<{ password: string }>('/api/keys/password'); form.setFieldValue('snell_psk', k.password) } catch (e) { toast.err(e) }
+  }
   const apply = (r: (typeof recipes)[number]) => {
     // A recipe keeps the chosen line ingress and takes a port from its range; any protocol may ride a line.
     const port = selectedIngress && selectedIngress.port_from ? (firstFree(selectedIngress) || r.values.port) : r.values.port
@@ -151,6 +170,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
     if (r.values.tls === 'reality') void genReality()
     if (r.values.cipher?.startsWith('2022')) void genKey()
     if (r.values.obfs) void genPassword()
+    if (r.values.protocol === 'snell') void genPSK()
   }
   const submit = (vals: Values) => {
     if (newIngress) {
@@ -267,8 +287,31 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
             <Select label={t('inbounds.mieruStrategy')} description={t('inbounds.mieruStrategyHint')} allowDeselect={false}
               data={[{ value: 'iplc', label: t('inbounds.mieru.iplc') }, { value: 'balanced', label: t('inbounds.mieru.balanced') }, { value: 'stealth', label: t('inbounds.mieru.stealth') }, { value: 'custom', label: t('inbounds.mieru.custom') }]}
               value={mieruStrategyOf(v.traffic_pattern)} onChange={(k) => k && form.setFieldValue('traffic_pattern', mieruPatternFor(k, v.traffic_pattern))} />
-            <Select label={t('inbounds.mieruTransport')} data={['TCP', 'UDP']} allowDeselect={false} {...form.getInputProps('mieru_transport')} />
+            <Select label={t('inbounds.mieruTransport')} description={v.mieru_transport === 'BOTH' ? t('inbounds.mieruBothHint', { port: Number(v.port) + 1 }) : undefined} data={[{ value: 'TCP', label: 'TCP' }, { value: 'UDP', label: 'UDP' }, { value: 'BOTH', label: t('inbounds.mieruBoth') }]} allowDeselect={false} {...form.getInputProps('mieru_transport')} />
           </Group>
+        )}
+        {v.protocol === 'mieru' && (
+          <Group grow align="flex-end">
+            <NumberInput label={t('inbounds.mieruMtu')} description={t('inbounds.mieruMtuHint')} placeholder="1400" min={1280} max={1500} {...form.getInputProps('mieru_mtu')} />
+            <Select label={t('inbounds.mieruMux')} description={t('inbounds.mieruMuxHint')} allowDeselect={false}
+              data={[{ value: '', label: t('inbounds.clientDefault') }, { value: 'MULTIPLEXING_OFF', label: t('inbounds.muxOff') }, { value: 'MULTIPLEXING_LOW', label: t('inbounds.muxLow') }, { value: 'MULTIPLEXING_MIDDLE', label: t('inbounds.muxMiddle') }, { value: 'MULTIPLEXING_HIGH', label: t('inbounds.muxHigh') }]}
+              {...form.getInputProps('mieru_multiplexing')} />
+            <Select label={t('inbounds.mieruHandshake')} description={t('inbounds.mieruHandshakeHint')} allowDeselect={false}
+              data={[{ value: '', label: t('inbounds.clientDefault') }, { value: 'HANDSHAKE_NO_WAIT', label: t('inbounds.handshakeNoWait') }, { value: 'HANDSHAKE_STANDARD', label: t('inbounds.handshakeStandard') }]}
+              {...form.getInputProps('mieru_handshake')} />
+          </Group>
+        )}
+        {v.protocol === 'snell' && (
+          <Card p="sm">
+            <Text size="xs" c="dimmed" mb="xs">{t('inbounds.snellHint')}</Text>
+            <Group grow align="flex-end">
+              <TextInput label={t('inbounds.snellPsk')} required {...form.getInputProps('snell_psk')} />
+              <Tooltip label={t('inbounds.generate')}><ActionIcon variant="light" size="lg" onClick={genPSK}><IconRefresh size={16} /></ActionIcon></Tooltip>
+              <Select label={t('inbounds.snellVersion')} data={[{ value: '5', label: 'v5' }, { value: '4', label: 'v4' }]} allowDeselect={false} value={String(v.snell_version)} onChange={(x) => form.setFieldValue('snell_version', Number(x) || 5)} />
+              <Select label={t('inbounds.snellObfs')} data={[{ value: '', label: t('common.none') }, { value: 'http', label: 'http' }, { value: 'tls', label: 'tls' }]} allowDeselect={false} {...form.getInputProps('snell_obfs')} />
+              {v.snell_obfs && <TextInput label={t('inbounds.snellObfsHost')} placeholder="www.bing.com" {...form.getInputProps('snell_obfs_host')} />}
+            </Group>
+          </Card>
         )}
         {v.protocol === 'mieru' && mieruStrategyOf(v.traffic_pattern) === 'custom' && (
           <JsonInput label={t('inbounds.trafficPattern')} description={t('inbounds.trafficPatternHint')} autosize minRows={6} maxRows={18} formatOnBlur {...form.getInputProps('traffic_pattern')} />
