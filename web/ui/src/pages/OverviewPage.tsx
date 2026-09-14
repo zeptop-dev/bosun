@@ -2,12 +2,13 @@ import { Alert, Badge, Card, Group, Progress, SimpleGrid, Skeleton, Stack, Table
 import { AreaChart } from '@mantine/charts'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { IconAlertTriangle, IconDevices, IconPlugConnected, IconArrowsExchange, IconClock } from '@tabler/icons-react'
+import { IconAlertTriangle, IconDevices, IconPlugConnected, IconArrowsExchange, IconClock, IconInfoCircle } from '@tabler/icons-react'
 import { api, type Status } from '../lib/api'
 import { ago, bytes } from '../lib/format'
 import { PageHeader } from '../components/PageHeader'
 import { PingList } from '../components/PingList'
 import { Stat } from '../components/Stat'
+import { InfoGrid, InfoTile, SectionTitle } from '../components/InfoTile'
 
 function uptime(s: number) {
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
@@ -35,9 +36,25 @@ export default function OverviewPage() {
           <Stat label={t('overview.uptime')} value={uptime(s.uptime_seconds)} hint={s.last_report ? t('overview.lastReport', { ago: ago(s.last_report) }) : undefined} icon={<IconClock size={18} opacity={0.6} />} />
         </SimpleGrid>
       )}
+      {s && (
+        <Card mb="lg">
+          <SectionTitle icon={<IconInfoCircle size={20} />}>{t('overview.nodeInfo')}</SectionTitle>
+          <InfoGrid>
+            <InfoTile label={t('overview.version')} value={s.version} mono />
+            <InfoTile label={t('overview.mode')} value={s.fixed ? t('mode.fixed', { driver: s.fixed }) : t(`mode.${s.mode}`)} />
+            <InfoTile label={t('overview.panel')} value={s.managed?.url ?? s.agent?.panel} mono />
+            <InfoTile label={t('overview.uptime')} value={uptime(s.uptime_seconds)} />
+            <InfoTile label={t('overview.lastSeen')} value={s.last_report ? ago(s.last_report) : undefined} />
+            <InfoTile label={t('overview.users')} value={s.users} hint={t('overview.onlineUsers') + ': ' + s.online_users} />
+            <InfoTile label={t('overview.inbounds')} value={s.inbounds} hint={s.agent ? t('overview.applied', { count: s.agent.inbounds }) : undefined} />
+            <InfoTile label={t('overview.forwards')} value={s.forwards.length} />
+            <InfoTile label={t('overview.certs')} value={s.certs.length} />
+          </InfoGrid>
+        </Card>
+      )}
       <SimpleGrid cols={{ base: 1, md: 2 }} mb="lg">
         <Card>
-          <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb="xs">{t('overview.host')}</Text>
+          <Text size="sm" c="dimmed" fw={500} mb="xs">{t('overview.host')}</Text>
           {host && host.mem_total ? (
             <Stack gap="xs">
               <div><Group justify="space-between"><Text size="sm">CPU</Text><Text size="sm">{Math.round(host.cpu_percent ?? 0)}%</Text></Group><Progress value={host.cpu_percent ?? 0} size="sm" /></div>
@@ -47,7 +64,7 @@ export default function OverviewPage() {
           ) : <Text size="sm" c="dimmed">—</Text>}
         </Card>
         <Card>
-          <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb="xs">{t('overview.cores')}</Text>
+          <Text size="sm" c="dimmed" fw={500} mb="xs">{t('overview.cores')}</Text>
           <Table>
             <Table.Tbody>
               {cores.map(([name, running]) => (
@@ -64,14 +81,14 @@ export default function OverviewPage() {
       </SimpleGrid>
       {(s?.pings?.length ?? 0) > 0 && (
         <Card mb="lg">
-          <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb="xs">{t('overview.latency')}</Text>
+          <Text size="sm" c="dimmed" fw={500} mb="xs">{t('overview.latency')}</Text>
           <PingList pings={s!.pings!} />
         </Card>
       )}
       <Card>
         <Text fw={600}>{t('overview.chart')}</Text>
         <Text size="xs" c="dimmed" mb="md">{t('overview.chartSub')}</Text>
-        <AreaChart h={200} data={series} dataKey="day" series={[{ name: 'GiB', color: 'cyan.5' }]} curveType="monotone" withDots={false} gridAxis="x" />
+        <AreaChart h={200} data={series} dataKey="day" series={[{ name: 'GiB', color: 'brand.5' }]} curveType="monotone" withDots={false} gridAxis="x" />
       </Card>
     </>
   )

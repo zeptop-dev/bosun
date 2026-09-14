@@ -38,7 +38,8 @@
     "empty": "아직 데이터가 없습니다",
     "saved": "저장됨",
     "deleted": "삭제됨",
-    "confirmDelete": "삭제할까요? 되돌릴 수 없습니다."
+    "confirmDelete": "삭제할까요? 되돌릴 수 없습니다.",
+    "logout": "로그아웃"
   },
   "form": {
     "required": "필수 항목",
@@ -88,7 +89,15 @@
     "inboundsOn": "인바운드 {{count}} 개",
     "latency": "지연",
     "chart": "일별 트래픽",
-    "chartSub": "최근 30 일, 업로드 + 다운로드."
+    "chartSub": "최근 30 일, 업로드 + 다운로드.",
+    "nodeInfo": "노드 정보",
+    "version": "버전",
+    "mode": "모드",
+    "panel": "소속 패널",
+    "forwards": "포워딩 규칙",
+    "certs": "인증서",
+    "users": "사용자 수",
+    "lastSeen": "최근 보고"
   },
   "inbounds": {
     "title": "인바운드",

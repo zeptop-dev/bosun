@@ -38,7 +38,8 @@
     "empty": "まだ何もありません",
     "saved": "保存しました",
     "deleted": "削除しました",
-    "confirmDelete": "削除しますか？この操作は取り消せません。"
+    "confirmDelete": "削除しますか？この操作は取り消せません。",
+    "logout": "ログアウト"
   },
   "form": {
     "required": "必須",
@@ -88,7 +89,15 @@
     "inboundsOn": "{{count}} インバウンド",
     "latency": "遅延",
     "chart": "日別トラフィック",
-    "chartSub": "直近 30 日、上り＋下り。"
+    "chartSub": "直近 30 日、上り＋下り。",
+    "nodeInfo": "ノード情報",
+    "version": "バージョン",
+    "mode": "モード",
+    "panel": "所属パネル",
+    "forwards": "転送ルール",
+    "certs": "証明書",
+    "users": "ユーザー数",
+    "lastSeen": "最終レポート"
   },
   "inbounds": {
     "title": "インバウンド",

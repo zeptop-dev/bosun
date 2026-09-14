@@ -38,7 +38,8 @@
     "empty": "暂无数据",
     "saved": "已保存",
     "deleted": "已删除",
-    "confirmDelete": "确定删除？此操作不可撤销。"
+    "confirmDelete": "确定删除？此操作不可撤销。",
+    "logout": "退出登录"
   },
   "form": {
     "required": "必填",
@@ -88,7 +89,15 @@
     "inboundsOn": "{{count}} 个入站",
     "latency": "延迟",
     "chart": "每日流量",
-    "chartSub": "最近 30 天，上行加下行。"
+    "chartSub": "最近 30 天，上行加下行。",
+    "nodeInfo": "节点信息",
+    "version": "版本",
+    "mode": "模式",
+    "panel": "所属面板",
+    "forwards": "转发规则",
+    "certs": "证书",
+    "users": "用户数",
+    "lastSeen": "最近上报"
   },
   "inbounds": {
     "title": "入站",

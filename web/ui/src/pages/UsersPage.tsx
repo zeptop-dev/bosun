@@ -56,7 +56,7 @@ export default function UsersPage() {
             {(q.data ?? []).map((u) => (
               <Table.Tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => setSel(u)}>
                 <Table.Td><Text fw={600} size="sm">{u.name}</Text><Text size="xs" c="dimmed" ff="monospace">{u.uuid.slice(0, 8)}…</Text></Table.Td>
-                <Table.Td w={200}><Text size="xs">{bytes(u.up + u.down)}{u.quota_bytes ? ` / ${bytes(u.quota_bytes)}` : ''}</Text>{u.quota_bytes > 0 && <Progress size="xs" mt={4} value={Math.min(100, ((u.up + u.down) / u.quota_bytes) * 100)} color={(u.up + u.down) / u.quota_bytes > 0.9 ? 'orange' : 'cyan'} />}</Table.Td>
+                <Table.Td w={200}><Text size="xs">{bytes(u.up + u.down)}{u.quota_bytes ? ` / ${bytes(u.quota_bytes)}` : ''}</Text>{u.quota_bytes > 0 && <Progress size="xs" mt={4} value={Math.min(100, ((u.up + u.down) / u.quota_bytes) * 100)} color={(u.up + u.down) / u.quota_bytes > 0.9 ? 'orange' : 'brand'} />}</Table.Td>
                 <Table.Td><Text size="sm">{u.expires_at ? when(u.expires_at).split(',')[0] : t('users.never')}</Text></Table.Td>
                 <Table.Td>{u.online.length > 0 ? <Badge color="teal">{u.online.length}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
                 <Table.Td><Badge color={!u.enabled ? 'gray' : u.usable ? 'teal' : 'orange'}>{!u.enabled ? t('common.disabled') : u.usable ? t('users.active') : t('users.blocked')}</Badge></Table.Td>
