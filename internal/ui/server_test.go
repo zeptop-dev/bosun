@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zeptop-dev/bosun/internal/local"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
@@ -150,4 +152,52 @@ func TestAPI(t *testing.T) {
 		t.Fatalf("snapshot restored: %d %s", code, b)
 	}
 	_ = agentproto.State{}
+}
+
+// A panel restart (upgrade, rollback, restart button) must not sign the
+// operator out: sessions live next to the state file.
+func TestSessionsSurviveRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "local.json")
+	store, pw, err := local.Open(path, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	first := httptest.NewServer(New(Deps{Store: store, Version: "a", Log: slog.Default()}).Handler())
+	c := &client{t: t, srv: first, http: &http.Client{Jar: jar}}
+	if code, b := c.do("POST", "/api/login", map[string]string{"Username": "admin", "Password": pw}); code != 200 {
+		t.Fatalf("login: %d %s", code, b)
+	}
+	first.Close()
+
+	// New process: fresh Server on the same state path, same cookie jar
+	// (the jar keys on host:port, so reuse the listener address).
+	second := httptest.NewUnstartedServer(New(Deps{Store: store, Version: "b", Log: slog.Default()}).Handler())
+	second.Listener.Close()
+	second.Listener = mustListen(t, first.Listener.Addr().String())
+	second.Start()
+	defer second.Close()
+	c.srv = second
+	if code, b := c.do("GET", "/api/me", nil); code != 200 {
+		t.Fatalf("session lost across restart: %d %s", code, b)
+	}
+	if code, _ := c.do("POST", "/api/logout", nil); code != 200 {
+		t.Fatal("logout")
+	}
+	if code, _ := c.do("GET", "/api/me", nil); code != 401 {
+		t.Fatalf("session survived logout: %d", code)
+	}
+}
+
+func mustListen(t *testing.T, addr string) net.Listener {
+	t.Helper()
+	for i := 0; i < 20; i++ {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			return ln
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("cannot rebind %s", addr)
+	return nil
 }

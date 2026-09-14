@@ -83,9 +83,7 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	if sum.AdminChanged {
 		// Sessions belong to the previous login.
-		s.mu.Lock()
-		s.sessions = map[string]time.Time{}
-		s.mu.Unlock()
+		s.sessions.Clear()
 	}
 	ok(w, sum)
 }
