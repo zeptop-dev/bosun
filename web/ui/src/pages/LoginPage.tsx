@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { Brand } from '../components/AppLayout'
+import { pageBackground } from '../theme'
 
 export default function LoginPage() {
   const { t } = useTranslation()
@@ -18,10 +20,11 @@ export default function LoginPage() {
     try { await api.post('/api/login', v); await refresh(); nav('/') } catch (e) { setError(e instanceof Error ? e.message : t('login.failed')) } finally { setBusy(false) }
   })
   return (
-    <Center h="100vh" p="md">
-      <Card w={380} p="xl">
+    <Center h="100vh" p="md" style={{ background: pageBackground }}>
+      <Card w={400} p="xl">
         <form onSubmit={submit}>
           <Stack>
+            <Brand name="bosun" size="lg" />
             <div>
               <Title order={3}>{t('login.title')}</Title>
               <Text c="dimmed" size="sm">{t('login.subtitle')}</Text>

@@ -38,7 +38,8 @@
     "empty": "Nothing here yet",
     "saved": "Saved",
     "deleted": "Deleted",
-    "confirmDelete": "Delete? This cannot be undone."
+    "confirmDelete": "Delete? This cannot be undone.",
+    "logout": "Sign out"
   },
   "form": {
     "required": "Required",
@@ -88,7 +89,15 @@
     "inboundsOn": "{{count}} inbounds",
     "latency": "Latency",
     "chart": "Daily traffic",
-    "chartSub": "Last 30 days, upload plus download."
+    "chartSub": "Last 30 days, upload plus download.",
+    "nodeInfo": "Node",
+    "version": "Version",
+    "mode": "Mode",
+    "panel": "Panel",
+    "forwards": "Forward rules",
+    "certs": "Certificates",
+    "users": "Users",
+    "lastSeen": "Last report"
   },
   "inbounds": {
     "title": "Inbounds",
