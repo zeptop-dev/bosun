@@ -230,6 +230,33 @@ state the panel pushed. `bosun admin reset-password` recovers a lost login.
 `panel.driver: captain` or `xboard` pins headless managed mode from the config
 file; `web:` may still be set for read-only diagnostics.
 
+### Doctor
+
+Doctor is a read-only self-check: cores running, every inbound answering a
+TCP connect on its bind address (UDP-only inbounds are skipped), bind
+addresses present on an interface, forward listeners and targets, certificate
+presence and expiry, port clashes across inbounds and forwards, a
+best-effort firewall look (a default-drop input policy without an accept
+rule for an inbound port), disk and swap, contact with the panel, Komari
+reporting and NTP sync. The agent runs it 30 s after start and every 10
+minutes and sends the result to Captain when it changed (at least every 30
+minutes) as `report.doctor`; the panel page "Doctor" (`GET /api/doctor`)
+runs it on demand with a 30 s cache. `bosun doctor -c config.yaml` runs the
+same checks outside the service and exits 1 when one failed; because that
+process does not run the cores, the core check is skipped there.
+
+### Backup and restore (standalone)
+
+Settings → Backup downloads `bosun-backup-<date>.tar.gz` with `local.json`,
+its traffic history, the Komari registration and operator certificates
+(`certs/custom`); ACME storage and panel TLS files are not included and are
+obtained again. Restore (`POST /api/backup/restore`, local mode only)
+validates the archive, refuses one taken while managed, writes the files
+atomically and reloads the store in place, so cores reconfigure at once;
+the archive's admin login wins and existing sessions end when it differs.
+`bosun backup create [-o FILE]` and `bosun backup restore FILE` do the same
+from the shell (restore wants the service stopped, or `--force`).
+
 ## Run
 
 ```sh

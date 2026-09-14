@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/zeptop-dev/bosun/internal/doctor"
 	"github.com/zeptop-dev/bosun/internal/komari"
 	"github.com/zeptop-dev/bosun/internal/probe"
 	"log/slog"
@@ -63,6 +65,16 @@ type Agent struct {
 	// skipped are inbounds left out of the last apply (no certificate yet).
 	customCerts map[string]agentproto.CertStatus // pushed certificates by domain
 	skipped     map[string]string
+
+	// Doctor: last periodic report, the one last sent to the panel and the
+	// one waiting to ride on the next report; when the panel last accepted
+	// a report and the last report error (for the panel check).
+	lastDoctor    *doctor.Report
+	sentDoctor    *doctor.Report
+	sentDoctorAt  time.Time
+	pendingDoctor *doctor.Report
+	lastReport    time.Time
+	lastReportErr string
 }
 
 // ReloadCerts asks the agent to restart the cores so renewed certificate
@@ -154,6 +166,16 @@ func (a *Agent) Run(ctx context.Context) error {
 	push := time.NewTicker(iv.Push)
 	defer pull.Stop()
 	defer push.Stop()
+	// Self-check: once shortly after start, then every 10 minutes.
+	doctorTick := time.NewTicker(10 * time.Minute)
+	defer doctorTick.Stop()
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-time.After(30 * time.Second):
+			a.runDoctor(ctx)
+		}
+	}()
 	a.log.Info("running", "pull", iv.Pull, "push", iv.Push)
 
 	// Beats run on their own ticker so the panel can ask for 5-10s host
@@ -248,6 +270,8 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.log.Info("intervals updated", "pull", iv.Pull, "push", iv.Push)
 			}
 			reconfigureBeat()
+		case <-doctorTick.C:
+			a.runDoctor(ctx)
 		case <-push.C:
 			if a.report(ctx) {
 				// The panel says newer state exists: pull now instead of
@@ -556,9 +580,18 @@ func (a *Agent) report(ctx context.Context) bool {
 			// Counters were already reset; this delta is lost. A persistent
 			// spool is a later improvement.
 			a.log.Error("report failed", "users", len(list), "err", err)
+			a.statusMu.Lock()
+			a.lastReportErr = err.Error()
+			a.statusMu.Unlock()
 			return false
 		}
 		a.log.Debug("report sent", "users", len(list), "state_changed", changed)
+		a.statusMu.Lock()
+		a.lastReport, a.lastReportErr = time.Now(), ""
+		if a.pendingDoctor != nil {
+			a.sentDoctor, a.sentDoctorAt, a.pendingDoctor = a.pendingDoctor, time.Now(), nil
+		}
+		a.statusMu.Unlock()
 		if ur, ok := a.driver.(panel.UpgradeRequester); ok && a.Upgrade != nil {
 			if v := ur.UpgradeRequested(); v != "" && v != a.upgradeAsked {
 				a.upgradeAsked = v
@@ -586,6 +619,9 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	rep := agentproto.Report{Traffic: traffic, Host: host, Cores: map[string]agentproto.CoreStatus{}, Online: map[string][]string{}}
+	a.statusMu.Lock()
+	rep.Doctor = a.pendingDoctor
+	a.statusMu.Unlock()
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		rep.Cores[name] = agentproto.CoreStatus{Running: c.Running()}
