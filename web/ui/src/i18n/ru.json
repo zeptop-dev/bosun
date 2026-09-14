@@ -128,7 +128,7 @@
     "congestion": "Контроль перегрузки",
     "mieruTransport": "Транспорт mieru",
     "trafficPattern": "Шаблон трафика",
-    "trafficPatternHint": "Пусто = по умолчанию",
+    "trafficPatternHint": "trafficPattern для mita передаётся как есть. Поля: seed, unlockAll, tcpFragment{enable, maxSleepMs 0-100}, nonce{type RANDOM|PRINTABLE|PRINTABLE_SUBSET|FIXED, applyToAllUDPPacket, minLen/maxLen 0-12, customHexStrings}, padding{maxMiddlePaddingLen, maxEndPaddingLen 0-255}, lowEntropy{mode OFF|32|40|48|56, maskRotation}. Незаданные поля mieru генерирует по seed.",
     "displayHost": "Публичный адрес (необязательно)",
     "displayHint": "Если вход находится в другом месте (входная точка IPLC перенаправляет сюда), ссылки для обмена используют этот адрес и порт.",
     "displayPort": "Публичный порт",

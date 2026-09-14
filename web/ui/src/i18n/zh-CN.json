@@ -128,7 +128,7 @@
     "congestion": "拥塞控制",
     "mieruTransport": "mieru 传输",
     "trafficPattern": "流量特征",
-    "trafficPatternHint": "留空用默认",
+    "trafficPatternHint": "mita 的 trafficPattern 原样下发。字段：seed、unlockAll、tcpFragment{enable,maxSleepMs 0-100}、nonce{type RANDOM|PRINTABLE|PRINTABLE_SUBSET|FIXED, applyToAllUDPPacket, minLen/maxLen 0-12, customHexStrings}、padding{maxMiddlePaddingLen,maxEndPaddingLen 0-255}、lowEntropy{mode OFF|32|40|48|56, maskRotation}。没写的字段由 mieru 按 seed 自动生成。",
     "displayHost": "对外地址（可选）",
     "displayHint": "当入口在别处（例如 IPLC 前置转发到这台机器）时，分享链接用这里的地址和端口。",
     "displayPort": "对外端口",

@@ -82,7 +82,12 @@ function mieruStrategyOf(pattern: string): string {
   return 'custom'
 }
 function mieruPatternFor(strategy: string, current: string): string {
-  if (strategy === 'custom') return current
+  // Custom starts from the current preset (or the conservative one) with
+  // every field spelled out, so the operator edits rather than recalls.
+  if (strategy === 'custom') {
+    if (current.trim()) { try { return JSON.stringify(JSON.parse(current), null, 2) } catch { return current } }
+    return JSON.stringify({ ...(mieruPatterns.balanced as object), tcpFragment: { enable: false, maxSleepMs: 0 }, lowEntropy: { mode: 'LOW_ENTROPY_MODE_OFF', maskRotation: 'LOW_ENTROPY_MASK_NO_ROTATION' } }, null, 2)
+  }
   const tp = mieruPatterns[strategy]
   return tp ? JSON.stringify(tp) : ''
 }
@@ -266,7 +271,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           </Group>
         )}
         {v.protocol === 'mieru' && mieruStrategyOf(v.traffic_pattern) === 'custom' && (
-          <TextInput label={t('inbounds.trafficPattern')} placeholder={t('inbounds.trafficPatternHint')} {...form.getInputProps('traffic_pattern')} />
+          <JsonInput label={t('inbounds.trafficPattern')} description={t('inbounds.trafficPatternHint')} autosize minRows={6} maxRows={18} formatOnBlur {...form.getInputProps('traffic_pattern')} />
         )}
 
         {!selectedIngress && !newIngress && (

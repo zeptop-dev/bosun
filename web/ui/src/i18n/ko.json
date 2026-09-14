@@ -128,7 +128,7 @@
     "congestion": "혼잡 제어",
     "mieruTransport": "mieru 전송",
     "trafficPattern": "트래픽 패턴",
-    "trafficPatternHint": "비우면 기본값",
+    "trafficPatternHint": "mita 의 trafficPattern 을 그대로 전달합니다. 필드: seed, unlockAll, tcpFragment{enable, maxSleepMs 0-100}, nonce{type RANDOM|PRINTABLE|PRINTABLE_SUBSET|FIXED, applyToAllUDPPacket, minLen/maxLen 0-12, customHexStrings}, padding{maxMiddlePaddingLen, maxEndPaddingLen 0-255}, lowEntropy{mode OFF|32|40|48|56, maskRotation}. 비워 둔 필드는 mieru 가 seed 로 생성합니다.",
     "displayHost": "공개 주소 (선택)",
     "displayHint": "입구가 다른 곳(IPLC 앞단이 여기로 포워딩)에 있을 때 공유 링크에 이 주소와 포트를 사용합니다.",
     "displayPort": "공개 포트",

@@ -128,7 +128,7 @@
     "congestion": "輻輳制御",
     "mieruTransport": "mieru トランスポート",
     "trafficPattern": "トラフィックパターン",
-    "trafficPatternHint": "空欄でデフォルト",
+    "trafficPatternHint": "mita の trafficPattern をそのまま送ります。フィールド: seed、unlockAll、tcpFragment{enable, maxSleepMs 0-100}、nonce{type RANDOM|PRINTABLE|PRINTABLE_SUBSET|FIXED, applyToAllUDPPacket, minLen/maxLen 0-12, customHexStrings}、padding{maxMiddlePaddingLen, maxEndPaddingLen 0-255}、lowEntropy{mode OFF|32|40|48|56, maskRotation}。未設定のフィールドは mieru が seed から生成します。",
     "displayHost": "公開アドレス（任意）",
     "displayHint": "入口が別の場所（IPLC の前段からこのマシンへ転送）にある場合、共有リンクにはこのアドレスとポートを使います。",
     "displayPort": "公開ポート",

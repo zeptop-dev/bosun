@@ -128,7 +128,7 @@
     "congestion": "壅塞控制",
     "mieruTransport": "mieru 傳輸",
     "trafficPattern": "流量特徵",
-    "trafficPatternHint": "留空用預設",
+    "trafficPatternHint": "mita 的 trafficPattern 原樣下發。欄位：seed、unlockAll、tcpFragment{enable,maxSleepMs 0-100}、nonce{type RANDOM|PRINTABLE|PRINTABLE_SUBSET|FIXED, applyToAllUDPPacket, minLen/maxLen 0-12, customHexStrings}、padding{maxMiddlePaddingLen,maxEndPaddingLen 0-255}、lowEntropy{mode OFF|32|40|48|56, maskRotation}。未填的欄位由 mieru 依 seed 自動產生。",
     "displayHost": "對外位址（選填）",
     "displayHint": "當入口在別處（例如 IPLC 前置轉發到這台機器）時，分享連結用這裡的位址和連接埠。",
     "displayPort": "對外連接埠",
