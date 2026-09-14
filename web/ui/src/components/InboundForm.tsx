@@ -71,7 +71,6 @@ const recipes: { key: string; values: Partial<Values> }[] = [
   { key: 'hysteria2', values: { protocol: 'hysteria2', port: 8443, tls: 'tls', auto_cert: true, obfs: 'salamander', up_mbps: 100, down_mbps: 500 } },
   { key: 'mieru', values: { protocol: 'mieru', port: 24450, tls: 'none', mieru_transport: 'TCP' } },
   // The IPLC recipe also picks (or describes) a line ingress; see apply().
-  { key: 'mieruLine', values: { protocol: 'mieru', port: 17701, tls: 'none', mieru_transport: 'TCP' } },
   { key: 'ss2022', values: { protocol: 'shadowsocks', port: 8388, tls: 'none', cipher: '2022-blake3-aes-128-gcm' } },
   { key: 'trojanWs', values: { protocol: 'trojan', port: 443, tls: 'tls', auto_cert: true, transport: 'ws', path: '/trojan' } },
   { key: 'anytls', values: { protocol: 'anytls', port: 8444, tls: 'tls', auto_cert: true } },
@@ -120,16 +119,9 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
     try { const k = await api.post<{ password: string }>('/api/keys/password'); form.setFieldValue('obfs_password', k.password) } catch (e) { toast.err(e) }
   }
   const apply = (r: (typeof recipes)[number]) => {
-    if (r.key === 'mieruLine') {
-      // Reuse the node's first line ingress, else describe one inline.
-      const g = ingresses[0]
-      form.setValues({ ...empty, ...r.values, tag: v.tag || 'mieru-iplc', remark: v.remark, enabled: true, ingress_id: g ? g.id : '', port: firstFree(g) || 17701 })
-      setNewIngress(!g)
-      if (!g) ingressForm.setValues(emptyIngress)
-      return
-    }
-    setNewIngress(false)
-    form.setValues({ ...empty, ...r.values, tag: v.tag || r.values.protocol!, remark: v.remark, enabled: true })
+    // A recipe keeps the chosen line ingress and takes a port from its range; any protocol may ride a line.
+    const port = selectedIngress && selectedIngress.port_from ? (firstFree(selectedIngress) || r.values.port) : r.values.port
+    form.setValues({ ...empty, ...r.values, port, tag: v.tag || r.values.protocol!, remark: v.remark, enabled: true, ingress_id: v.ingress_id })
     if (r.values.tls === 'reality') void genReality()
     if (r.values.cipher?.startsWith('2022')) void genKey()
     if (r.values.obfs) void genPassword()
