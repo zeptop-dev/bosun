@@ -70,7 +70,7 @@ type Server struct {
 
 	mu       sync.Mutex
 	agent    *agent.Agent
-	sessions map[string]time.Time
+	sessions *sessionStore
 	failed   map[string]failure
 	// doctorRep is the last on-demand self-check, served again for 30 s.
 	doctorRep *agentproto.DoctorReport
@@ -84,7 +84,7 @@ type failure struct {
 
 // New builds the handler.
 func New(d Deps) *Server {
-	s := &Server{d: d, mux: http.NewServeMux(), start: time.Now(), sessions: map[string]time.Time{}, failed: map[string]failure{}}
+	s := &Server{d: d, mux: http.NewServeMux(), start: time.Now(), sessions: newSessionStore(d.Store.Path(), sessionTTL), failed: map[string]failure{}}
 	s.routes()
 	return s
 }
@@ -198,14 +198,7 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			fail(w, http.StatusUnauthorized, errors.New("not signed in"))
 			return
 		}
-		s.mu.Lock()
-		exp, found := s.sessions[c.Value]
-		if found && time.Now().After(exp) {
-			delete(s.sessions, c.Value)
-			found = false
-		}
-		s.mu.Unlock()
-		if !found {
+		if !s.sessions.Valid(c.Value) {
 			fail(w, http.StatusUnauthorized, errors.New("session expired"))
 			return
 		}
@@ -251,22 +244,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	tok := authutil.Token(32)
 	s.mu.Lock()
 	delete(s.failed, ip)
-	s.sessions[tok] = time.Now().Add(sessionTTL)
-	for k, exp := range s.sessions {
-		if time.Now().After(exp) {
-			delete(s.sessions, k)
-		}
-	}
 	s.mu.Unlock()
+	s.sessions.Add(tok)
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: tok, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.d.Secure, MaxAge: int(sessionTTL.Seconds())})
 	ok(w, map[string]any{"username": in.Username, "version": s.d.Version})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookie); err == nil {
-		s.mu.Lock()
-		delete(s.sessions, c.Value)
-		s.mu.Unlock()
+		s.sessions.Remove(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
 	ok(w, map[string]bool{"ok": true})
