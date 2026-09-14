@@ -14,6 +14,7 @@ type serverConfig struct {
 	PortBindings   []portBinding   `json:"portBindings"`
 	Users          []user          `json:"users"`
 	LoggingLevel   string          `json:"loggingLevel,omitempty"`
+	MTU            int             `json:"mtu,omitempty"`
 	DNS            *dnsConfig      `json:"dns,omitempty"`
 	TrafficPattern json.RawMessage `json:"trafficPattern,omitempty"`
 }
@@ -51,10 +52,24 @@ func render(inbounds []spec.Inbound, users []spec.User, logLevel string) ([]byte
 		if proto == "" {
 			proto = "TCP"
 		}
-		if proto != "TCP" && proto != "UDP" {
-			return nil, fmt.Errorf("mita: inbound %q: transport must be TCP or UDP, got %q", ib.Tag, ib.MieruTransport)
+		switch proto {
+		case "TCP", "UDP":
+			cfg.PortBindings = append(cfg.PortBindings, portBinding{Port: ib.Port, Protocol: proto})
+		case "BOTH":
+			// TCP at the port, UDP right after it (nobrand's convention).
+			if ib.Port+1 > 65535 {
+				return nil, fmt.Errorf("mita: inbound %q: BOTH needs port+1 (%d) to be valid", ib.Tag, ib.Port+1)
+			}
+			cfg.PortBindings = append(cfg.PortBindings, portBinding{Port: ib.Port, Protocol: "TCP"}, portBinding{Port: ib.Port + 1, Protocol: "UDP"})
+		default:
+			return nil, fmt.Errorf("mita: inbound %q: transport must be TCP, UDP or BOTH, got %q", ib.Tag, ib.MieruTransport)
 		}
-		cfg.PortBindings = append(cfg.PortBindings, portBinding{Port: ib.Port, Protocol: proto})
+		if ib.MieruMTU > 0 {
+			if ib.MieruMTU < 1280 || ib.MieruMTU > 1500 {
+				return nil, fmt.Errorf("mita: inbound %q: mtu must be 1280-1500", ib.Tag)
+			}
+			cfg.MTU = ib.MieruMTU
+		}
 		if cfg.TrafficPattern == nil && ib.TrafficPattern != "" {
 			tp := strings.TrimSpace(ib.TrafficPattern)
 			if json.Valid([]byte(tp)) && strings.HasPrefix(tp, "{") {
@@ -79,7 +94,7 @@ func render(inbounds []spec.Inbound, users []spec.User, logLevel string) ([]byte
 func bindingsKey(inbounds []spec.Inbound) string {
 	parts := make([]string, 0, len(inbounds))
 	for _, ib := range inbounds {
-		parts = append(parts, fmt.Sprintf("%d/%s", ib.Port, strings.ToUpper(ib.MieruTransport)))
+		parts = append(parts, fmt.Sprintf("%d/%s/%d", ib.Port, strings.ToUpper(ib.MieruTransport), ib.MieruMTU))
 	}
 	return strings.Join(parts, ",")
 }

@@ -31,6 +31,7 @@ type Config struct {
 		Xray          *XrayCore     `yaml:"xray"`
 		Mita          *MitaCore     `yaml:"mita"`
 		Hysteria      *HysteriaCore `yaml:"hysteria"`
+		Snell         *SnellCore    `yaml:"snell"`
 	} `yaml:"cores"`
 
 	// Probe runs the latency checks on a node that is not managed by
@@ -82,7 +83,7 @@ func (c *Config) CoresDir() string { return filepath.Join(c.DataDir, "cores") }
 
 // CoreOrder returns the effective core preference order.
 func (c *Config) CoreOrder() []string {
-	def := []string{"singbox", "xray", "mita", "hysteria"}
+	def := []string{"singbox", "xray", "mita", "hysteria", "snell"}
 	out := append([]string(nil), c.Cores.Order...)
 	for _, d := range def {
 		seen := false
@@ -129,6 +130,12 @@ type MitaCore struct {
 	Binary   string `yaml:"binary"`
 	Version  string `yaml:"version"`
 	LogLevel string `yaml:"log_level"`
+}
+
+// SnellCore enables the Surge snell-server adapter (snell protocol only).
+type SnellCore struct {
+	Binary  string `yaml:"binary"`
+	Version string `yaml:"version"` // manifest version when managed: "5.0.0" (default) or "4.1.1"
 }
 
 // CaptainPanel configures the Captain driver.
@@ -182,8 +189,8 @@ func Load(path string) (*Config, error) {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
-	if c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil && c.Cores.Hysteria == nil {
-		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita, cores.hysteria)")
+	if c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil && c.Cores.Hysteria == nil && c.Cores.Snell == nil {
+		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita, cores.hysteria, cores.snell)")
 	}
 	// BOSUN_CAPTAIN / BOSUN_PAIR (the docker one-liner Captain prints) select
 	// the Captain driver without editing the baked-in config. The pair code is
@@ -226,7 +233,7 @@ func Load(path string) (*Config, error) {
 	}
 	for _, name := range c.Cores.Order {
 		switch name {
-		case "singbox", "xray", "mita", "hysteria":
+		case "singbox", "xray", "mita", "hysteria", "snell":
 		default:
 			return nil, fmt.Errorf("config: cores.order: unknown core %q", name)
 		}

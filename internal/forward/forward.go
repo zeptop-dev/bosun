@@ -57,6 +57,9 @@ type rule struct {
 	up        bool
 	rtt       time.Duration
 	lastError string
+	// nftBroken marks an nft rule whose ruleset could not be installed; the
+	// target probe then never reports it up.
+	nftBroken bool
 }
 
 // Manager owns the set of running rules and reconciles it against a spec.
@@ -64,6 +67,8 @@ type Manager struct {
 	log   *slog.Logger
 	mu    sync.Mutex
 	rules map[string]*rule
+	// nftApplied is the nft script currently installed ("" = no table).
+	nftApplied string
 }
 
 // NewManager returns an empty manager.
@@ -72,7 +77,7 @@ func NewManager(log *slog.Logger) *Manager {
 }
 
 func key(f spec.Forward) string {
-	return fmt.Sprintf("%s|%s|%d|%s|%s", f.Tag, f.Listen, f.Port, f.Protocol, f.Target)
+	return fmt.Sprintf("%s|%s|%d|%s|%s|%s|%t", f.Tag, f.Listen, f.Port, f.Protocol, f.Target, f.Backend, f.PreserveSource)
 }
 
 // Apply makes the running set match forwards: unchanged rules keep their
@@ -95,8 +100,20 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 		}
 	}
 	var firstErr error
+	nftChanged := false
+	var nftRules []spec.Forward
 	for k, f := range want {
+		if f.Backend == "nft" {
+			nftRules = append(nftRules, f)
+		}
 		if _, running := m.rules[k]; running {
+			continue
+		}
+		if f.Backend == "nft" {
+			// The kernel does the relaying; bosun only keeps the target probe.
+			m.rules[k] = startProbeOnly(f, m.log)
+			nftChanged = true
+			m.log.Info("nft forward added", "tag", f.Tag, "port", f.Port, "protocol", f.Protocol, "target", f.Target, "preserve_source", f.PreserveSource)
 			continue
 		}
 		r, err := start(f, m.log)
@@ -110,7 +127,22 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 		m.rules[k] = r
 		m.log.Info("forward started", "tag", f.Tag, "listen", f.Listen, "port", f.Port, "protocol", f.Protocol, "target", f.Target)
 	}
+	if nftChanged || (len(nftRules) == 0 && m.nftApplied != "") || (len(nftRules) > 0 && m.nftApplied == "") {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		m.applyNFT(ctx, nftRules)
+		cancel()
+	}
 	return firstErr
+}
+
+// startProbeOnly builds a rule that opens no listener (the kernel forwards)
+// but still probes the target so the panel sees its health.
+func startProbeOnly(f spec.Forward, log *slog.Logger) *rule {
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &rule{spec: f, cancel: cancel, log: log.With("tag", f.Tag), up: true}
+	r.wg.Add(1)
+	go r.probeLoop(ctx)
+	return r
 }
 
 // Stop tears down every rule.
@@ -120,6 +152,11 @@ func (m *Manager) Stop() {
 	for k, r := range m.rules {
 		r.stop()
 		delete(m.rules, k)
+	}
+	if m.nftApplied != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		m.applyNFT(ctx, nil)
+		cancel()
 	}
 }
 
@@ -156,6 +193,14 @@ func validate(forwards []spec.Forward) error {
 		case "tcp", "udp", "both":
 		default:
 			return fmt.Errorf("forward %q: protocol must be tcp, udp or both", f.Tag)
+		}
+		switch f.Backend {
+		case "", "nft":
+		default:
+			return fmt.Errorf("forward %q: backend must be empty (relay) or nft", f.Tag)
+		}
+		if f.PreserveSource && f.Backend != "nft" {
+			return fmt.Errorf("forward %q: preserve_source needs the nft backend", f.Tag)
 		}
 		if _, _, err := net.SplitHostPort(f.Target); err != nil {
 			return fmt.Errorf("forward %q: target must be host:port: %w", f.Tag, err)
@@ -258,6 +303,13 @@ func (r *rule) probeLoop(ctx context.Context) {
 }
 
 func (r *rule) probe(ctx context.Context) bool {
+	r.probeMu.Lock()
+	broken := r.nftBroken
+	r.probeMu.Unlock()
+	if broken {
+		// The ruleset is not installed; keep the apply error visible.
+		return false
+	}
 	dctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	start := time.Now()
