@@ -242,6 +242,51 @@ func validateInbound(ib *Inbound) error {
 	if ib.Protocol == spec.Shadowsocks && ib.Cipher == "" {
 		return errors.New("shadowsocks needs a cipher")
 	}
+	if ib.Protocol == spec.Mieru {
+		ib.MieruTransport = strings.ToUpper(strings.TrimSpace(ib.MieruTransport))
+		switch ib.MieruTransport {
+		case "", "TCP", "UDP":
+		case "BOTH":
+			if ib.Port >= 65535 {
+				return errors.New("mieru BOTH needs port+1 to be valid")
+			}
+		default:
+			return errors.New("mieru transport must be TCP, UDP or BOTH")
+		}
+		if ib.MieruMTU != 0 && (ib.MieruMTU < 1280 || ib.MieruMTU > 1500) {
+			return errors.New("mieru mtu must be 1280-1500")
+		}
+		switch ib.MieruMultiplexing {
+		case "", "MULTIPLEXING_OFF", "MULTIPLEXING_LOW", "MULTIPLEXING_MIDDLE", "MULTIPLEXING_HIGH":
+		default:
+			return errors.New("mieru multiplexing must be MULTIPLEXING_OFF, _LOW, _MIDDLE or _HIGH")
+		}
+		switch ib.MieruHandshake {
+		case "", "HANDSHAKE_NO_WAIT", "HANDSHAKE_STANDARD":
+		default:
+			return errors.New("mieru handshake must be HANDSHAKE_NO_WAIT or HANDSHAKE_STANDARD")
+		}
+	}
+	if ib.Protocol == spec.Snell {
+		ib.SnellPSK = strings.TrimSpace(ib.SnellPSK)
+		if ib.SnellPSK == "" {
+			return errors.New("snell needs a psk")
+		}
+		if ib.SnellVersion == 0 {
+			ib.SnellVersion = 5
+		}
+		if ib.SnellVersion != 4 && ib.SnellVersion != 5 {
+			return errors.New("snell version must be 4 or 5")
+		}
+		switch ib.SnellObfs {
+		case "", "off", "http", "tls":
+			if ib.SnellObfs == "off" {
+				ib.SnellObfs = ""
+			}
+		default:
+			return errors.New("snell obfs must be off, http or tls")
+		}
+	}
 	if ib.TLS != nil && ib.TLS.Mode == spec.TLSReality {
 		if ib.TLS.Reality == nil || ib.TLS.Reality.PrivateKey == "" {
 			return errors.New("reality needs a private key")

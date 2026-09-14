@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -174,14 +175,46 @@ func shareURI(ib spec.Inbound, host string, port int, name string, u spec.User) 
 		return "anytls://" + url.PathEscape(u.Password) + "@" + hostPort + "?" + q.Encode() + frag
 	case spec.Mieru:
 		q := url.Values{}
-		q.Set("port", strconv.Itoa(port))
-		proto := ib.MieruTransport
+		proto := strings.ToUpper(ib.MieruTransport)
 		if proto == "" {
 			proto = "TCP"
 		}
-		q.Set("protocol", proto)
+		if proto == "BOTH" {
+			// mierus:// pairs each port with the protocol at the same position.
+			q.Add("port", strconv.Itoa(port))
+			q.Add("protocol", "TCP")
+			q.Add("port", strconv.Itoa(port+1))
+			q.Add("protocol", "UDP")
+		} else {
+			q.Set("port", strconv.Itoa(port))
+			q.Set("protocol", proto)
+		}
 		q.Set("profile", name)
+		if ib.MieruMTU > 0 {
+			q.Set("mtu", strconv.Itoa(ib.MieruMTU))
+		}
+		if ib.MieruMultiplexing != "" {
+			q.Set("multiplexing", ib.MieruMultiplexing)
+		}
+		if ib.MieruHandshake != "" {
+			q.Set("handshake-mode", ib.MieruHandshake)
+		}
 		return "mierus://" + url.PathEscape(u.UUID) + ":" + url.PathEscape(u.Password) + "@" + host + "?" + q.Encode()
+	case spec.Snell:
+		// Snell has no share-URI standard; a Surge proxy line is the lingua
+		// franca (Surge, Loon and mihomo import it).
+		v := ib.SnellVersion
+		if v == 0 {
+			v = 5
+		}
+		line := fmt.Sprintf("%s = snell, %s, %d, psk=%s, version=%d", name, host, port, ib.SnellPSK, v)
+		if ib.SnellObfs != "" {
+			line += ", obfs=" + ib.SnellObfs
+			if ib.SnellObfsHost != "" {
+				line += ", obfs-host=" + ib.SnellObfsHost
+			}
+		}
+		return line
 	}
 	return ""
 }
