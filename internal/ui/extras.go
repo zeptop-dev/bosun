@@ -29,6 +29,8 @@ func (s *Server) extraRoutes() {
 	m.HandleFunc("POST /api/certificates", auth(s.local(s.putCertificate)))
 	m.HandleFunc("DELETE /api/certificates/{domain}", auth(s.local(s.deleteCertificate)))
 
+	m.HandleFunc("GET /api/komari", auth(s.getKomari))
+	m.HandleFunc("PUT /api/komari", auth(s.local(s.putKomari)))
 	m.HandleFunc("GET /api/probe", auth(s.getProbe))
 	m.HandleFunc("PUT /api/probe", auth(s.local(s.putProbe)))
 }
@@ -212,4 +214,26 @@ func (s *Server) putProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	storeErr(w, s.d.Store.SetProbe(p))
+}
+
+// ---- komari ----------------------------------------------------------------
+
+func (s *Server) getKomari(w http.ResponseWriter, r *http.Request) {
+	k := s.d.Store.KomariSettings()
+	hasKey := k.Key != ""
+	k.Key = ""
+	var st any
+	if a := s.currentAgent(); a != nil {
+		st = a.KomariStatus()
+	}
+	ok(w, map[string]any{"settings": k, "has_key": hasKey, "status": st})
+}
+
+func (s *Server) putKomari(w http.ResponseWriter, r *http.Request) {
+	var k spec.Komari
+	if err := decode(r, &k); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	storeErr(w, s.d.Store.SetKomari(k))
 }

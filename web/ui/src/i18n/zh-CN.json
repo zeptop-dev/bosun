@@ -371,5 +371,23 @@
     "restart": "重启",
     "restartConfirm": "进程退出后由 systemd 或 Docker 拉起，内核会重启。继续？",
     "restarting": "正在重启，等待服务恢复…"
+  },
+  "komari": {
+    "title": "Komari 上报",
+    "hint": "把这台节点作为 agent 接入 Komari 监控：填服务器地址和自动发现密钥，节点自动注册，之后每隔几秒上报 CPU、内存、磁盘、网络等指标，并响应 Komari 下发的延迟任务。不提供终端、文件和远程执行。与本机探针互不影响。",
+    "server": "Komari 地址",
+    "key": "自动发现密钥",
+    "keyHint": "Komari → 设置 → 通用 → 自动发现密钥；只在首次注册时使用",
+    "keySet": "已保存；留空不改",
+    "name": "显示名称",
+    "nameHint": "留空用主机名；Komari 会加 Auto- 前缀",
+    "interval": "上报间隔（秒）",
+    "enabled": "启用",
+    "reporting": "上报中",
+    "registering": "注册中",
+    "error": "出错",
+    "uuid": "UUID",
+    "lastReport": "最近上报 {{at}}，共 {{n}} 次",
+    "noReport": "还没有上报"
   }
 }

@@ -371,5 +371,23 @@
     "restart": "재시작",
     "restartConfirm": "프로세스가 종료된 뒤 systemd 나 Docker 가 다시 시작합니다. 코어도 재시작됩니다. 계속할까요?",
     "restarting": "재시작 중, 서비스 복구를 기다리는 중…"
+  },
+  "komari": {
+    "title": "Komari 보고",
+    "hint": "이 노드를 에이전트로 Komari 모니터에 연결합니다. 서버 주소와 자동 검색 키를 입력하면 자동 등록되고, 몇 초마다 CPU·메모리·디스크·네트워크 지표를 보내며 Komari의 ping 작업에 응답합니다. 터미널, 파일, 원격 실행은 제공하지 않습니다. 로컬 프로브와는 별개입니다.",
+    "server": "Komari 주소",
+    "key": "자동 검색 키",
+    "keyHint": "Komari → 설정 → 일반 → 자동 검색 키; 최초 등록에만 사용",
+    "keySet": "저장됨; 비우면 유지",
+    "name": "표시 이름",
+    "nameHint": "비우면 호스트명; Komari가 Auto- 접두사를 붙입니다",
+    "interval": "보고 간격(초)",
+    "enabled": "사용",
+    "reporting": "보고 중",
+    "registering": "등록 중",
+    "error": "오류",
+    "uuid": "UUID",
+    "lastReport": "마지막 보고 {{at}}, 총 {{n}}회",
+    "noReport": "아직 보고 없음"
   }
 }

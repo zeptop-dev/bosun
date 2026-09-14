@@ -282,6 +282,17 @@ type Probe struct {
 	Tasks       []PingTask `json:"tasks,omitempty"`
 }
 
+// Komari makes the node report to a Komari monitoring server as a v2
+// agent: it registers itself once through the auto-discovery key, then
+// sends host metrics every few seconds and answers ping tasks.
+type Komari struct {
+	Enabled  bool   `json:"enabled"`
+	Server   string `json:"server"`             // https://komari.example.com
+	Key      string `json:"key,omitempty"`      // auto-discovery key (registration only)
+	Name     string `json:"name,omitempty"`     // client name; "" = hostname
+	Interval int    `json:"interval,omitempty"` // report seconds, default 3
+}
+
 // Carrier is one always-on TCP-connect latency target, named after the
 // network it represents (CT/CU/CM by default).
 type Carrier struct {

@@ -206,6 +206,9 @@ func (r *Runner) taskLoop(ctx context.Context, t spec.PingTask) {
 
 // measure runs one task: DNS is resolved before timing (Komari), a result
 // above one second is retried up to three times, -1 means lost.
+// Measure runs one task once (Komari ping events).
+func (r *Runner) Measure(ctx context.Context, t spec.PingTask) float64 { return r.measure(ctx, t) }
+
 func (r *Runner) measure(ctx context.Context, t spec.PingTask) float64 {
 	var best float64 = -1
 	for attempt := 0; attempt < 3; attempt++ {

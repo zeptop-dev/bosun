@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { KomariCard } from '../components/KomariCard'
 import { api, type Carrier, type ProbeInfo, type ProbeSettings, type ProbeTask } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { toast } from '../lib/notify'
@@ -76,6 +77,7 @@ export default function ProbePage() {
           )}
         </Stack>
       </Card>
+      <KomariCard readOnly={readOnly} />
     </>
   )
 }
