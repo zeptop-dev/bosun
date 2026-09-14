@@ -88,6 +88,49 @@ func Open(path string, log *slog.Logger) (*Store, string, error) {
 
 func (s *Store) historyPath() string { return strings.TrimSuffix(s.path, ".json") + ".history.json" }
 
+// Path is the state file location.
+func (s *Store) Path() string { return s.path }
+
+// AdminKey identifies the current login ("username:hash") for restores.
+func (s *Store) AdminKey() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.Admin.Username + ":" + s.st.Admin.PasswordHash
+}
+
+// Reload re-reads the state file (after a restore wrote it), keeps the
+// revision monotonic and wakes the agent so the new objects apply.
+func (s *Store) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	raw, err := os.ReadFile(s.path)
+	if err != nil {
+		return err
+	}
+	var st State
+	st.Probe.CarrierPing = true
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return fmt.Errorf("local: %s: %w", s.path, err)
+	}
+	if st.Mode == "" {
+		st.Mode = ModeLocal
+	}
+	if st.Revision <= s.st.Revision {
+		st.Revision = s.st.Revision + 1
+	}
+	s.st = st
+	s.history = nil
+	s.loadHistory()
+	if err := s.saveLocked(); err != nil {
+		return err
+	}
+	select {
+	case s.changed <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
 func (s *Store) loadHistory() {
 	raw, err := os.ReadFile(s.historyPath())
 	if err == nil {

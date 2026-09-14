@@ -61,6 +61,48 @@ type Report struct {
 	Cores    map[string]CoreStatus `json:"cores,omitempty"`
 	Certs    []CertStatus          `json:"certs,omitempty"`
 	Host     spec.SystemStatus     `json:"host"`
+	// Doctor is the node's latest self-check, sent when it changed and at
+	// least every 30 minutes.
+	Doctor *DoctorReport `json:"doctor,omitempty"`
+}
+
+// DoctorCheck is one verdict of the node's self-check.
+type DoctorCheck struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"` // ok | warn | fail | skip
+	Detail string `json:"detail,omitempty"`
+}
+
+// DoctorSummary counts checks by status.
+type DoctorSummary struct {
+	OK   int `json:"ok"`
+	Warn int `json:"warn"`
+	Fail int `json:"fail"`
+	Skip int `json:"skip"`
+}
+
+// DoctorReport is one self-check run.
+type DoctorReport struct {
+	At      time.Time     `json:"at"`
+	Checks  []DoctorCheck `json:"checks"`
+	Summary DoctorSummary `json:"summary"`
+}
+
+// Failed reports whether any check failed.
+func (r DoctorReport) Failed() bool { return r.Summary.Fail > 0 }
+
+// Same reports whether two reports carry the same verdicts (time aside).
+func (r DoctorReport) Same(o *DoctorReport) bool {
+	if o == nil || len(r.Checks) != len(o.Checks) {
+		return false
+	}
+	for i := range r.Checks {
+		if r.Checks[i] != o.Checks[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // CertStatus is one automatically managed certificate.
