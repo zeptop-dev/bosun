@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/zeptop-dev/bosun/internal/komari"
 	"github.com/zeptop-dev/bosun/internal/probe"
 	"log/slog"
 	"path/filepath"
@@ -55,6 +56,10 @@ type Agent struct {
 	// probe config when the driver is a panel.Beater.
 	sampler sysinfo.Sampler
 	probes  probe.Runner
+	// komari reports to a Komari server when the driver carries a config.
+	komari komari.Exporter
+	// Version is the bosun release string reported to Komari.
+	Version string
 	// skipped are inbounds left out of the last apply (no certificate yet).
 	customCerts map[string]agentproto.CertStatus // pushed certificates by domain
 	skipped     map[string]string
@@ -158,8 +163,14 @@ func (a *Agent) Run(ctx context.Context) error {
 	beat.Stop()
 	defer beat.Stop()
 	defer a.probes.Stop()
+	defer a.komari.Stop()
+	a.komari.CredFile, a.komari.Sampler, a.komari.Prober, a.komari.Log, a.komari.Version = filepath.Join(a.cfg.DataDir, "komari.json"), &a.sampler, &a.probes, a.log, a.Version
+	ks, _ := a.driver.(panel.KomariSource)
 	beatEvery := time.Duration(0)
 	reconfigureBeat := func() {
+		if ks != nil {
+			a.komari.Configure(ctx, ks.Komari())
+		}
 		if beater == nil {
 			// Standalone: the local store decides when it can, else the
 			// config file; results only show up on /metrics and in the
@@ -627,6 +638,9 @@ func (a *Agent) applyForwards(ctx context.Context) error {
 	}
 	return a.fwd.Apply(rules)
 }
+
+// KomariStatus reports the exporter's state for the UI.
+func (a *Agent) KomariStatus() komari.Status { return a.komari.Status() }
 
 // ProbeResults returns the latest carrier and task measurements.
 func (a *Agent) ProbeResults() []spec.PingResult { return a.probes.Results() }

@@ -371,5 +371,23 @@
     "restart": "再起動",
     "restartConfirm": "プロセスが終了し、systemd または Docker が再起動します。コアも再起動します。続行しますか？",
     "restarting": "再起動中。サービスの復帰を待っています…"
+  },
+  "komari": {
+    "title": "Komari レポート",
+    "hint": "このノードをエージェントとして Komari モニターに接続します。サーバー URL と自動検出キーを入力すると自動登録され、数秒ごとに CPU・メモリ・ディスク・ネットワークの指標を送信し、Komari の ping タスクに応答します。ターミナル・ファイル・リモート実行は提供しません。ローカルのプローブとは独立です。",
+    "server": "Komari URL",
+    "key": "自動検出キー",
+    "keyHint": "Komari → 設定 → 一般 → 自動検出キー。初回登録時のみ使用",
+    "keySet": "保存済み。空欄なら変更なし",
+    "name": "表示名",
+    "nameHint": "空欄ならホスト名。Komari 側で Auto- が付きます",
+    "interval": "送信間隔（秒）",
+    "enabled": "有効",
+    "reporting": "送信中",
+    "registering": "登録中",
+    "error": "エラー",
+    "uuid": "UUID",
+    "lastReport": "最終送信 {{at}}、合計 {{n}} 回",
+    "noReport": "まだ送信していません"
   }
 }

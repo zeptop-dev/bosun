@@ -141,6 +141,18 @@ probe:
     - { name: IPLC, type: tcp, target: 198.51.100.20:17701, source_ip: 10.10.0.2 }
 ```
 
+## Komari reporting
+
+Probe → Komari reporting turns the node into a Komari agent: with the
+server URL and the auto-discovery key (Komari → Settings → General) it
+registers once (`POST /api/clients/register`, client named `Auto-<name>`),
+keeps the token in `<data_dir>/komari.json`, then posts `agent.basicInfo`
+and `agent.report` over JSON-RPC every few seconds and answers Komari's
+ping tasks (icmp/tcp/http) through its own probe runner. Only the `ping`
+capability is advertised: no terminal, file or exec access. Captain can push
+the same setting to every managed node (`state.komari`). A deleted client on
+the Komari side makes the node re-register automatically.
+
 ## Certificates
 
 Inbounds that need TLS (Hysteria2, Trojan, AnyTLS, VLESS/VMess over TLS) can

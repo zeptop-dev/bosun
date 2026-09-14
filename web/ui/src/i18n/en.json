@@ -371,5 +371,23 @@
     "restart": "Restart",
     "restartConfirm": "The process exits and systemd or Docker starts it again; cores restart. Continue?",
     "restarting": "Restarting, waiting for the service to come back…"
+  },
+  "komari": {
+    "title": "Komari reporting",
+    "hint": "Report this node to a Komari monitor as an agent: give the server URL and the auto-discovery key, the node registers itself, then sends CPU, memory, disk and network metrics every few seconds and answers Komari's ping tasks. No terminal, files or remote exec. Independent of the local probe.",
+    "server": "Komari URL",
+    "key": "Auto-discovery key",
+    "keyHint": "Komari → Settings → General → auto-discovery key; used only for the first registration",
+    "keySet": "saved; blank keeps it",
+    "name": "Display name",
+    "nameHint": "Blank = hostname; Komari prefixes it with Auto-",
+    "interval": "Report interval (s)",
+    "enabled": "Enabled",
+    "reporting": "reporting",
+    "registering": "registering",
+    "error": "error",
+    "uuid": "UUID",
+    "lastReport": "last report {{at}}, {{n}} total",
+    "noReport": "no report yet"
   }
 }

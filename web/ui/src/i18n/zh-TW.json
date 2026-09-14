@@ -371,5 +371,23 @@
     "restart": "重新啟動",
     "restartConfirm": "程序結束後由 systemd 或 Docker 拉起，核心會重新啟動。繼續？",
     "restarting": "正在重新啟動，等待服務恢復…"
+  },
+  "komari": {
+    "title": "Komari 上報",
+    "hint": "把這台節點作為 agent 接入 Komari 監控：填伺服器位址和自動發現金鑰，節點自動註冊，之後每隔幾秒上報 CPU、記憶體、磁碟、網路等指標，並回應 Komari 下發的延遲任務。不提供終端、檔案和遠端執行。與本機探針互不影響。",
+    "server": "Komari 位址",
+    "key": "自動發現金鑰",
+    "keyHint": "Komari → 設定 → 一般 → 自動發現金鑰；只在首次註冊時使用",
+    "keySet": "已儲存；留空不改",
+    "name": "顯示名稱",
+    "nameHint": "留空用主機名稱；Komari 會加 Auto- 前綴",
+    "interval": "上報間隔（秒）",
+    "enabled": "啟用",
+    "reporting": "上報中",
+    "registering": "註冊中",
+    "error": "錯誤",
+    "uuid": "UUID",
+    "lastReport": "最近上報 {{at}}，共 {{n}} 次",
+    "noReport": "尚未上報"
   }
 }

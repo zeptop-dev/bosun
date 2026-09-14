@@ -51,6 +51,8 @@ type State struct {
 	Certificates []spec.Certificate `json:"certificates,omitempty"`
 	// Probe is the standalone monitoring configuration.
 	Probe ProbeSettings `json:"probe"`
+	// Komari reports this node to a Komari server as an agent.
+	Komari spec.Komari `json:"komari"`
 }
 
 // Ingress is a way into the node other than its public address: an IPLC

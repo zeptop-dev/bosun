@@ -30,6 +30,12 @@ type Beater interface {
 	Beat(ctx context.Context, b agentproto.Beat) error
 }
 
+// KomariSource is implemented by drivers that carry a Komari exporter
+// configuration (the local store's settings or Captain's state).
+type KomariSource interface {
+	Komari() *spec.Komari
+}
+
 // ProbeSource is implemented by drivers that decide the probe configuration
 // without receiving beats (the local store): results stay on the node.
 type ProbeSource interface {

@@ -352,6 +352,17 @@ func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error
 }
 
 // Probe returns the panel's monitoring configuration (nil when off).
+// Komari implements panel.KomariSource from the last pulled state.
+func (c *Client) Komari() *spec.Komari {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state == nil || c.state.Komari == nil {
+		return nil
+	}
+	k := *c.state.Komari
+	return &k
+}
+
 func (c *Client) Probe() *spec.Probe {
 	c.mu.Lock()
 	defer c.mu.Unlock()

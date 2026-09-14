@@ -399,3 +399,42 @@ func (s *Store) Probe() *spec.Probe {
 	}
 	return p
 }
+
+// ---- komari ----------------------------------------------------------------
+
+// KomariSettings returns the exporter configuration.
+func (s *Store) KomariSettings() spec.Komari {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.Komari
+}
+
+// SetKomari validates and stores it; a blank key keeps the stored one.
+func (s *Store) SetKomari(k spec.Komari) error {
+	k.Server = strings.TrimRight(strings.TrimSpace(k.Server), "/")
+	k.Name = strings.TrimSpace(k.Name)
+	if k.Enabled && !strings.HasPrefix(k.Server, "http://") && !strings.HasPrefix(k.Server, "https://") {
+		return errors.New("komari: server must start with http:// or https://")
+	}
+	if k.Interval < 0 || k.Interval > 300 {
+		return errors.New("komari: interval must be 0-300 seconds")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(k.Key) == "" {
+		k.Key = s.st.Komari.Key
+	}
+	s.st.Komari = k
+	return s.commit()
+}
+
+// Komari implements panel.KomariSource.
+func (s *Store) Komari() *spec.Komari {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.st.Komari.Enabled {
+		return nil
+	}
+	k := s.st.Komari
+	return &k
+}

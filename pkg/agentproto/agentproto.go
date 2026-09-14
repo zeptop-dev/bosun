@@ -41,6 +41,8 @@ type State struct {
 	// Probe configures host monitoring beats; nil/disabled = only the
 	// coarse host snapshot inside Report.
 	Probe *spec.Probe `json:"probe,omitempty"`
+	// Komari asks the node to also report to a Komari server.
+	Komari *spec.Komari `json:"komari,omitempty"`
 }
 
 // Beat is the light, frequent host sample sent while probing is enabled.

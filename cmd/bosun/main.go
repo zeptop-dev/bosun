@@ -295,6 +295,7 @@ func cmdRun(args []string) error {
 	// Headless managed mode without a web panel: the original single agent.
 	if e.driver != nil && cfg.Web == nil {
 		ag := agent.New(cfg, e.driver, e.reg, mreg, log)
+		ag.Version = version
 		ag.Upgrade = upgradeHook(log, upd)
 		ag.Certs = cm
 		current.ag = ag
