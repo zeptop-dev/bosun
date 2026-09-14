@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/zeptop-dev/bosun/internal/local"
-	"github.com/zeptop-dev/bosun/pkg/sharelink"
 	"github.com/zeptop-dev/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/subscription"
 )
 
 // Standalone parity with Captain's node page: line ingresses, landing
@@ -163,7 +163,7 @@ func (s *Server) parseLinks(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, errors.New("paste one or more share links"))
 		return
 	}
-	lines, skipped := sharelink.ParseList(text)
+	lines, skipped := subscription.ParseList(text)
 	type node struct {
 		Name     string       `json:"name"`
 		Protocol string       `json:"protocol"`

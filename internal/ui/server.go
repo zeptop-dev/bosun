@@ -10,10 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zeptop-dev/bosun/pkg/subscription"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -517,19 +519,32 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	links := linksFor(u, s.d.Store.Inbounds(), s.d.Store.Settings(), requestHost(r), s.d.Store.ListIngresses()...)
-	var lines []string
-	for _, l := range links {
-		lines = append(lines, l.URI)
-	}
-	info := fmt.Sprintf("upload=%d; download=%d; total=%d", u.Up, u.Down, u.QuotaBytes)
+	// The document format follows the client (User-Agent or ?client=):
+	// Clash/mihomo YAML, sing-box JSON, Surge/Loon/QX/Stash/Surfboard
+	// dialects, else a base64 URI list.
+	settings := s.d.Store.Settings()
+	lines := linesFor(u, s.d.Store.Inbounds(), settings, requestHost(r), s.d.Store.ListIngresses()...)
+	acct := subscription.Account{Upload: u.Up, Download: u.Down, Total: u.QuotaBytes}
 	if u.ExpiresAt != nil {
-		info += fmt.Sprintf("; expire=%d", u.ExpiresAt.Unix())
+		acct.Expire = u.ExpiresAt.Unix()
 	}
-	w.Header().Set("Subscription-Userinfo", info)
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	rd := subscription.Pick(r.URL.Query().Get("client"), r.UserAgent())
+	body, err := rd.Render(lines, acct)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	name := strings.TrimSpace(settings.NodeName)
+	if name == "" {
+		name = "bosun"
+	}
+	w.Header().Set("Content-Type", rd.ContentType())
+	w.Header().Set("Content-Disposition", "attachment; filename="+asciiName(name)+"; filename*=UTF-8''"+url.PathEscape(name))
+	w.Header().Set("Profile-Title", "base64:"+base64.StdEncoding.EncodeToString([]byte(name)))
+	w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", acct.Upload, acct.Download, acct.Total, acct.Expire))
 	w.Header().Set("Profile-Update-Interval", "12")
-	_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))))
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(body)
 }
 
 // ---- forwards --------------------------------------------------------------
@@ -732,4 +747,26 @@ func (s *Server) restart(w http.ResponseWriter, r *http.Request) {
 	s.d.Log.Warn("restart requested from the web panel")
 	ok(w, map[string]bool{"restarting": true})
 	selfupdate.Restart(500 * time.Millisecond)
+}
+
+// asciiName keeps a profile name safe for the plain Content-Disposition
+// filename (clients that ignore filename* still get something readable).
+func asciiName(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteRune('_')
+		}
+	}
+	out := strings.Trim(b.String(), "_.-")
+	for strings.Contains(out, "__") {
+		out = strings.ReplaceAll(out, "__", "_")
+	}
+	if out == "" {
+		out = "bosun"
+	}
+	return out
 }

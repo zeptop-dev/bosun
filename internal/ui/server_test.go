@@ -110,12 +110,17 @@ func TestAPI(t *testing.T) {
 		t.Fatalf("sub url: %s", links.SubURL)
 	}
 
-	// The subscription needs no login.
+	// The subscription needs no login; the format follows the client:
+	// a base64 URI list by default, Clash YAML for mihomo-family agents.
 	anon := &client{t: t, srv: srv, http: &http.Client{}}
 	code, b = anon.do("GET", "/sub/"+u.SubToken, nil)
 	dec, _ := base64.StdEncoding.DecodeString(string(b))
 	if code != 200 || !strings.HasPrefix(string(dec), "vless://") {
 		t.Fatalf("subscription: %d %s", code, b)
+	}
+	code, b = anon.do("GET", "/sub/"+u.SubToken+"?client=clash", nil)
+	if code != 200 || !strings.Contains(string(b), "proxies:") || !strings.Contains(string(b), "type: vless") {
+		t.Fatalf("clash subscription: %d %s", code, b)
 	}
 	if code, _ := anon.do("GET", "/sub/nope", nil); code != 404 {
 		t.Fatal("unknown token should 404")

@@ -204,7 +204,7 @@ a notice every six hours when a newer release exists.
 `panel.driver: local` (the default) keeps inbounds, users and forwards in
 `<data_dir>/local.json`, edited through the web panel. Every save applies at once:
 cores are reconfigured or restarted as needed. Users get per-user quota and expiry,
-traffic counters, share links and a `/sub/<token>` subscription.
+traffic counters, share links and a `/sub/<token>` subscription whose format follows the client (Clash/mihomo YAML, sing-box JSON, Surge, Loon, Quantumult X, Stash, Surfboard, else a base64 URI list; `?client=` forces one). The renderers live in `pkg/subscription`, which Captain imports too.
 
 The standalone panel carries the same node-side features as Captain's node
 page: line ingresses (IPLC / dedicated NICs: inbounds bind to the line

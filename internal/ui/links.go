@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/zeptop-dev/bosun/pkg/subscription"
 	"net/url"
 	"strconv"
 	"strings"
@@ -19,6 +20,59 @@ type Link struct {
 	URI  string `json:"uri"`
 }
 
+// endpointFor picks the address clients dial and the display name of an
+// inbound: the inbound's own override, else the line ingress it sits
+// behind, else the node's public host, else the TLS domain (it must point
+// here anyway), else whatever address the panel was reached on.
+func endpointFor(ib local.Inbound, settings local.Settings, byID map[string]local.Ingress, fallbackHost string) (h string, p int, name string) {
+	// Connection address: the inbound's own override, else the line
+	// ingress it sits behind, else the node's public host, else the
+	// TLS domain (it must point here anyway), else whatever address
+	// the panel was reached on.
+	h, p = settings.PublicHost, ib.Port
+	if g, has := byID[ib.IngressID]; has && ib.DisplayHost == "" && g.ClientHost() != "" {
+		h, p = g.ClientHost(), g.EntryPort(ib.Port)
+	}
+	if ib.DisplayHost != "" {
+		h = ib.DisplayHost
+	}
+	if h == "" && ib.TLS != nil && ib.TLS.Mode == spec.TLSStandard && ib.TLS.ServerName != "" {
+		h = ib.TLS.ServerName
+	}
+	if h == "" {
+		h = fallbackHost
+	}
+	if ib.DisplayPort != 0 {
+		p = ib.DisplayPort
+	}
+	name = ib.Tag
+	if ib.Remark != "" {
+		name = ib.Remark
+	}
+	if settings.NodeName != "" {
+		name = settings.NodeName + " " + name
+	}
+	return h, p, name
+}
+
+// linesFor builds the subscription lines (one per usable inbound).
+func linesFor(u local.User, inbounds []local.Inbound, settings local.Settings, fallbackHost string, ingresses ...local.Ingress) []subscription.Line {
+	byID := map[string]local.Ingress{}
+	for _, g := range ingresses {
+		byID[g.ID] = g
+	}
+	out := []subscription.Line{}
+	for _, ib := range inbounds {
+		if !ib.Enabled || !userAllowed(u, ib.Tag) {
+			continue
+		}
+		h, p, name := endpointFor(ib, settings, byID, fallbackHost)
+		su := u.Spec()
+		out = append(out, subscription.Line{Name: name, Host: h, Port: p, Inbound: ib.Inbound, UUID: su.UUID, Password: su.Password})
+	}
+	return out
+}
+
 // linksFor renders share URIs for every enabled inbound the user may use.
 func linksFor(u local.User, inbounds []local.Inbound, settings local.Settings, fallbackHost string, ingresses ...local.Ingress) []Link {
 	out := []Link{}
@@ -30,33 +84,7 @@ func linksFor(u local.User, inbounds []local.Inbound, settings local.Settings, f
 		if !ib.Enabled || !userAllowed(u, ib.Tag) {
 			continue
 		}
-		// Connection address: the inbound's own override, else the line
-		// ingress it sits behind, else the node's public host, else the
-		// TLS domain (it must point here anyway), else whatever address
-		// the panel was reached on.
-		h, p := settings.PublicHost, ib.Port
-		if g, has := byID[ib.IngressID]; has && ib.DisplayHost == "" && g.ClientHost() != "" {
-			h, p = g.ClientHost(), g.EntryPort(ib.Port)
-		}
-		if ib.DisplayHost != "" {
-			h = ib.DisplayHost
-		}
-		if h == "" && ib.TLS != nil && ib.TLS.Mode == spec.TLSStandard && ib.TLS.ServerName != "" {
-			h = ib.TLS.ServerName
-		}
-		if h == "" {
-			h = fallbackHost
-		}
-		if ib.DisplayPort != 0 {
-			p = ib.DisplayPort
-		}
-		name := ib.Tag
-		if ib.Remark != "" {
-			name = ib.Remark
-		}
-		if settings.NodeName != "" {
-			name = settings.NodeName + " " + name
-		}
+		h, p, name := endpointFor(ib, settings, byID, fallbackHost)
 		if uri := shareURI(ib.Inbound, h, p, name, u.Spec()); uri != "" {
 			out = append(out, Link{Tag: ib.Tag, Name: name, URI: uri})
 		}
