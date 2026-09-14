@@ -9,7 +9,8 @@
     "certificates": "憑證",
     "probe": "探針",
     "settings": "設定",
-    "logs": "日誌"
+    "logs": "日誌",
+    "doctor": "健檢"
   },
   "login": {
     "title": "登入 bosun",
@@ -158,7 +159,9 @@
       "trojanWs": "Trojan + WS + TLS",
       "trojanWsDesc": "可套 CDN，需要憑證。",
       "anytls": "AnyTLS",
-      "anytlsDesc": "新協定，抗流量分析，需要憑證。"
+      "anytlsDesc": "新協定，抗流量分析，需要憑證。",
+      "snell5": "Snell v5",
+      "snell5Desc": "Surge 官方 snell-server，共享 PSK，自動產生金鑰。"
     },
     "serverNameAuto": "憑證對應的網域，DNS 要指向這台機器",
     "autoCert": "自動憑證",
@@ -174,7 +177,27 @@
       "balanced": "一般公網（保守偽裝）",
       "stealth": "強化偽裝",
       "custom": "自訂"
-    }
+    },
+    "mieruBoth": "TCP + UDP",
+    "mieruBothHint": "TCP 用本連接埠，UDP 用 {{port}}（本連接埠 +1），兩個都要放行",
+    "mieruMtu": "MTU",
+    "mieruMtuHint": "留空 = 1400；只對 UDP 傳輸有意義，1280–1500",
+    "mieruMux": "多工",
+    "mieruMuxHint": "寫進分享連結的用戶端參數；預設由用戶端決定（通常 LOW）",
+    "mieruHandshake": "交握模式",
+    "mieruHandshakeHint": "no-wait 為 0-RTT，延遲更低；standard 更穩",
+    "clientDefault": "用戶端預設",
+    "muxOff": "關閉",
+    "muxLow": "低",
+    "muxMiddle": "中",
+    "muxHigh": "高",
+    "handshakeNoWait": "no-wait（0-RTT）",
+    "handshakeStandard": "standard",
+    "snellHint": "Snell 只有一把共享 PSK，所有使用者用同一把金鑰，無法按使用者限制或計費；分享文字是 Surge 格式的一行。",
+    "snellPsk": "PSK",
+    "snellVersion": "版本",
+    "snellObfs": "混淆",
+    "snellObfsHost": "混淆 Host"
   },
   "ingress": {
     "title": "專線入口",
@@ -325,7 +348,16 @@
     "health": "健康",
     "down": "不通",
     "conns": "連線 活躍/累計",
-    "bytes": "流量"
+    "bytes": "流量",
+    "backend": "後端",
+    "backendRelay": "內建轉發（使用者態）",
+    "backendNft": "nftables（核心 DNAT）",
+    "backendRelayHint": "bosun 自己中轉，支援網域目標，有連線數和流量統計。",
+    "backendNftHint": "核心 DNAT，效能最好；需要機器上有 nft 命令，目標必須是 IPv4 位址，沒有流量統計。",
+    "targetNftHint": "IPv4 位址:連接埠（nftables 不解析網域）",
+    "preserveSource": "保留來源 IP",
+    "preserveSourceHint": "不做 MASQUERADE，目標看到的是用戶端真實 IP；目標伺服器必須把回包路由回本機，否則不通。",
+    "preserveShort": "保留來源 IP"
   },
   "settings": {
     "title": "設定",
@@ -398,5 +430,31 @@
     "uuid": "UUID",
     "lastReport": "最近上報 {{at}}，共 {{n}} 次",
     "noReport": "尚未上報"
+  },
+  "doctor": {
+    "title": "健檢",
+    "subtitle": "唯讀檢查：核心、監聽連接埠、憑證、轉發、防火牆、磁碟、面板連線。不改任何設定。",
+    "run": "重新檢查",
+    "ok": "正常",
+    "warn": "警告",
+    "fail": "失敗",
+    "skip": "略過",
+    "ranAt": "檢查時間 {{at}}",
+    "status": "狀態",
+    "check": "檢查項",
+    "detail": "說明",
+    "empty": "還沒有檢查結果。"
+  },
+  "backup": {
+    "title": "備份與還原",
+    "hint": "下載這台節點的全部設定（入站、使用者、轉發、專線入口、推送的憑證、Komari 註冊）為一個壓縮檔；還原會用壓縮檔內容整體取代目前設定。",
+    "download": "下載備份",
+    "file": "備份檔案",
+    "restore": "還原",
+    "restoreConfirm": "目前的入站、使用者、轉發和入口會被壓縮檔裡的內容整體取代，核心隨即重啟。如果壓縮檔裡的管理員登入不同，你會被登出。繼續？",
+    "restored": "已還原",
+    "summary": "已還原：{{inbounds}} 個入站，{{users}} 個使用者，{{forwards}} 條轉發，{{ingresses}} 個入口",
+    "adminChanged": "管理員登入已變更，請重新登入",
+    "managedHint": "Captain 託管中，設定由面板保存；只能下載，不能還原。"
   }
 }
