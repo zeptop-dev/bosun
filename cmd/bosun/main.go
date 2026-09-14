@@ -420,6 +420,7 @@ func (s *supervisor) run(ctx context.Context) error {
 			s.mreg.Reset()
 		}
 		ag := agent.New(s.cfg, d, s.reg, s.mreg, s.log)
+		ag.Version = version
 		ag.Upgrade = s.upgrade
 		ag.Certs = s.certs
 		if s.onAgent != nil {

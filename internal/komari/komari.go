@@ -14,10 +14,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -294,7 +296,7 @@ func (e *Exporter) run(ctx context.Context, cfg spec.Komari) {
 			var p struct {
 				TaskID   int64  `json:"ping_task_id"`
 				PingType string `json:"ping_type"`
-				Target   string `json:"target"`
+				Target   string `json:"ping_target"`
 			}
 			_ = json.Unmarshal(ev.Params, &p)
 			if p.TaskID <= 0 || e.Prober == nil {
@@ -303,7 +305,7 @@ func (e *Exporter) run(ctx context.Context, cfg spec.Komari) {
 			go func(evID string, p struct {
 				TaskID   int64  `json:"ping_task_id"`
 				PingType string `json:"ping_type"`
-				Target   string `json:"target"`
+				Target   string `json:"ping_target"`
 			}) {
 				typ := strings.ToLower(p.PingType)
 				if typ == "" {
@@ -328,7 +330,8 @@ func (e *Exporter) run(ctx context.Context, cfg spec.Komari) {
 	// Static facts once (retried until accepted).
 	sendInfo := func() error {
 		s := e.Sampler.Sample(ctx)
-		info := map[string]any{"cpu_name": "", "cpu_cores": 0, "cpu_physical_cores": 0, "arch": "", "os": "", "kernel_version": "", "ipv4": "", "ipv6": "", "mem_total": s.MemTotal, "swap_total": s.SwapTotal, "disk_total": s.DiskTotal, "gpu_name": "", "virtualization": "", "version": "bosun/" + e.Version}
+		v4, v6 := publicIPs(ctx, e.client())
+		info := map[string]any{"cpu_name": "", "cpu_cores": 0, "cpu_physical_cores": 0, "arch": "", "os": "", "kernel_version": "", "ipv4": v4, "ipv6": v6, "mem_total": s.MemTotal, "swap_total": s.SwapTotal, "disk_total": s.DiskTotal, "gpu_name": "", "virtualization": "", "version": "bosun " + strings.TrimSpace(e.Version)}
 		if h := s.Info; h != nil {
 			info["cpu_name"], info["cpu_cores"], info["cpu_physical_cores"], info["arch"], info["os"], info["kernel_version"], info["virtualization"] = h.CPUModel, h.CPUCores, h.CPUCores, h.Arch, h.OS, h.Kernel, h.Virt
 		}
@@ -337,6 +340,7 @@ func (e *Exporter) run(ctx context.Context, cfg spec.Komari) {
 		return err
 	}
 	infoSent := false
+	infoAt := time.Time{}
 
 	// Event pull in its own goroutine (the server may long-poll).
 	go func() {
@@ -356,6 +360,9 @@ func (e *Exporter) run(ctx context.Context, cfg spec.Komari) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
+		if infoSent && time.Since(infoAt) > time.Hour {
+			infoSent = false // refresh static facts and public IPs
+		}
 		if !infoSent {
 			if err := sendInfo(); err != nil {
 				e.setErr(err)
@@ -367,7 +374,7 @@ func (e *Exporter) run(ctx context.Context, cfg spec.Komari) {
 					return
 				}
 			} else {
-				infoSent = true
+				infoSent, infoAt = true, time.Now()
 			}
 		}
 		if infoSent {
@@ -443,4 +450,48 @@ func arch(s spec.SystemStatus) string {
 		return s.Info.Arch
 	}
 	return ""
+}
+
+// publicIPs asks a few well-known responders for this host's public
+// addresses, the way the official Komari agent does; "" when unknown.
+var (
+	ipv4Sources = []string{"https://api.ipify.org", "https://ipv4.icanhazip.com", "http://ipv4.ip.sb"}
+	ipv6Sources = []string{"https://api6.ipify.org", "https://ipv6.icanhazip.com"}
+	ipv4Re      = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
+	ipv6Re      = regexp.MustCompile(`[0-9a-fA-F]*:[0-9a-fA-F:]+`)
+)
+
+// PublicIPSources overrides the responders (tests).
+var PublicIPSources = func() ([]string, []string) { return ipv4Sources, ipv6Sources }
+
+func publicIPs(ctx context.Context, client *http.Client) (string, string) {
+	v4s, v6s := PublicIPSources()
+	fetch := func(urls []string, re *regexp.Regexp, want func(net.IP) bool) string {
+		for _, u := range urls {
+			fctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			req, err := http.NewRequestWithContext(fctx, http.MethodGet, u, nil)
+			if err != nil {
+				cancel()
+				continue
+			}
+			req.Header.Set("User-Agent", "curl/8.0.1")
+			resp, err := client.Do(req)
+			if err != nil {
+				cancel()
+				continue
+			}
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			resp.Body.Close()
+			cancel()
+			if m := re.FindString(string(body)); m != "" {
+				if ip := net.ParseIP(m); ip != nil && want(ip) {
+					return ip.String()
+				}
+			}
+		}
+		return ""
+	}
+	v4 := fetch(v4s, ipv4Re, func(ip net.IP) bool { return ip.To4() != nil })
+	v6 := fetch(v6s, ipv6Re, func(ip net.IP) bool { return ip.To4() == nil })
+	return v4, v6
 }

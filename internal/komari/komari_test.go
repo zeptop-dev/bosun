@@ -31,6 +31,7 @@ type fakeKomari struct {
 	methods   []string
 	pings     []map[string]any
 	sentPing  bool
+	info      map[string]any
 }
 
 func (f *fakeKomari) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +48,10 @@ func (f *fakeKomari) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.registers++
 		f.names = append(f.names, r.URL.Query().Get("name"))
 		_, _ = w.Write([]byte(`{"status":"success","data":{"uuid":"u-1","token":"tok-1"}}`))
+	case r.URL.Path == "/ip4":
+		_, _ = w.Write([]byte("192.0.2.10\n"))
+	case r.URL.Path == "/ip6":
+		_, _ = w.Write([]byte("2001:db8::10\n"))
 	case r.URL.Path == "/api/clients/v2/rpc":
 		if r.URL.Query().Get("token") != "tok-1" {
 			w.WriteHeader(401)
@@ -58,10 +63,13 @@ func (f *fakeKomari) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		f.methods = append(f.methods, req.Method)
+		if req.Method == "agent.basicInfo" {
+			f.info, _ = req.Params["info"].(map[string]any)
+		}
 		events := []any{}
 		if req.Method == "agent.pull" && !f.sentPing {
 			f.sentPing = true
-			events = append(events, map[string]any{"id": "ev-1", "method": "agent.ping", "params": map[string]any{"ping_task_id": 7, "ping_type": "tcp", "target": "192.0.2.10:443"}})
+			events = append(events, map[string]any{"id": "ev-1", "method": "agent.ping", "params": map[string]any{"ping_task_id": 7, "ping_type": "tcp", "ping_target": "192.0.2.10:443"}})
 		}
 		if req.Method == "agent.pingResult" {
 			f.pings = append(f.pings, req.Params)
@@ -76,7 +84,9 @@ func TestExporterRegistersReportsAndPings(t *testing.T) {
 	fk := &fakeKomari{}
 	srv := httptest.NewServer(fk)
 	defer srv.Close()
-	e := &Exporter{CredFile: filepath.Join(t.TempDir(), "komari.json"), Sampler: fakeSampler{}, Prober: fakeProber{}, Version: "test"}
+	PublicIPSources = func() ([]string, []string) { return []string{srv.URL + "/ip4"}, []string{srv.URL + "/ip6"} }
+	defer func() { PublicIPSources = func() ([]string, []string) { return ipv4Sources, ipv6Sources } }()
+	e := &Exporter{CredFile: filepath.Join(t.TempDir(), "komari.json"), Sampler: fakeSampler{}, Prober: fakeProber{}, Version: "v0.17.1"}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	e.Configure(ctx, &spec.Komari{Enabled: true, Server: srv.URL + "/", Key: "adkey-1234567890", Name: "jp1", Interval: 1})
@@ -101,6 +111,9 @@ func TestExporterRegistersReportsAndPings(t *testing.T) {
 	}
 	if len(fk.pings) == 0 || fk.pings[0]["task_id"].(float64) != 7 || fk.pings[0]["value"].(float64) != 28 {
 		t.Fatalf("pings: %v", fk.pings)
+	}
+	if fk.info["version"] != "bosun v0.17.1" || fk.info["ipv4"] != "192.0.2.10" || fk.info["ipv6"] != "2001:db8::10" || fk.info["cpu_name"] != "cpu" {
+		t.Fatalf("basic info: %v", fk.info)
 	}
 	st := e.Status()
 	if !st.Registered || st.UUID != "u-1" || st.Reports == 0 || st.LastError != "" {
