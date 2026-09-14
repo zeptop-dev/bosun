@@ -36,7 +36,8 @@ export interface Inbound {
   tag: string; protocol: string; listen?: string; port: number; core?: string
   tls?: TLS; transport?: Transport; multiplex?: { enabled: boolean; padding?: boolean }
   flow?: string; cipher?: string; server_key?: string; obfs?: string; obfs_password?: string; up_mbps?: number; down_mbps?: number
-  congestion_control?: string; mieru_transport?: string; traffic_pattern?: string
+  congestion_control?: string; mieru_transport?: string; traffic_pattern?: string; mieru_mtu?: number; mieru_multiplexing?: string; mieru_handshake?: string
+  snell_psk?: string; snell_version?: number; snell_obfs?: string; snell_obfs_host?: string
   remark?: string; enabled: boolean; display_host?: string; display_port?: number
   assigned_core?: string; ingress_id?: string
 }
@@ -45,7 +46,10 @@ export interface User {
   quota_bytes: number; expires_at: string | null; up: number; down: number; created_at: string; inbound_tags?: string[]
   online: string[]; usable: boolean
 }
-export interface Forward { tag: string; listen?: string; port: number; protocol: string; target: string; status: ForwardStatus | null }
+export interface Forward { tag: string; listen?: string; port: number; protocol: string; target: string; backend?: string; preserve_source?: boolean; status: ForwardStatus | null }
+export interface DoctorCheck { id: string; name: string; status: 'ok' | 'warn' | 'fail' | 'skip'; detail?: string }
+export interface DoctorReport { at: string; checks: DoctorCheck[]; summary: { OK: number; Warn: number; Fail: number; Skip: number } }
+export interface RestoreResult { inbounds: number; users: number; forwards: number; ingresses: number; admin_changed: boolean }
 export interface ForwardStatus { tag: string; up: boolean; rtt_ms: number; last_error?: string; active_conn: number; total_conn: number; bytes_in: number; bytes_out: number }
 export interface Host { cpu_percent?: number; mem_total?: number; mem_used?: number; swap_total?: number; swap_used?: number; disk_total?: number; disk_used?: number }
 export interface AgentStatus { panel: string; ready: boolean; inbounds: number; users: number; last_pull: string; last_apply: string; last_error?: string; core_running: Record<string, boolean>; core_inbounds: Record<string, number>; assign: Record<string, string>; skipped?: Record<string, string> }

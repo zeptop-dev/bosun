@@ -9,7 +9,8 @@
     "certificates": "証明書",
     "probe": "プローブ",
     "settings": "設定",
-    "logs": "ログ"
+    "logs": "ログ",
+    "doctor": "診断"
   },
   "login": {
     "title": "bosun にサインイン",
@@ -158,7 +159,9 @@
       "trojanWs": "Trojan + WS + TLS",
       "trojanWsDesc": "CDN 経由可。証明書が必要。",
       "anytls": "AnyTLS",
-      "anytlsDesc": "トラフィック解析に強い新プロトコル。証明書が必要。"
+      "anytlsDesc": "トラフィック解析に強い新プロトコル。証明書が必要。",
+      "snell5": "Snell v5",
+      "snell5Desc": "Surge 公式 snell-server。共有 PSK を自動生成します。"
     },
     "serverNameAuto": "証明書のドメイン。DNS がこのマシンを指している必要があります",
     "autoCert": "自動証明書",
@@ -174,7 +177,27 @@
       "balanced": "公網（控えめな難読化）",
       "stealth": "強化カモフラージュ",
       "custom": "カスタム"
-    }
+    },
+    "mieruBoth": "TCP + UDP",
+    "mieruBothHint": "TCP はこのポート、UDP は {{port}}（ポート +1）。両方開放してください",
+    "mieruMtu": "MTU",
+    "mieruMtuHint": "空欄 = 1400。UDP トランスポートのみ有効、1280–1500",
+    "mieruMux": "多重化",
+    "mieruMuxHint": "共有リンクに書き込まれるクライアント設定。空欄ならクライアント任せ（通常 LOW）",
+    "mieruHandshake": "ハンドシェイク",
+    "mieruHandshakeHint": "no-wait は 0-RTT で低遅延、standard はより安定",
+    "clientDefault": "クライアント既定",
+    "muxOff": "オフ",
+    "muxLow": "低",
+    "muxMiddle": "中",
+    "muxHigh": "高",
+    "handshakeNoWait": "no-wait（0-RTT）",
+    "handshakeStandard": "standard",
+    "snellHint": "Snell は共有 PSK が 1 つだけで、全ユーザーが同じ鍵で接続するため、ユーザー別の制限や計測はできません。共有テキストは Surge 形式の 1 行です。",
+    "snellPsk": "PSK",
+    "snellVersion": "バージョン",
+    "snellObfs": "難読化",
+    "snellObfsHost": "難読化 Host"
   },
   "ingress": {
     "title": "専用線入口",
@@ -325,7 +348,16 @@
     "health": "ヘルス",
     "down": "ダウン",
     "conns": "接続 アクティブ/累計",
-    "bytes": "バイト"
+    "bytes": "バイト",
+    "backend": "バックエンド",
+    "backendRelay": "内蔵リレー（ユーザー空間）",
+    "backendNft": "nftables（カーネル DNAT）",
+    "backendRelayHint": "bosun 自身が中継。ドメイン宛先、接続数とバイト数の統計に対応。",
+    "backendNftHint": "カーネル DNAT で最速。nft コマンドが必要、宛先は IPv4 アドレスのみ、バイト数統計なし。",
+    "targetNftHint": "IPv4 アドレス:ポート（nftables は名前解決しません）",
+    "preserveSource": "送信元 IP を保持",
+    "preserveSourceHint": "MASQUERADE しないため宛先にはクライアントの実 IP が見えます。宛先サーバーが応答をこのノード経由で返すよう経路設定されていないと接続できません。",
+    "preserveShort": "送信元保持"
   },
   "settings": {
     "title": "設定",
@@ -398,5 +430,31 @@
     "uuid": "UUID",
     "lastReport": "最終送信 {{at}}、合計 {{n}} 回",
     "noReport": "まだ送信していません"
+  },
+  "doctor": {
+    "title": "診断",
+    "subtitle": "読み取り専用チェック: コア、リスナー、証明書、転送、ファイアウォール、ディスク、パネル接続。設定は変更しません。",
+    "run": "再チェック",
+    "ok": "正常",
+    "warn": "警告",
+    "fail": "失敗",
+    "skip": "スキップ",
+    "ranAt": "実行 {{at}}",
+    "status": "状態",
+    "check": "項目",
+    "detail": "詳細",
+    "empty": "まだ結果がありません。"
+  },
+  "backup": {
+    "title": "バックアップと復元",
+    "hint": "このノードの設定全体（インバウンド、ユーザー、転送、専用線入口、プッシュされた証明書、Komari 登録）を 1 つのアーカイブとしてダウンロードします。復元は現在の設定をアーカイブの内容で置き換えます。",
+    "download": "バックアップをダウンロード",
+    "file": "バックアップファイル",
+    "restore": "復元",
+    "restoreConfirm": "現在のインバウンド、ユーザー、転送、入口はアーカイブの内容で置き換えられ、コアが再起動します。アーカイブの管理者ログインが異なる場合はログアウトされます。続行しますか？",
+    "restored": "復元しました",
+    "summary": "復元: インバウンド {{inbounds}}、ユーザー {{users}}、転送 {{forwards}}、入口 {{ingresses}}",
+    "adminChanged": "管理者ログインが変更されました。再ログインしてください",
+    "managedHint": "Captain 管理中のため設定はパネル側にあります。ダウンロードのみ可能で、復元はできません。"
   }
 }

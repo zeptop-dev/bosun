@@ -9,7 +9,8 @@
     "certificates": "인증서",
     "probe": "프로브",
     "settings": "설정",
-    "logs": "로그"
+    "logs": "로그",
+    "doctor": "진단"
   },
   "login": {
     "title": "bosun 로그인",
@@ -158,7 +159,9 @@
       "trojanWs": "Trojan + WS + TLS",
       "trojanWsDesc": "CDN 뒤에 둘 수 있음. 인증서 필요.",
       "anytls": "AnyTLS",
-      "anytlsDesc": "트래픽 분석에 강한 새 프로토콜. 인증서 필요."
+      "anytlsDesc": "트래픽 분석에 강한 새 프로토콜. 인증서 필요.",
+      "snell5": "Snell v5",
+      "snell5Desc": "Surge 공식 snell-server, 공유 PSK 자동 생성."
     },
     "serverNameAuto": "인증서의 도메인. DNS 가 이 머신을 가리켜야 합니다",
     "autoCert": "자동 인증서",
@@ -174,7 +177,27 @@
       "balanced": "공용망 (보수적 위장)",
       "stealth": "강화 위장",
       "custom": "사용자 정의"
-    }
+    },
+    "mieruBoth": "TCP + UDP",
+    "mieruBothHint": "TCP는 이 포트, UDP는 {{port}}(포트 +1); 둘 다 열어야 합니다",
+    "mieruMtu": "MTU",
+    "mieruMtuHint": "비우면 1400; UDP 전송에만 의미 있음, 1280–1500",
+    "mieruMux": "다중화",
+    "mieruMuxHint": "공유 링크에 기록되는 클라이언트 설정; 비우면 클라이언트가 결정(보통 LOW)",
+    "mieruHandshake": "핸드셰이크",
+    "mieruHandshakeHint": "no-wait는 0-RTT로 지연이 낮고, standard가 더 안정적",
+    "clientDefault": "클라이언트 기본값",
+    "muxOff": "끔",
+    "muxLow": "낮음",
+    "muxMiddle": "중간",
+    "muxHigh": "높음",
+    "handshakeNoWait": "no-wait (0-RTT)",
+    "handshakeStandard": "standard",
+    "snellHint": "Snell은 공유 PSK 하나뿐이라 모든 사용자가 같은 키로 접속하므로 사용자별 제한이나 집계가 적용되지 않습니다. 공유 텍스트는 Surge 형식 한 줄입니다.",
+    "snellPsk": "PSK",
+    "snellVersion": "버전",
+    "snellObfs": "난독화",
+    "snellObfsHost": "난독화 Host"
   },
   "ingress": {
     "title": "전용선 입구",
@@ -325,7 +348,16 @@
     "health": "상태",
     "down": "불통",
     "conns": "연결 활성/누적",
-    "bytes": "바이트"
+    "bytes": "바이트",
+    "backend": "백엔드",
+    "backendRelay": "내장 릴레이(사용자 공간)",
+    "backendNft": "nftables(커널 DNAT)",
+    "backendRelayHint": "bosun이 직접 중계: 도메인 대상, 연결 수와 바이트 통계 지원.",
+    "backendNftHint": "커널 DNAT, 가장 빠름; nft 명령이 필요하고 대상은 IPv4 주소만, 바이트 통계 없음.",
+    "targetNftHint": "IPv4 주소:포트 (nftables는 이름을 해석하지 않음)",
+    "preserveSource": "원본 IP 유지",
+    "preserveSourceHint": "MASQUERADE 없이 대상에 클라이언트 실제 IP가 보입니다. 대상 서버가 응답을 이 노드로 되돌려 보내도록 라우팅되어야 연결됩니다.",
+    "preserveShort": "원본 유지"
   },
   "settings": {
     "title": "설정",
@@ -398,5 +430,31 @@
     "uuid": "UUID",
     "lastReport": "마지막 보고 {{at}}, 총 {{n}}회",
     "noReport": "아직 보고 없음"
+  },
+  "doctor": {
+    "title": "진단",
+    "subtitle": "읽기 전용 점검: 코어, 리스너, 인증서, 포워딩, 방화벽, 디스크, 패널 연결. 설정은 변경하지 않습니다.",
+    "run": "다시 점검",
+    "ok": "정상",
+    "warn": "경고",
+    "fail": "실패",
+    "skip": "건너뜀",
+    "ranAt": "실행 {{at}}",
+    "status": "상태",
+    "check": "항목",
+    "detail": "상세",
+    "empty": "아직 결과가 없습니다."
+  },
+  "backup": {
+    "title": "백업 및 복원",
+    "hint": "이 노드의 전체 설정(인바운드, 사용자, 포워딩, 전용선 입구, 푸시된 인증서, Komari 등록)을 하나의 아카이브로 내려받습니다. 복원은 현재 설정을 아카이브 내용으로 통째로 교체합니다.",
+    "download": "백업 다운로드",
+    "file": "백업 파일",
+    "restore": "복원",
+    "restoreConfirm": "현재 인바운드, 사용자, 포워딩, 입구가 아카이브 내용으로 교체되고 코어가 재시작됩니다. 아카이브의 관리자 로그인이 다르면 로그아웃됩니다. 계속할까요?",
+    "restored": "복원됨",
+    "summary": "복원: 인바운드 {{inbounds}}, 사용자 {{users}}, 포워딩 {{forwards}}, 입구 {{ingresses}}",
+    "adminChanged": "관리자 로그인이 변경되어 다시 로그인해야 합니다",
+    "managedHint": "Captain이 관리 중이라 설정은 패널에 있습니다. 다운로드만 가능하고 복원은 비활성화됩니다."
   }
 }
