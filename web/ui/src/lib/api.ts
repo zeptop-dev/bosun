@@ -67,8 +67,8 @@ export interface UpdateInfo {
 export interface LogEntry { time: string; level: string; msg: string; attrs?: string }
 
 // Line ingresses: an IPLC / dedicated line in front of this node.
-export interface Ingress { id: string; name: string; bind_ip: string; line_ip: string; entry_host: string; entry_domain: string; port_from: number; port_to: number; port_offset: number }
-export interface IngressInput { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number; PortTo: number; PortOffset: number }
+export interface Ingress { id: string; name: string; bind_ip: string; line_ip: string; entry_host: string; entry_domain: string; port_from: number; port_to: number; port_offset: number; reserved_ports?: number[] }
+export interface IngressInput { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number; PortTo: number; PortOffset: number; ReservedPorts?: number[] }
 // Outbounds and routing (landing servers, relay chains).
 export interface Remote { host: string; port: number; uuid?: string; password?: string; username?: string; settings: { protocol: string } }
 export interface Outbound { tag: string; protocol?: string; settings?: Record<string, unknown>; proxy_tag?: string; remote?: Remote }

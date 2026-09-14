@@ -167,7 +167,8 @@
     "autoCertHint": "Obtained and renewed from Let's Encrypt; no certificate files to manage",
     "acme": "Challenge",
     "acmeHttp": "HTTP (port 80 here must be reachable from the internet)",
-    "acmeDns": "DNS (Cloudflare, token in Settings)"
+    "acmeDns": "DNS (Cloudflare, token in Settings)",
+    "lineOnlyHint": "This node has no public address and is reached only through a line ingress: pick one, or share links have no usable address."
   },
   "ingress": {
     "title": "Line ingresses",
@@ -193,7 +194,9 @@
     "noEntry": "no public entry",
     "noEntryHint": "This line has no public entry: add a port forward on a relay that can reach it (target = the far-end address) and share the relay's address.",
     "deleteHint": "Inbounds using it fall back to direct; share links change accordingly.",
-    "empty": "No line ingresses. Only needed when an IPLC or dedicated line sits in front of this node."
+    "empty": "No line ingresses. Only needed when an IPLC or dedicated line sits in front of this node.",
+    "reserved": "Reserved ports",
+    "reservedHint": "Ports in the range the provider uses itself (usually the mapped SSH port), comma separated; recipes skip them and inbounds may not take them"
   },
   "routing": {
     "title": "Outbounds & landing",

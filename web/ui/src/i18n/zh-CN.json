@@ -167,7 +167,8 @@
     "autoCertHint": "用 Let's Encrypt 自动申请并续期，不用手工配证书文件",
     "acme": "验证方式",
     "acmeHttp": "HTTP（需要本机 80 端口可从公网访问）",
-    "acmeDns": "DNS（Cloudflare，需在设置里填 token）"
+    "acmeDns": "DNS（Cloudflare，需在设置里填 token）",
+    "lineOnlyHint": "这台节点没有填对外地址，只能通过专线入口访问：请选一个入口，否则分享链接里没有可用地址。"
   },
   "ingress": {
     "title": "专线入口",
@@ -193,7 +194,9 @@
     "noEntry": "无公网入口",
     "noEntryHint": "这条线没有公网入口：在能连通它的前置机上加一条端口转发到外部连接 IP，分享链接写前置的地址。",
     "deleteHint": "删除后用它的入站会变回直连，分享链接随之改变。",
-    "empty": "没有专线入口。只有 IPLC 或专线在本机前面时才需要。"
+    "empty": "没有专线入口。只有 IPLC 或专线在本机前面时才需要。",
+    "reserved": "保留端口",
+    "reservedHint": "端口段里被服务商占用的端口（一般是 SSH 映射的那个），逗号分隔；配方选端口时跳过，入站也不能用"
   },
   "routing": {
     "title": "出站与落地",

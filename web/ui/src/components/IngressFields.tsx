@@ -3,10 +3,11 @@ import type { useForm } from '@mantine/form'
 import { useTranslation } from 'react-i18next'
 import type { Ingress, IngressInput } from '../lib/api'
 
-export type IngressValues = { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number | string; PortTo: number | string; PortOffset: number | string }
-export const emptyIngress: IngressValues = { Name: 'IPLC', BindIP: '', LineIP: '', EntryHost: '', EntryDomain: '', PortFrom: '', PortTo: '', PortOffset: 0 }
-export const ingressPayload = (v: IngressValues): IngressInput => ({ Name: v.Name, BindIP: v.BindIP, LineIP: v.LineIP, EntryHost: v.EntryHost, EntryDomain: v.EntryDomain, PortFrom: Number(v.PortFrom) || 0, PortTo: Number(v.PortTo) || 0, PortOffset: Number(v.PortOffset) || 0 })
-export const ingressValues = (g: Ingress): IngressValues => ({ Name: g.name, BindIP: g.bind_ip, LineIP: g.line_ip, EntryHost: g.entry_host, EntryDomain: g.entry_domain ?? '', PortFrom: g.port_from || '', PortTo: g.port_to || '', PortOffset: g.port_offset })
+export type IngressValues = { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number | string; PortTo: number | string; PortOffset: number | string; ReservedPorts: string }
+export const parsePorts = (s: string) => s.split(/[\s,]+/).map((x) => Number(x)).filter((n) => n > 0 && n < 65536)
+export const emptyIngress: IngressValues = { Name: 'IPLC', BindIP: '', LineIP: '', EntryHost: '', EntryDomain: '', PortFrom: '', PortTo: '', PortOffset: 0, ReservedPorts: '' }
+export const ingressPayload = (v: IngressValues): IngressInput => ({ Name: v.Name, BindIP: v.BindIP, LineIP: v.LineIP, EntryHost: v.EntryHost, EntryDomain: v.EntryDomain, PortFrom: Number(v.PortFrom) || 0, PortTo: Number(v.PortTo) || 0, PortOffset: Number(v.PortOffset) || 0, ReservedPorts: parsePorts(v.ReservedPorts) })
+export const ingressValues = (g: Ingress): IngressValues => ({ Name: g.name, BindIP: g.bind_ip, LineIP: g.line_ip, EntryHost: g.entry_host, EntryDomain: g.entry_domain ?? '', PortFrom: g.port_from || '', PortTo: g.port_to || '', PortOffset: g.port_offset, ReservedPorts: (g.reserved_ports ?? []).join(', ') })
 // What share links advertise for a line: its domain when named, else the provider's entry.
 export const clientHost = (g: Ingress) => g.entry_domain || g.entry_host
 
@@ -29,6 +30,7 @@ export function IngressFields({ form }: { form: ReturnType<typeof useForm<Ingres
         <NumberInput label={t('ingress.portTo')} min={1} max={65535} placeholder="17799" {...form.getInputProps('PortTo')} />
         <NumberInput label={t('ingress.portOffset')} description={t('ingress.portOffsetHint')} {...form.getInputProps('PortOffset')} />
       </Group>
+      <TextInput label={t('ingress.reserved')} description={t('ingress.reservedHint')} placeholder="17700" {...form.getInputProps('ReservedPorts')} />
     </>
   )
 }

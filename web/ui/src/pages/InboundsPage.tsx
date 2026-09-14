@@ -22,6 +22,7 @@ export default function InboundsPage() {
   const qc = useQueryClient()
   const readOnly = me?.mode !== 'local' || !!me?.fixed
   const q = useQuery({ queryKey: ['inbounds'], queryFn: () => api.get<Inbound[]>('/api/inbounds'), refetchInterval: 10_000 })
+  const settingsQ = useQuery({ queryKey: ['settings'], queryFn: () => api.get<{ public_host: string }>('/api/settings') })
   const ingresses = useQuery({ queryKey: ['ingresses'], queryFn: () => api.get<Ingress[]>('/api/ingresses') })
   const [editing, setEditing] = useState<Inbound | 'new' | null>(null)
   const invalidate = () => { qc.invalidateQueries({ queryKey: ['inbounds'] }); qc.invalidateQueries({ queryKey: ['status'] }); qc.invalidateQueries({ queryKey: ['ingresses'] }) }
@@ -72,7 +73,7 @@ export default function InboundsPage() {
         </Table>
       </Card>
       <Modal opened={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? t('inbounds.create') : t('common.edit')} size="xl">
-        {editing !== null && <InboundForm initial={toValues(editing === 'new' ? undefined : editing)} ingresses={ingresses.data ?? []} usedPorts={usedPorts} busy={save.isPending} onSubmit={(s) => save.mutate(s)} onCancel={() => setEditing(null)} />}
+        {editing !== null && <InboundForm lineOnly={!settingsQ.data?.public_host && (ingresses.data ?? []).length > 0} initial={toValues(editing === 'new' ? undefined : editing)} ingresses={ingresses.data ?? []} usedPorts={usedPorts} busy={save.isPending} onSubmit={(s) => save.mutate(s)} onCancel={() => setEditing(null)} />}
       </Modal>
     </>
   )
