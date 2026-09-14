@@ -12,8 +12,8 @@ import { Indicator } from '@mantine/core'
 const items = [
   { to: '/', key: 'overview', icon: IconLayoutDashboard },
   { to: '/inbounds', key: 'inbounds', icon: IconPlugConnected },
-  { to: '/users', key: 'users', icon: IconUsers },
   { to: '/forwards', key: 'outbound', icon: IconRoute },
+  { to: '/users', key: 'users', icon: IconUsers },
   { to: '/certificates', key: 'certificates', icon: IconCertificate },
   { to: '/probe', key: 'probe', icon: IconActivity },
   { to: '/doctor', key: 'doctor', icon: IconStethoscope },
