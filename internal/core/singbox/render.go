@@ -115,7 +115,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	if len(node.DNS) > 0 {
 		cfg["dns"] = renderDNS(node.DNS)
 	}
-	if err := core.ApplyOverride(cfg, node.Overrides["singbox"]); err != nil {
+	if err := core.ApplyOverride("singbox", cfg, node.Overrides["singbox"]); err != nil {
 		return nil, fmt.Errorf("sing-box: %w", err)
 	}
 	return json.MarshalIndent(cfg, "", "  ")

@@ -103,8 +103,12 @@ func Script(rules []Rule) string {
 	var b strings.Builder
 	b.WriteString("table inet " + table + " {\n  chain input {\n    type filter hook input priority filter; policy accept;\n")
 	for _, r := range sorted {
+		ip := net.ParseIP(r.IP)
+		if ip == nil || r.Port <= 0 || r.Port > 65535 || (r.Proto != "tcp" && r.Proto != "udp") {
+			continue // never interpolate anything that is not a literal address
+		}
 		fam := "ip"
-		if ip := net.ParseIP(r.IP); ip != nil && ip.To4() == nil {
+		if ip.To4() == nil {
 			fam = "ip6"
 		}
 		fmt.Fprintf(&b, "    %s daddr != %s %s dport %d drop\n", fam, r.IP, r.Proto, r.Port)

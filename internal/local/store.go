@@ -278,8 +278,20 @@ func validateInbound(ib *Inbound) error {
 	if ib.Tag == "" {
 		return errors.New("tag is required")
 	}
-	if strings.ContainsAny(ib.Tag, " /") {
-		return errors.New("tag may not contain spaces or slashes")
+	if !spec.ValidTag(ib.Tag) {
+		return errors.New("tag may only contain letters, digits, . _ : - (max 64)")
+	}
+	if !spec.ValidListen(ib.Listen) {
+		return errors.New("listen must be an IP address on this node")
+	}
+	plain := []string{ib.SnellObfsHost, ib.Remark}
+	if ib.Transport != nil {
+		plain = append(plain, ib.Transport.Host, ib.Transport.Path, ib.Transport.ServiceName)
+	}
+	for _, v := range plain {
+		if !spec.Plain(v) {
+			return errors.New("fields may not contain control characters")
+		}
 	}
 	if ib.Protocol == "" {
 		return errors.New("protocol is required")
@@ -579,6 +591,12 @@ func (s *Store) PutForward(f spec.Forward, prevTag string) error {
 	f.Tag = strings.TrimSpace(f.Tag)
 	if f.Tag == "" {
 		f.Tag = fmt.Sprintf("forward-%d", f.Port)
+	}
+	if !spec.ValidTag(f.Tag) {
+		return errors.New("tag may only contain letters, digits, . _ : - (max 64)")
+	}
+	if !spec.ValidListen(f.Listen) {
+		return errors.New("listen must be an IP address")
 	}
 	if f.Port <= 0 || f.Port > 65535 {
 		return errors.New("port must be 1-65535")

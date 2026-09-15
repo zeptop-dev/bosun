@@ -5,7 +5,11 @@ package spec
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -241,6 +245,55 @@ type User struct {
 	// when the panel is unreachable. 0 = not enforced by the core.
 	QuotaBytes int64 `json:"quota_bytes,omitempty"`
 	QuotaDays  int   `json:"quota_days,omitempty"`
+}
+
+// deniedOverrideKeys are top-level config keys a per-core override may not
+// touch: they would let a panel operator point the core at arbitrary
+// files, replace the inbounds bosun manages or disable the stats it bills from.
+var deniedOverrideKeys = map[string][]string{
+	"xray":     {"log", "api", "stats", "inbounds", "metrics"},
+	"singbox":  {"log", "experimental", "inbounds"},
+	"hysteria": {"listen", "auth", "trafficStats", "tls", "acme"},
+	"mita":     {"users", "portBindings"},
+}
+
+// CheckOverride validates a raw config override for the core: a JSON
+// object with none of the denied keys. Empty is fine.
+func CheckOverride(core string, patch json.RawMessage) error {
+	if len(strings.TrimSpace(string(patch))) == 0 {
+		return nil
+	}
+	var over map[string]any
+	if err := json.Unmarshal(patch, &over); err != nil {
+		return fmt.Errorf("config override is not a JSON object: %w", err)
+	}
+	for _, k := range deniedOverrideKeys[core] {
+		if _, has := over[k]; has {
+			return fmt.Errorf("%s override may not set %q", core, k)
+		}
+	}
+	return nil
+}
+
+var tagRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+
+// ValidTag reports whether an inbound/forward/outbound tag is safe to use
+// as a file name, an nft comment and a core config key: letters, digits,
+// dot, underscore, colon and dash, at most 64 characters.
+func ValidTag(tag string) bool { return tagRE.MatchString(tag) }
+
+// ValidListen reports whether a bind address is empty or a literal IP.
+func ValidListen(listen string) bool { return listen == "" || net.ParseIP(listen) != nil }
+
+// Plain reports whether s carries no control characters (safe to embed in
+// generated INI/TOML/nft text).
+func Plain(s string) bool {
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 // EffectiveSpeedLimit is the user's own limit, else the node default.

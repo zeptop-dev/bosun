@@ -106,7 +106,7 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 		if node != nil && len(node.Overrides["mita"]) > 0 {
 			var obj map[string]any
 			if err := json.Unmarshal(cfg, &obj); err == nil {
-				if err := core.ApplyOverride(obj, node.Overrides["mita"]); err != nil {
+				if err := core.ApplyOverride("mita", obj, node.Overrides["mita"]); err != nil {
 					return nil, fmt.Errorf("mita: %w", err)
 				}
 				cfg, _ = json.MarshalIndent(obj, "", "  ")
