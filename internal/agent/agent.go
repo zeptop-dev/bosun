@@ -32,6 +32,9 @@ import (
 )
 
 // Agent wires one panel driver to a core registry.
+// retryFloor is the least time between retries of a failed apply.
+const retryFloor = 30 * time.Second
+
 type Agent struct {
 	cfg     *config.Config
 	driver  panel.Driver
@@ -77,6 +80,20 @@ type Agent struct {
 	// kick re-applies the current state (after a certificate renewal).
 	kick         chan struct{}
 	forceRestart bool
+	// dirty is set when the last apply failed part-way; the next pull tick
+	// retries even though the panel revision did not move (with a floor
+	// between attempts so a broken core is not restarted every second).
+	dirty       bool
+	lastAttempt time.Time
+	// kernelNode/kernelByTag are what the last apply handed to the kernel
+	// helpers, so forwards applied afterwards can refresh the firewall.
+	kernelNode  *spec.Node
+	kernelByTag map[string]string
+	// pending* are traffic deltas the cores already zeroed but the panel
+	// has not acknowledged; they ride along on the next report.
+	pendingTraffic  map[int64]*spec.UserTraffic
+	pendingInbound  map[string]spec.Traffic
+	pendingOutbound map[string]spec.Traffic
 	// reportNow asks the run loop for an out-of-band report (job results).
 	reportNow chan struct{}
 	// Jobs handed down by the panel: which ran, which are running, and
@@ -195,6 +212,11 @@ func (a *Agent) Run(ctx context.Context) error {
 	if err := a.applyForwards(ctx); err != nil {
 		a.log.Error("forwards", "err", err)
 	}
+	// The firewall openings computed during apply did not see the forward
+	// listeners yet (they start after); refresh once they are up.
+	if a.kernelNode != nil {
+		a.applyKernelHelpers(ctx, a.kernelNode, a.kernelByTag)
+	}
 	a.setStatus(func(s *Status) { s.Ready = true })
 	a.runJobs(ctx)
 
@@ -299,7 +321,10 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-pull.C:
 			if changed, err := a.pull(ctx); err != nil {
 				a.log.Warn("pull failed", "err", err)
-			} else if changed {
+			} else if changed || (a.dirty && time.Since(a.lastAttempt) >= retryFloor) {
+				if a.dirty && !changed {
+					a.log.Info("retrying the last apply that failed")
+				}
 				if err := a.apply(ctx); err != nil {
 					a.log.Error("apply failed", "err", err)
 				}
@@ -508,7 +533,9 @@ func (a *Agent) resolveCerts(ctx context.Context, node *spec.Node) {
 // apply renders the current state onto each core and starts, restarts or
 // stops cores as their assignment changes.
 func (a *Agent) apply(ctx context.Context) error {
+	a.lastAttempt = time.Now()
 	err := a.applyInner(ctx)
+	a.dirty = err != nil
 	a.setStatus(func(s *Status) {
 		s.LastApply = time.Now()
 		s.LastError = ""
@@ -603,6 +630,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		}
 	}
 	a.setStatus(func(s *Status) { s.Assign, s.CoreInbound = byTag, perCore })
+	a.kernelNode, a.kernelByTag = node, byTag
 	defer a.applyKernelHelpers(ctx, node, byTag)
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
@@ -724,7 +752,14 @@ func listenPorts(ib spec.Inbound) []firewall.Port {
 // report collects per-user traffic from every running core and pushes it
 // with a host snapshot. It returns true when the panel signals newer state.
 func (a *Agent) report(ctx context.Context) bool {
-	totals := map[int64]*spec.UserTraffic{}
+	if a.pendingTraffic == nil {
+		a.pendingTraffic = map[int64]*spec.UserTraffic{}
+		a.pendingInbound = map[string]spec.Traffic{}
+		a.pendingOutbound = map[string]spec.Traffic{}
+	}
+	// Deltas the panel never acknowledged are carried forward: the cores
+	// zero their counters on read, so this map is the only copy.
+	totals := a.pendingTraffic
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		if !c.Running() {
@@ -756,7 +791,7 @@ func (a *Agent) report(ctx context.Context) bool {
 	for _, t := range totals {
 		list = append(list, *t)
 	}
-	perInbound := map[string]spec.Traffic{}
+	perInbound := a.pendingInbound
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		is, ok := c.(core.InboundStatser)
@@ -778,7 +813,7 @@ func (a *Agent) report(ctx context.Context) bool {
 			perInbound[tag] = cur
 		}
 	}
-	perOutbound := map[string]spec.Traffic{}
+	perOutbound := a.pendingOutbound
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		os, ok := c.(core.OutboundStatser)
@@ -813,16 +848,16 @@ func (a *Agent) report(ctx context.Context) bool {
 		}
 		changed, err := rep.Report(ctx, full)
 		if err != nil {
-			// Counters were already reset; this delta is lost. A persistent
-			// spool is a later improvement. Job results are kept for the
-			// next attempt.
+			// The deltas stay in the pending maps and go out with the next
+			// report; job results are requeued the same way.
 			a.requeueJobResults(full.Jobs)
-			a.log.Error("report failed", "users", len(list), "err", err)
+			a.log.Error("report failed; traffic deltas kept for the next attempt", "users", len(list), "err", err)
 			a.statusMu.Lock()
 			a.lastReportErr = err.Error()
 			a.statusMu.Unlock()
 			return false
 		}
+		a.pendingTraffic, a.pendingInbound, a.pendingOutbound = map[int64]*spec.UserTraffic{}, map[string]spec.Traffic{}, map[string]spec.Traffic{}
 		a.log.Debug("report sent", "users", len(list), "state_changed", changed)
 		a.statusMu.Lock()
 		a.lastReport, a.lastReportErr = time.Now(), ""
