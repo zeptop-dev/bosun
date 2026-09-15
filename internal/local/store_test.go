@@ -148,3 +148,50 @@ func TestStoreLifecycle(t *testing.T) {
 		t.Fatalf("keep users: %+v", us)
 	}
 }
+
+func TestDeviceLimitAndResetCycle(t *testing.T) {
+	s, _, err := Open(filepath.Join(t.TempDir(), "local.json"), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := s.CreateUser(User{Name: "u", Enabled: true, DeviceLimit: 1, QuotaBytes: 100, ResetMode: "days", ResetDays: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.ResetAt == nil {
+		t.Fatal("reset_at not scheduled")
+	}
+	ctx := context.Background()
+	// Two client IPs at once: the user is held back and the revision bumps.
+	rev := s.Runtime().Revision
+	changed, err := s.Report(ctx, agentproto.Report{Online: map[string][]string{u.UUID: {"198.51.100.20", "203.0.113.30"}}})
+	if err != nil || !changed {
+		t.Fatalf("hold: changed=%v err=%v", changed, err)
+	}
+	if s.Runtime().Revision == rev {
+		t.Fatal("revision unchanged")
+	}
+	if _, users := s.buildNodeForTest(); len(users) != 0 {
+		t.Fatalf("held user still rendered: %d", len(users))
+	}
+	if !s.Runtime().OverDevices[u.ID].After(time.Now()) {
+		t.Fatal("hold not reported")
+	}
+	// Quota exhausted, then the cycle comes round: counters zero and the
+	// user is usable again.
+	if _, err := s.Report(ctx, agentproto.Report{Traffic: []spec.UserTraffic{{UserID: u.ID, Up: 60, Down: 60}}}); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	past := time.Now().Add(-time.Minute)
+	s.st.Users[0].ResetAt = &past
+	s.overDevices = nil
+	s.mu.Unlock()
+	if _, err := s.Report(ctx, agentproto.Report{}); err != nil {
+		t.Fatal(err)
+	}
+	got := s.ListUsers()[0]
+	if got.Up+got.Down != 0 || got.ResetAt == nil || !got.ResetAt.After(time.Now()) || !got.Usable(time.Now()) {
+		t.Fatalf("reset cycle: %+v", got)
+	}
+}

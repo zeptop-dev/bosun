@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Card, Code, Drawer, Group, Modal, MultiSelect, NumberInput, Progress, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core'
+import { ActionIcon, Badge, Button, Card, Code, Drawer, Group, Modal, MultiSelect, NumberInput, Progress, Select, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core'
 import { DateInput } from '@mantine/dates'
 import { useForm } from '@mantine/form'
 import { modals } from '@mantine/modals'
@@ -14,8 +14,8 @@ import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
 import { Copy } from '../components/Copy'
 
-type Values = { name: string; uuid: string; password: string; enabled: boolean; quota_gib: number; expires_at: Date | null; inbound_tags: string[] }
-const empty: Values = { name: '', uuid: '', password: '', enabled: true, quota_gib: 0, expires_at: null, inbound_tags: [] }
+type Values = { name: string; uuid: string; password: string; enabled: boolean; quota_gib: number; expires_at: Date | null; inbound_tags: string[]; device_limit: number; reset_mode: string; reset_days: number }
+const empty: Values = { name: '', uuid: '', password: '', enabled: true, quota_gib: 0, expires_at: null, inbound_tags: [], device_limit: 0, reset_mode: '', reset_days: 30 }
 
 export default function UsersPage() {
   const { t } = useTranslation()
@@ -30,7 +30,7 @@ export default function UsersPage() {
   const links = useQuery({ queryKey: ['links', sel?.id], queryFn: () => api.get<{ links: Link[]; sub_url: string }>(`/api/users/${sel!.id}/links`), enabled: sel !== null })
   const invalidate = () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['status'] }); qc.invalidateQueries({ queryKey: ['links'] }) }
   const form = useForm<Values>({ initialValues: empty, validate: { name: (v) => (v.trim() ? null : t('form.required')) } })
-  const payload = (v: Values) => ({ name: v.name, uuid: v.uuid, password: v.password, enabled: v.enabled, quota_bytes: Math.round(v.quota_gib * 2 ** 30), expires_at: v.expires_at ? v.expires_at.toISOString() : null, inbound_tags: v.inbound_tags })
+  const payload = (v: Values) => ({ name: v.name, uuid: v.uuid, password: v.password, enabled: v.enabled, quota_bytes: Math.round(v.quota_gib * 2 ** 30), expires_at: v.expires_at ? v.expires_at.toISOString() : null, inbound_tags: v.inbound_tags, device_limit: v.device_limit, reset_mode: v.reset_mode, reset_days: v.reset_days })
   const save = useMutation({
     mutationFn: (v: Values) => editing === 'new' ? api.post('/api/users', payload(v)) : api.put(`/api/users/${(editing as User).id}`, payload(v)),
     onSuccess: () => { toast.ok(t('common.saved')); setEditing(null); invalidate() }, onError: toast.err,
@@ -39,7 +39,7 @@ export default function UsersPage() {
   const reset = useMutation({ mutationFn: (id: number) => api.post(`/api/users/${id}/reset`), onSuccess: () => { toast.ok(t('common.saved')); invalidate() }, onError: toast.err })
   const rotate = useMutation({ mutationFn: (id: number) => api.post(`/api/users/${id}/rotate`), onSuccess: () => { toast.ok(t('common.saved')); invalidate() }, onError: toast.err })
   const open = (u: User | 'new') => {
-    form.setValues(u === 'new' ? empty : { name: u.name, uuid: u.uuid, password: u.password, enabled: u.enabled, quota_gib: u.quota_bytes / 2 ** 30, expires_at: u.expires_at ? new Date(u.expires_at) : null, inbound_tags: u.inbound_tags ?? [] })
+    form.setValues(u === 'new' ? empty : { name: u.name, uuid: u.uuid, password: u.password, enabled: u.enabled, quota_gib: u.quota_bytes / 2 ** 30, expires_at: u.expires_at ? new Date(u.expires_at) : null, inbound_tags: u.inbound_tags ?? [], device_limit: u.device_limit ?? 0, reset_mode: u.reset_mode ?? '', reset_days: u.reset_days || 30 })
     setEditing(u)
   }
   // Snell has one shared PSK, so a per-user restriction cannot apply to it.
@@ -57,9 +57,9 @@ export default function UsersPage() {
               <Table.Tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => setSel(u)}>
                 <Table.Td><Text fw={600} size="sm">{u.name}</Text><Text size="xs" c="dimmed" ff="monospace">{u.uuid.slice(0, 8)}…</Text></Table.Td>
                 <Table.Td w={200}><Text size="xs">{bytes(u.up + u.down)}{u.quota_bytes ? ` / ${bytes(u.quota_bytes)}` : ''}</Text>{u.quota_bytes > 0 && <Progress size="xs" mt={4} value={Math.min(100, ((u.up + u.down) / u.quota_bytes) * 100)} color={(u.up + u.down) / u.quota_bytes > 0.9 ? 'orange' : 'brand'} />}</Table.Td>
-                <Table.Td><Text size="sm">{u.expires_at ? when(u.expires_at).split(',')[0] : t('users.never')}</Text></Table.Td>
+                <Table.Td><Text size="sm">{u.expires_at ? when(u.expires_at).split(',')[0] : t('users.never')}</Text>{u.reset_mode && u.reset_at && <Text size="xs" c="dimmed">{t('users.resetsOn', { date: when(u.reset_at).split(',')[0] })}</Text>}</Table.Td>
                 <Table.Td>{u.online.length > 0 ? <Badge color="teal">{u.online.length}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
-                <Table.Td><Badge color={!u.enabled ? 'gray' : u.usable ? 'teal' : 'orange'}>{!u.enabled ? t('common.disabled') : u.usable ? t('users.active') : t('users.blocked')}</Badge></Table.Td>
+                <Table.Td><Badge color={!u.enabled ? 'gray' : u.over_devices ? 'red' : u.usable ? 'teal' : 'orange'} title={u.over_devices && u.over_devices_until ? t('users.overDevicesUntil', { at: when(u.over_devices_until) }) : undefined}>{!u.enabled ? t('common.disabled') : u.over_devices ? t('users.overDevices') : u.usable ? t('users.active') : t('users.blocked')}</Badge></Table.Td>
                 <Table.Td onClick={(e) => e.stopPropagation()}><Group gap={4} justify="flex-end" wrap="nowrap">
                   {!readOnly && <ActionIcon variant="subtle" color="gray" onClick={() => open(u)}><IconPencil size={16} /></ActionIcon>}
                   {!readOnly && <ActionIcon variant="subtle" color="red" onClick={() => modals.openConfirmModal({ title: t('common.delete'), children: <Text size="sm">{t('common.confirmDelete')}</Text>, labels: { confirm: t('common.delete'), cancel: t('common.cancel') }, confirmProps: { color: 'red' }, onConfirm: () => del.mutate(u.id) })}><IconTrash size={16} /></ActionIcon>}
@@ -81,6 +81,11 @@ export default function UsersPage() {
           <Group grow>
             <NumberInput label={t('users.quota')} description={t('users.quotaHint')} min={0} decimalScale={2} {...form.getInputProps('quota_gib')} />
             <DateInput label={t('users.expires')} description={t('users.expiresHint')} clearable {...form.getInputProps('expires_at')} />
+          </Group>
+          <Group grow align="flex-start">
+            <NumberInput label={t('users.deviceLimit')} description={t('users.deviceLimitHint')} min={0} {...form.getInputProps('device_limit')} />
+            <Select label={t('users.resetMode')} description={t('users.resetModeHint')} data={[{ value: '', label: t('users.resetNever') }, { value: 'days', label: t('users.resetDays') }, { value: 'monthly', label: t('users.resetMonthly') }]} allowDeselect={false} {...form.getInputProps('reset_mode')} />
+            {form.values.reset_mode === 'days' && <NumberInput label={t('users.resetEvery')} min={1} max={365} {...form.getInputProps('reset_days')} />}
           </Group>
           <MultiSelect label={t('users.inbounds')} description={t('users.inboundsHint')} data={tagOptions} {...form.getInputProps('inbound_tags')} />
           <Switch label={t('common.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />

@@ -189,6 +189,34 @@ type User struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	// InboundTags restricts the user to these inbounds; empty = all.
 	InboundTags []string `json:"inbound_tags,omitempty"`
+	// DeviceLimit caps distinct client IPs seen at once (0 = unlimited).
+	// sing-box enforces it natively; for the other cores the store drops
+	// the user for a few minutes when the online list exceeds it.
+	DeviceLimit int `json:"device_limit,omitempty"`
+	// ResetMode zeroes the counters on a cycle: "" never, "days" every
+	// ResetDays days, "monthly" on the first of each month (UTC).
+	ResetMode string     `json:"reset_mode,omitempty"`
+	ResetDays int        `json:"reset_days,omitempty"`
+	ResetAt   *time.Time `json:"reset_at,omitempty"` // next scheduled reset
+}
+
+// NextReset returns when the counters should next be zeroed after `from`.
+func (u User) NextReset(from time.Time) *time.Time {
+	var t time.Time
+	switch u.ResetMode {
+	case "days":
+		d := u.ResetDays
+		if d <= 0 {
+			d = 30
+		}
+		t = from.Add(time.Duration(d) * 24 * time.Hour)
+	case "monthly":
+		f := from.UTC()
+		t = time.Date(f.Year(), f.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	default:
+		return nil
+	}
+	return &t
 }
 
 // Usable reports whether the user should be provisioned right now.
@@ -211,5 +239,5 @@ func (u User) Spec() spec.User {
 	if pw == "" {
 		pw = u.UUID
 	}
-	return spec.User{ID: u.ID, Name: u.UUID, UUID: u.UUID, Password: pw}
+	return spec.User{ID: u.ID, Name: u.UUID, UUID: u.UUID, Password: pw, DeviceLimit: u.DeviceLimit}
 }

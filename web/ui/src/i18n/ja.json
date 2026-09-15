@@ -360,7 +360,18 @@
     "noLinks": "使用可能なインバウンドがありません。",
     "resetTraffic": "トラフィックをリセット",
     "rotate": "サブスクリプション URL を更新",
-    "rotateHint": "古いリンクは直ちに無効になります。"
+    "rotateHint": "古いリンクは直ちに無効になります。",
+    "deviceLimit": "デバイス数上限",
+    "deviceLimitHint": "0 = 無制限。同時接続 IP が上限を超えると 5 分間停止",
+    "resetMode": "トラフィックリセット",
+    "resetModeHint": "周期的に使用量をゼロに戻す",
+    "resetNever": "しない",
+    "resetDays": "N 日ごと",
+    "resetMonthly": "毎月 1 日",
+    "resetEvery": "間隔（日）",
+    "overDevices": "デバイス数超過",
+    "overDevicesUntil": "{{at}} まで停止",
+    "resetsOn": "{{date}} にリセット"
   },
   "forwards": {
     "title": "転送",

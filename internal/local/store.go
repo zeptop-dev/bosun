@@ -37,11 +37,16 @@ type Store struct {
 	// runtime, not persisted
 	nodeSeen, usersSeen, fwdSeen int64
 	online                       map[string][]string
-	host                         spec.SystemStatus
-	cores                        map[string]agentproto.CoreStatus
-	forwardStatus                []agentproto.ForwardStatus
-	lastReport                   time.Time
-	history                      []DayPoint
+	// Device-limit enforcement for cores without native support: client
+	// IPs seen per user (by name) with the last time, and users currently
+	// dropped from the rendered list because they exceeded their limit.
+	seenIPs       map[string]map[string]time.Time
+	overDevices   map[int64]time.Time
+	host          spec.SystemStatus
+	cores         map[string]agentproto.CoreStatus
+	forwardStatus []agentproto.ForwardStatus
+	lastReport    time.Time
+	history       []DayPoint
 }
 
 // DayPoint is one day's node-wide traffic, kept for the overview chart.
@@ -471,6 +476,7 @@ func (s *Store) CreateUser(u User) (User, error) {
 	}
 	u.CreatedAt = time.Now()
 	u.Up, u.Down = 0, 0
+	u.ResetAt = u.NextReset(u.CreatedAt)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var maxID int64
@@ -507,6 +513,11 @@ func (s *Store) UpdateUser(u User) error {
 		cur.QuotaBytes = u.QuotaBytes
 		cur.ExpiresAt = u.ExpiresAt
 		cur.InboundTags = u.InboundTags
+		cur.DeviceLimit = u.DeviceLimit
+		if cur.ResetMode != u.ResetMode || cur.ResetDays != u.ResetDays {
+			cur.ResetMode, cur.ResetDays = u.ResetMode, u.ResetDays
+			cur.ResetAt = cur.NextReset(time.Now())
+		}
 		s.st.Users[i] = cur
 		return s.commit()
 	}
@@ -729,7 +740,7 @@ func (s *Store) Intervals() spec.Intervals {
 func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	var usable []User
 	for _, u := range s.st.Users {
-		if u.Usable(now) {
+		if u.Usable(now) && !s.overDevices[u.ID].After(now) {
 			usable = append(usable, u)
 		}
 	}
@@ -853,6 +864,12 @@ func (s *Store) Report(ctx context.Context, rep agentproto.Report) (bool, error)
 	if s.online == nil {
 		s.online = map[string][]string{}
 	}
+	if s.enforceDevices(now) {
+		changed = true
+	}
+	if s.resetQuotasDue(now) {
+		changed = true
+	}
 	s.host = rep.Host
 	s.cores = rep.Cores
 	s.forwardStatus = rep.Forwards
@@ -898,13 +915,16 @@ func (s *Store) PushStatus(ctx context.Context, st spec.SystemStatus) error {
 
 // Runtime is what the UI shows about the running node.
 type Runtime struct {
-	Host       spec.SystemStatus                `json:"host"`
-	Cores      map[string]agentproto.CoreStatus `json:"cores"`
-	Forwards   []agentproto.ForwardStatus       `json:"forwards"`
-	Online     map[string][]string              `json:"online"`
-	LastReport time.Time                        `json:"last_report"`
-	History    []DayPoint                       `json:"history"`
-	Revision   int64                            `json:"revision"`
+	Host     spec.SystemStatus                `json:"host"`
+	Cores    map[string]agentproto.CoreStatus `json:"cores"`
+	Forwards []agentproto.ForwardStatus       `json:"forwards"`
+	Online   map[string][]string              `json:"online"`
+	// OverDevices lists users currently held back for exceeding their
+	// device limit, with the time the hold ends.
+	OverDevices map[int64]time.Time `json:"over_devices"`
+	LastReport  time.Time           `json:"last_report"`
+	History     []DayPoint          `json:"history"`
+	Revision    int64               `json:"revision"`
 }
 
 // Runtime returns the latest report data.
@@ -915,6 +935,13 @@ func (s *Store) Runtime() Runtime {
 	for k, v := range s.online {
 		online[k] = append([]string(nil), v...)
 	}
+	over := map[int64]time.Time{}
+	now := time.Now()
+	for id, until := range s.overDevices {
+		if until.After(now) {
+			over[id] = until
+		}
+	}
 	return Runtime{Host: s.host, Cores: s.cores, Forwards: append([]agentproto.ForwardStatus(nil), s.forwardStatus...),
-		Online: online, LastReport: s.lastReport, History: append([]DayPoint(nil), s.history...), Revision: s.st.Revision}
+		Online: online, OverDevices: over, LastReport: s.lastReport, History: append([]DayPoint(nil), s.history...), Revision: s.st.Revision}
 }

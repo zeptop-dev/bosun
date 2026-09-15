@@ -360,7 +360,18 @@
     "noLinks": "没有可用的入站。",
     "resetTraffic": "清零流量",
     "rotate": "更换订阅链接",
-    "rotateHint": "旧链接立即失效。"
+    "rotateHint": "旧链接立即失效。",
+    "deviceLimit": "设备数上限",
+    "deviceLimitHint": "0 不限；同时在线 IP 超过上限时暂停该用户 5 分钟",
+    "resetMode": "流量重置",
+    "resetModeHint": "到期自动清零已用流量",
+    "resetNever": "不重置",
+    "resetDays": "每 N 天",
+    "resetMonthly": "每月 1 日",
+    "resetEvery": "间隔（天）",
+    "overDevices": "超设备数",
+    "overDevicesUntil": "暂停到 {{at}}",
+    "resetsOn": "{{date}} 重置"
   },
   "forwards": {
     "title": "转发",

@@ -45,7 +45,8 @@ export interface Inbound {
 export interface User {
   id: number; name: string; uuid: string; password: string; sub_token: string; enabled: boolean
   quota_bytes: number; expires_at: string | null; up: number; down: number; created_at: string; inbound_tags?: string[]
-  online: string[]; usable: boolean
+  device_limit?: number; reset_mode?: string; reset_days?: number; reset_at?: string | null
+  online: string[]; usable: boolean; over_devices?: boolean; over_devices_until?: string
 }
 export interface Forward { tag: string; listen?: string; port: number; protocol: string; target: string; backend?: string; preserve_source?: boolean; status: ForwardStatus | null }
 export interface DoctorCheck { id: string; name: string; status: 'ok' | 'warn' | 'fail' | 'skip'; detail?: string }
