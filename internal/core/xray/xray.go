@@ -73,7 +73,7 @@ func (c *Core) Name() string { return "xray" }
 
 func (c *Core) Capabilities() core.Capabilities {
 	return core.Capabilities{
-		Protocols:     []spec.Protocol{spec.VLESS, spec.VMess, spec.Trojan, spec.Shadowsocks, spec.SOCKS, spec.HTTP},
+		Protocols:     []spec.Protocol{spec.VLESS, spec.VMess, spec.Trojan, spec.Shadowsocks, spec.SOCKS, spec.HTTP, spec.WireGuard},
 		Transports:    []string{"ws", "grpc", "httpupgrade", "xhttp"},
 		HotUserReload: true,
 		Fallbacks:     true,

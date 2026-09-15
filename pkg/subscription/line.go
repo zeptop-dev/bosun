@@ -16,6 +16,7 @@ type Line struct {
 	Port     int
 	Inbound  spec.Inbound
 	UUID     string // user identity
+	UserID   int64  // numeric id (WireGuard tunnel address)
 	Password string
 	Tags     []string // labels for the portal's server list; not rendered into configs
 }

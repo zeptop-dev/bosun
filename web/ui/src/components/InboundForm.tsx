@@ -10,7 +10,7 @@ import { RealityScan, type RealityResult } from './RealityScan'
 import { toast } from '../lib/notify'
 import { IngressFields, clientHost, emptyIngress, ingressPayload, type IngressValues } from './IngressFields'
 
-const protocols = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'mieru', 'snell', 'socks', 'http']
+const protocols = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'mieru', 'snell', 'socks', 'http', 'naive', 'wireguard']
 const cores = ['', 'singbox', 'xray', 'mita', 'hysteria', 'snell']
 const transports = ['tcp', 'ws', 'grpc', 'httpupgrade', 'http', 'xhttp']
 const ciphers = ['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305', 'aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'none']
@@ -24,6 +24,7 @@ export type Values = {
   flow: string; cipher: string; server_key: string; obfs: string; obfs_password: string; up_mbps: number; down_mbps: number
   congestion_control: string; mieru_transport: string; traffic_pattern: string; mieru_mtu: number | string; mieru_multiplexing: string; mieru_handshake: string
   snell_psk: string; snell_version: number; snell_obfs: string; snell_obfs_host: string
+  wg_private: string; wg_public: string; wg_address: string; wg_mtu: number
   fallbacks: Fallback[]
   extra: string
 }
@@ -34,10 +35,10 @@ export const empty: Values = {
   transport: 'tcp', path: '', host: '', service_name: '', xhttp_mode: '',
   flow: '', cipher: '2022-blake3-aes-128-gcm', server_key: '', obfs: '', obfs_password: '', up_mbps: 0, down_mbps: 0,
   congestion_control: 'bbr', mieru_transport: 'TCP', traffic_pattern: '', mieru_mtu: '', mieru_multiplexing: '', mieru_handshake: '',
-  snell_psk: '', snell_version: 5, snell_obfs: '', snell_obfs_host: '', fallbacks: [], extra: '{}',
+  snell_psk: '', snell_version: 5, snell_obfs: '', snell_obfs_host: '', wg_private: '', wg_public: '', wg_address: '10.66.0.1/16', wg_mtu: 1420, fallbacks: [], extra: '{}',
 }
 
-const known = new Set(['tag', 'remark', 'protocol', 'listen', 'port', 'core', 'enabled', 'display_host', 'display_port', 'ingress_id', 'tls', 'transport', 'flow', 'cipher', 'server_key', 'obfs', 'obfs_password', 'up_mbps', 'down_mbps', 'congestion_control', 'mieru_transport', 'traffic_pattern', 'assigned_core', 'scoped_users', 'users', 'mieru_mtu', 'mieru_multiplexing', 'mieru_handshake', 'snell_psk', 'snell_version', 'snell_obfs', 'snell_obfs_host', 'fallbacks'])
+const known = new Set(['tag', 'remark', 'protocol', 'listen', 'port', 'core', 'enabled', 'display_host', 'display_port', 'ingress_id', 'tls', 'transport', 'flow', 'cipher', 'server_key', 'obfs', 'obfs_password', 'up_mbps', 'down_mbps', 'congestion_control', 'mieru_transport', 'traffic_pattern', 'assigned_core', 'scoped_users', 'users', 'mieru_mtu', 'mieru_multiplexing', 'mieru_handshake', 'snell_psk', 'snell_version', 'snell_obfs', 'snell_obfs_host', 'fallbacks', 'wg_private_key', 'wg_public_key', 'wg_address', 'wg_mtu'])
 
 export function toValues(ib?: Inbound): Values {
   if (!ib) return empty
@@ -55,6 +56,7 @@ export function toValues(ib?: Inbound): Values {
     flow: ib.flow ?? '', cipher: ib.cipher ?? empty.cipher, server_key: ib.server_key ?? '', obfs: ib.obfs ?? '', obfs_password: ib.obfs_password ?? '',
     up_mbps: ib.up_mbps ?? 0, down_mbps: ib.down_mbps ?? 0, congestion_control: ib.congestion_control ?? 'bbr', mieru_transport: ib.mieru_transport ?? 'TCP', traffic_pattern: ib.traffic_pattern ?? '', mieru_mtu: ib.mieru_mtu || '', mieru_multiplexing: ib.mieru_multiplexing ?? '', mieru_handshake: ib.mieru_handshake ?? '',
     snell_psk: ib.snell_psk ?? '', snell_version: ib.snell_version || 5, snell_obfs: ib.snell_obfs ?? '', snell_obfs_host: ib.snell_obfs_host ?? '',
+    wg_private: ib.wg_private_key ?? '', wg_public: ib.wg_public_key ?? '', wg_address: ib.wg_address || '10.66.0.1/16', wg_mtu: ib.wg_mtu || 1420,
     fallbacks: (ib.fallbacks ?? []).map((f) => ({ name: f.name ?? '', alpn: f.alpn ?? '', path: f.path ?? '', dest: f.dest, xver: f.xver ?? 0 })),
     extra: JSON.stringify(extra, null, 2),
   }
@@ -70,7 +72,7 @@ function fallbackLimit(v: Values): FallbackLimit | undefined {
 export function toInbound(v: Values): Record<string, unknown> {
   const out: Record<string, unknown> = { ...JSON.parse(v.extra || '{}'), tag: v.tag, remark: v.remark, protocol: v.protocol, listen: v.listen, port: v.port, core: v.core, enabled: v.enabled, display_host: v.display_host, display_port: v.display_port, ingress_id: v.ingress_id }
   const stream = ['vless', 'vmess', 'trojan', 'shadowsocks', 'anytls', 'socks', 'http'].includes(v.protocol)
-  const quic = ['hysteria2', 'tuic'].includes(v.protocol)
+  const quic = ['hysteria2', 'tuic', 'naive'].includes(v.protocol)
   if (v.tls === 'tls' && ['vless', 'trojan'].includes(v.protocol) && v.transport === 'tcp' && v.fallbacks.length) out.fallbacks = v.fallbacks.filter((f) => f.dest.trim()).map((f) => ({ name: f.name || undefined, alpn: f.alpn || undefined, path: f.path || undefined, dest: f.dest.trim(), xver: f.xver || undefined }))
   if (v.tls === 'reality') out.tls = { mode: 2, server_name: v.server_name, reality: { private_key: v.reality_private, public_key: v.reality_public, short_ids: v.reality_short ? [v.reality_short] : [], handshake_server: v.handshake_server || v.server_name, handshake_port: v.handshake_port || 443, fallback_limit: fallbackLimit(v) } }
   else if (v.tls === 'tls' || quic) out.tls = { mode: 1, server_name: v.server_name, auto_cert: v.auto_cert, acme: v.auto_cert ? v.acme : '' }
@@ -86,6 +88,8 @@ export function toInbound(v: Values): Record<string, unknown> {
     if (v.mieru_multiplexing) out.mieru_multiplexing = v.mieru_multiplexing
     if (v.mieru_handshake) out.mieru_handshake = v.mieru_handshake
   }
+  if (v.protocol === 'wireguard') { out.wg_private_key = v.wg_private; out.wg_public_key = v.wg_public; out.wg_address = v.wg_address; out.wg_mtu = Number(v.wg_mtu) || 1420 }
+  if (v.protocol === 'naive') out.tls = { mode: 1, server_name: v.server_name, auto_cert: v.auto_cert, acme: v.auto_cert ? v.acme : '' }
   if (v.protocol === 'snell') {
     out.snell_psk = v.snell_psk
     out.snell_version = Number(v.snell_version) || 5
@@ -129,6 +133,7 @@ const recipes: { key: string; values: Partial<Values> }[] = [
   { key: 'trojanWs', values: { protocol: 'trojan', port: 443, tls: 'tls', auto_cert: true, transport: 'ws', path: '/trojan' } },
   { key: 'anytls', values: { protocol: 'anytls', port: 8444, tls: 'tls', auto_cert: true } },
   { key: 'snell5', values: { protocol: 'snell', port: 6160, tls: 'none', snell_version: 5, snell_obfs: '' } },
+  { key: 'wireguard', values: { protocol: 'wireguard', port: 51820, tls: 'none', wg_address: '10.66.0.1/16', wg_mtu: 1420 } },
 ]
 
 export type InboundSubmit = { body: Record<string, unknown>; ingress?: IngressInput }
@@ -163,7 +168,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
     form.setValues({ ingress_id: val ?? '', port: g && g.port_from ? firstFree(g) || v.port : v.port })
   }
   const stream = ['vless', 'vmess', 'trojan', 'shadowsocks', 'anytls', 'socks', 'http'].includes(v.protocol)
-  const quic = ['hysteria2', 'tuic'].includes(v.protocol)
+  const quic = ['hysteria2', 'tuic', 'naive'].includes(v.protocol)
   const tlsCapable = stream && v.protocol !== 'shadowsocks'
   const settingsQ = useQuery({ queryKey: ['settings'], queryFn: () => api.get<Settings>('/api/settings'), staleTime: 60_000 })
   const decoy = settingsQ.data?.decoy_enabled && settingsQ.data.decoy_domain ? settingsQ.data : null
@@ -177,6 +182,9 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   const genPassword = async () => {
     try { const k = await api.post<{ password: string }>('/api/keys/password'); form.setFieldValue('obfs_password', k.password) } catch (e) { toast.err(e) }
   }
+  const genWG = async () => {
+    try { const k = await api.post<{ private_key: string; public_key: string }>('/api/keys/wireguard'); form.setValues({ wg_private: k.private_key, wg_public: k.public_key }) } catch (e) { toast.err(e) }
+  }
   const genPSK = async () => {
     try { const k = await api.post<{ password: string }>('/api/keys/password'); form.setFieldValue('snell_psk', k.password) } catch (e) { toast.err(e) }
   }
@@ -188,6 +196,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
     if (r.values.cipher?.startsWith('2022')) void genKey()
     if (r.values.obfs) void genPassword()
     if (r.values.protocol === 'snell') void genPSK()
+    if (r.values.protocol === 'wireguard') void genWG()
   }
   const submit = (vals: Values) => {
     if (newIngress) {
@@ -349,6 +358,20 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
               data={[{ value: '', label: t('inbounds.clientDefault') }, { value: 'HANDSHAKE_NO_WAIT', label: t('inbounds.handshakeNoWait') }, { value: 'HANDSHAKE_STANDARD', label: t('inbounds.handshakeStandard') }]}
               {...form.getInputProps('mieru_handshake')} />
           </Group>
+        )}
+        {v.protocol === 'wireguard' && (
+          <Card p="sm">
+            <Text size="xs" c="dimmed" mb="xs">{t('inbounds.wgHint')}</Text>
+            <Group align="flex-end" wrap="nowrap">
+              <TextInput label={t('inbounds.wgPrivate')} required style={{ flex: 1 }} {...form.getInputProps('wg_private')} />
+              <TextInput label={t('inbounds.wgPublic')} style={{ flex: 1 }} {...form.getInputProps('wg_public')} />
+              <Tooltip label={t('inbounds.generateKeypair')}><ActionIcon variant="light" size="input-sm" aria-label={t('inbounds.generateKeypair')} onClick={genWG}><IconRefresh size={16} /></ActionIcon></Tooltip>
+            </Group>
+            <Group grow align="flex-start" mt="xs">
+              <TextInput label={t('inbounds.wgAddress')} description={t('inbounds.wgAddressHint')} {...form.getInputProps('wg_address')} />
+              <NumberInput label="MTU" min={1280} max={1500} {...form.getInputProps('wg_mtu')} />
+            </Group>
+          </Card>
         )}
         {v.protocol === 'snell' && (
           <Card p="sm">

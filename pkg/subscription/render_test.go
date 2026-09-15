@@ -3,6 +3,7 @@ package subscription
 import (
 	"encoding/base64"
 	"encoding/json"
+	"github.com/zeptop-dev/bosun/pkg/wg"
 	"strings"
 	"testing"
 
@@ -270,5 +271,27 @@ func TestPickNewClients(t *testing.T) {
 	}
 	if Pick("stash", "").Name() != "stash" || Pick("quantumult-x", "").Name() != "qx" || Pick("surfboard", "Mozilla").Name() != "surfboard" {
 		t.Fatal("aliases")
+	}
+}
+
+func TestWireGuardRendering(t *testing.T) {
+	priv, pub, _ := wg.Keypair()
+	l := Line{Name: "wg", Host: "198.51.100.20", Port: 51820, UUID: "u1", UserID: 7, Inbound: spec.Inbound{Tag: "wg", Protocol: spec.WireGuard, Port: 51820, WGPrivateKey: priv, WGPublicKey: pub}}
+	conf := WGConf(l)
+	if !strings.Contains(conf, "[Interface]") || !strings.Contains(conf, "PublicKey = "+pub) || !strings.Contains(conf, "Endpoint = 198.51.100.20:51820") || strings.Contains(conf, priv) {
+		t.Fatalf("conf:\n%s", conf)
+	}
+	out, _ := WireGuardConf{}.Render([]Line{l}, Account{})
+	if !strings.HasPrefix(string(out), "# wg\n[Interface]") {
+		t.Fatalf("renderer: %s", out)
+	}
+	if p := clashProxy(l); p == nil || p["type"] != "wireguard" || p["public-key"] != pub {
+		t.Fatalf("clash: %v", p)
+	}
+	if o := singboxOutbound(l); o == nil || o["type"] != "wireguard" {
+		t.Fatalf("singbox: %v", o)
+	}
+	if Pick("wg", "").Name() != "wireguard" {
+		t.Fatal("alias")
 	}
 }

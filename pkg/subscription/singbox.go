@@ -115,6 +115,17 @@ func singboxOutbound(l Line) m {
 		o["type"] = "http"
 		o["username"] = l.UUID
 		o["password"] = l.Password
+	case spec.WireGuard:
+		c, ok := WGClient(l)
+		if !ok {
+			return nil
+		}
+		o["type"] = "wireguard"
+		o["local_address"] = []string{c.Address}
+		o["private_key"] = c.PrivateKey
+		o["peer_public_key"] = c.ServerPublicKey
+		o["mtu"] = c.MTU
+		return o
 	default:
 		return nil // mieru: no upstream sing-box client support
 	}

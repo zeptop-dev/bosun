@@ -140,6 +140,20 @@ func clashProxy(l Line) m {
 			p["tls"] = true
 			p["sni"] = serverName(l)
 		}
+	case spec.WireGuard:
+		c, ok := WGClient(l)
+		if !ok {
+			return nil
+		}
+		p["type"] = "wireguard"
+		p["private-key"] = c.PrivateKey
+		p["public-key"] = c.ServerPublicKey
+		p["ip"] = strings.TrimSuffix(c.Address, "/32")
+		p["mtu"] = c.MTU
+		p["allowed-ips"] = []string{"0.0.0.0/0", "::/0"}
+		p["remote-dns-resolve"] = true
+		p["dns"] = []string{"1.1.1.1"}
+		return p
 	default:
 		return nil
 	}

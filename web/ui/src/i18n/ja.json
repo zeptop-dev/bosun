@@ -169,7 +169,9 @@
       "anytls": "AnyTLS",
       "anytlsDesc": "トラフィック解析に強い新プロトコル。証明書が必要。",
       "snell5": "Snell v5",
-      "snell5Desc": "Surge 公式 snell-server。共有 PSK を自動生成します。"
+      "snell5Desc": "Surge 公式 snell-server。共有 PSK を自動生成します。",
+      "wireguard": "WireGuard",
+      "wireguardDesc": "UDP の端末全体 VPN。専用線・内部網向け。"
     },
     "serverNameAuto": "証明書のドメイン。DNS がこのマシンを指している必要があります",
     "autoCert": "自動証明書",
@@ -236,7 +238,12 @@
     "fallbackAdd": "ルール追加",
     "fallbackDest": "転送先",
     "useDecoy": "おとりサイト {{domain}} を使う",
-    "useDecoyHint": "SNI をおとりドメインに、ハンドシェイク先を 127.0.0.1:4443 に設定"
+    "useDecoyHint": "SNI をおとりドメインに、ハンドシェイク先を 127.0.0.1:4443 に設定",
+    "wgHint": "標準 WireGuard。端末全体の VPN 用途（ルーター、OS レベル）。UDP の特徴が明確なので専用線や内部ネットワーク向け。クライアント鍵はサーバー鍵から派生し、サブスクリプションに .conf と QR を含めます。",
+    "wgPrivate": "サーバー秘密鍵",
+    "wgPublic": "サーバー公開鍵",
+    "wgAddress": "トンネルネットワーク（サーバーアドレス）",
+    "wgAddressHint": "クライアントアドレスはこのネットワークからユーザー ID で割り当て"
   },
   "ingress": {
     "title": "専用線入口",

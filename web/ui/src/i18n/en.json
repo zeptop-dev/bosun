@@ -169,7 +169,9 @@
       "anytls": "AnyTLS",
       "anytlsDesc": "New protocol resisting traffic analysis; needs a certificate.",
       "snell5": "Snell v5",
-      "snell5Desc": "Surge's official snell-server, one shared PSK generated for you."
+      "snell5Desc": "Surge's official snell-server, one shared PSK generated for you.",
+      "wireguard": "WireGuard",
+      "wireguardDesc": "Whole-device VPN over UDP; for lines and internal networks."
     },
     "serverNameAuto": "Domain of the certificate; its DNS must point at this machine",
     "autoCert": "Automatic certificate",
@@ -236,7 +238,12 @@
     "fallbackAdd": "Add rule",
     "fallbackDest": "Destination",
     "useDecoy": "Use decoy site {{domain}}",
-    "useDecoyHint": "SNI becomes the decoy domain, handshake target 127.0.0.1:4443"
+    "useDecoyHint": "SNI becomes the decoy domain, handshake target 127.0.0.1:4443",
+    "wgHint": "Plain WireGuard for whole-device VPN use (routers, OS-level). Its UDP signature is obvious, so use it on lines or internal networks rather than across the GFW. Client keys derive from the server key; subscriptions carry a .conf and a QR code.",
+    "wgPrivate": "Server private key",
+    "wgPublic": "Server public key",
+    "wgAddress": "Tunnel network (server address)",
+    "wgAddressHint": "Client addresses are assigned from this network by user id"
   },
   "ingress": {
     "title": "Line ingresses",
