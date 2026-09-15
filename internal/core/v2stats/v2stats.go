@@ -53,6 +53,24 @@ func QueryInbounds(ctx context.Context, conn *grpc.ClientConn, method, pattern s
 	return decodeKind(resp, "inbound")
 }
 
+// QueryOutbounds is QueryUsers for per-outbound counters, keyed by tag.
+func QueryOutbounds(ctx context.Context, conn *grpc.ClientConn, method, pattern string, reset bool) (map[string]spec.Traffic, error) {
+	var req []byte
+	if pattern != "" {
+		req = protowire.AppendTag(req, 1, protowire.BytesType)
+		req = protowire.AppendString(req, pattern)
+	}
+	if reset {
+		req = protowire.AppendTag(req, 2, protowire.VarintType)
+		req = protowire.AppendVarint(req, 1)
+	}
+	resp, err := grpcraw.Invoke(ctx, conn, method, req)
+	if err != nil {
+		return nil, err
+	}
+	return decodeKind(resp, "outbound")
+}
+
 // DecodeUsers parses QueryStatsResponse { repeated Stat stat = 1 } where
 // Stat { name = 1; value = 2 } and keeps only user traffic counters.
 func DecodeUsers(b []byte) (map[string]spec.Traffic, error) { return decodeKind(b, "user") }

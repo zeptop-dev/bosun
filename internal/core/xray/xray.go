@@ -269,6 +269,17 @@ func (c *Core) InboundStats(ctx context.Context, reset bool) (map[string]spec.Tr
 	return v2stats.QueryInbounds(rctx, conn, methodQueryStats, "inbound>>>", reset)
 }
 
+// OutboundStats implements core.OutboundStatser.
+func (c *Core) OutboundStats(ctx context.Context, reset bool) (map[string]spec.Traffic, error) {
+	conn, err := c.dial()
+	if err != nil {
+		return nil, err
+	}
+	rctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	return v2stats.QueryOutbounds(rctx, conn, methodQueryStats, "outbound>>>", reset)
+}
+
 func (c *Core) dial() (*grpc.ClientConn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

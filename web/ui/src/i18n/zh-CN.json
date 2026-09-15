@@ -468,7 +468,18 @@
     "decoyUpstream": "上游站点（可选）",
     "decoyUpstreamHint": "留空用内置的占位页面；填 http(s) 地址则反向代理到你自己的网站",
     "decoyReady": "站点已就绪，监听 127.0.0.1:{{port}}",
-    "decoyPending": "正在申请证书…"
+    "decoyPending": "正在申请证书…",
+    "access": "访问控制",
+    "allowCidrs": "面板 IP 白名单",
+    "allowCidrsHint": "只允许这些 IP 或网段登录和调用 API；留空不限制。保存时会拒绝把你自己排除在外的名单。",
+    "extraLinks": "订阅附加节点",
+    "extraLinksHint": "每行一条分享链接（vless://、ss://、hysteria2:// 等），会附加到每个用户的订阅里，适合把别处的节点合并进来。",
+    "telegram": "Telegram 通知",
+    "telegramHint": "体检出现新的失败项时发消息到指定聊天；给机器人发 /status 查看节点状态，发 /id 获取聊天 ID。",
+    "telegramToken": "机器人 Token",
+    "telegramChat": "聊天 ID",
+    "telegramChatHint": "给机器人发 /id 就能拿到",
+    "telegramNotify": "发送告警"
   },
   "logs": {
     "title": "日志",

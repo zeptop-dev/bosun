@@ -153,6 +153,11 @@ type InboundStatser interface {
 	InboundStats(ctx context.Context, reset bool) (map[string]spec.Traffic, error)
 }
 
+// OutboundStatser is implemented by cores that count traffic per outbound.
+type OutboundStatser interface {
+	OutboundStats(ctx context.Context, reset bool) (map[string]spec.Traffic, error)
+}
+
 // OnlineTracker is implemented by cores that can report which client IPs
 // each user currently connects from. Not every upstream core exposes this:
 // Xray and the official Hysteria server do, sing-box and mita do not.

@@ -73,7 +73,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		"experimental": m{
 			"v2ray_api": m{
 				"listen": opt.StatsListen,
-				"stats":  m{"enabled": true, "users": names, "inbounds": inboundTags(inbounds)},
+				"stats":  m{"enabled": true, "users": names, "inbounds": inboundTags(inbounds), "outbounds": outboundTags(node)},
 			},
 		},
 		"inbounds":  ins,
@@ -481,6 +481,16 @@ func inboundTags(list []spec.Inbound) []string {
 	out := make([]string, 0, len(list))
 	for _, ib := range list {
 		out = append(out, ib.Tag)
+	}
+	return out
+}
+
+func outboundTags(node *spec.Node) []string {
+	out := []string{"direct"}
+	for _, o := range node.Outbounds {
+		if o.WARP == nil { // endpoints have no stats entry
+			out = append(out, o.Tag)
+		}
 	}
 	return out
 }

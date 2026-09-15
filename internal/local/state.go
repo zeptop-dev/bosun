@@ -56,6 +56,8 @@ type State struct {
 	Probe ProbeSettings `json:"probe"`
 	// Komari reports this node to a Komari server as an agent.
 	Komari spec.Komari `json:"komari"`
+	// OutboundTraffic is lifetime bytes per outbound tag.
+	OutboundTraffic map[string]spec.Traffic `json:"outbound_traffic,omitempty"`
 	// WARP is the Cloudflare account registered on this node (also used
 	// while a panel manages the node: the panel pushes from_node outbounds).
 	WARP *spec.WARPAccount `json:"warp,omitempty"`
@@ -182,6 +184,15 @@ type Settings struct {
 	DecoyDomain   string `json:"decoy_domain"`
 	DecoyUpstream string `json:"decoy_upstream"`
 	DecoyACME     string `json:"decoy_acme"`
+	// PanelAllowCIDRs restricts panel login/API to these networks (empty = any).
+	PanelAllowCIDRs []string `json:"panel_allow_cidrs"`
+	// ExtraLinks are share links (one per line) appended to every user's
+	// subscription: nodes elsewhere that this panel does not manage.
+	ExtraLinks string `json:"extra_links"`
+	// Telegram alerts and /status.
+	TelegramToken  string `json:"telegram_token"`
+	TelegramChatID int64  `json:"telegram_chat_id"`
+	TelegramNotify bool   `json:"telegram_notify"`
 }
 
 // Inbound is a spec.Inbound plus local bookkeeping.

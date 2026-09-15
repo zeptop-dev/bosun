@@ -126,13 +126,19 @@ type Routing struct {
 	Routes          []spec.RouteRule `json:"routes"`
 	DefaultOutbound string           `json:"default_outbound"`
 	DNS             []string         `json:"dns"`
+	// Traffic is lifetime bytes per outbound tag (read-only).
+	Traffic map[string]spec.Traffic `json:"traffic,omitempty"`
 }
 
 // Routing returns a copy with non-nil slices.
 func (s *Store) Routing() Routing {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return Routing{Outbounds: append([]spec.Outbound{}, s.st.Outbounds...), Routes: append([]spec.RouteRule{}, s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound, DNS: append([]string{}, s.st.DNS...)}
+	tr := map[string]spec.Traffic{}
+	for k, v := range s.st.OutboundTraffic {
+		tr[k] = v
+	}
+	return Routing{Outbounds: append([]spec.Outbound{}, s.st.Outbounds...), Routes: append([]spec.RouteRule{}, s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound, DNS: append([]string{}, s.st.DNS...), Traffic: tr}
 }
 
 // ValidateRouting checks tags: every rule and the default must point at a

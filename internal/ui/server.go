@@ -198,8 +198,40 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+// ipAllowed applies the panel allow-list (empty = everyone).
+func (s *Server) ipAllowed(r *http.Request) bool {
+	list := s.d.Store.Settings().PanelAllowCIDRs
+	if len(list) == 0 {
+		return true
+	}
+	ip := net.ParseIP(clientIP(r))
+	if ip == nil {
+		return false
+	}
+	for _, c := range list {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if !strings.Contains(c, "/") {
+			if ip.Equal(net.ParseIP(c)) {
+				return true
+			}
+			continue
+		}
+		if _, n, err := net.ParseCIDR(c); err == nil && n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.ipAllowed(r) {
+			fail(w, http.StatusForbidden, errors.New("your address is not on the panel allow-list"))
+			return
+		}
 		// Personal API token (scripts): same access as the login.
 		if tok := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer")); tok != "" {
 			if s.d.Store.CheckAPIToken(tok) {
@@ -239,6 +271,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Username, Password, Code string }
 	if err := decode(r, &in); err != nil {
 		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if !s.ipAllowed(r) {
+		fail(w, http.StatusForbidden, errors.New("your address is not on the panel allow-list"))
 		return
 	}
 	ip := clientIP(r)
@@ -606,6 +642,10 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 	// dialects, else a base64 URI list.
 	settings := s.d.Store.Settings()
 	lines := linesFor(u, s.d.Store.Inbounds(), settings, requestHost(r), s.d.Store.ListIngresses()...)
+	if strings.TrimSpace(settings.ExtraLinks) != "" {
+		extra, _ := subscription.ParseList(settings.ExtraLinks)
+		lines = append(lines, extra...)
+	}
 	acct := subscription.Account{Upload: u.Up, Download: u.Down, Total: u.QuotaBytes}
 	if u.ExpiresAt != nil {
 		acct.Expire = u.ExpiresAt.Unix()
@@ -687,6 +727,21 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if err := decode(r, &v); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
+	}
+	if len(v.PanelAllowCIDRs) > 0 {
+		ip := net.ParseIP(clientIP(r))
+		hit := false
+		for _, c := range v.PanelAllowCIDRs {
+			if !strings.Contains(c, "/") {
+				hit = hit || ip.Equal(net.ParseIP(strings.TrimSpace(c)))
+			} else if _, n, err := net.ParseCIDR(strings.TrimSpace(c)); err == nil && n.Contains(ip) {
+				hit = true
+			}
+		}
+		if !hit {
+			fail(w, http.StatusBadRequest, fmt.Errorf("the allow-list would lock you out: your address %s is not in it", ip))
+			return
+		}
 	}
 	storeErr(w, s.d.Store.SetSettings(v))
 }

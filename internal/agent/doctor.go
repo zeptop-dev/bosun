@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/doctor"
@@ -78,10 +79,45 @@ func (a *Agent) LastDoctor() *doctor.Report {
 // it changed, and at least every 30 minutes.
 func (a *Agent) runDoctor(ctx context.Context) {
 	rep := a.Doctor(ctx)
+	a.alertOnNewFailures(rep)
 	a.statusMu.Lock()
 	a.lastDoctor = &rep
 	if !rep.Same(a.sentDoctor) || time.Since(a.sentDoctorAt) > 30*time.Minute {
 		a.pendingDoctor = &rep
 	}
 	a.statusMu.Unlock()
+}
+
+// alertOnNewFailures notifies once per check that flips to Fail and once
+// when everything is back to normal.
+func (a *Agent) alertOnNewFailures(rep doctor.Report) {
+	if a.Alert == nil {
+		return
+	}
+	a.statusMu.Lock()
+	prev := map[string]bool{}
+	if a.lastDoctor != nil {
+		for _, c := range a.lastDoctor.Checks {
+			if c.Status == doctor.Fail {
+				prev[c.ID] = true
+			}
+		}
+	}
+	a.statusMu.Unlock()
+	var fresh []string
+	now := map[string]bool{}
+	for _, c := range rep.Checks {
+		if c.Status == doctor.Fail {
+			now[c.ID] = true
+			if !prev[c.ID] {
+				fresh = append(fresh, c.Name+": "+c.Detail)
+			}
+		}
+	}
+	switch {
+	case len(fresh) > 0:
+		a.Alert("❌ bosun doctor found new failures:\n" + strings.Join(fresh, "\n"))
+	case len(prev) > 0 && len(now) == 0:
+		a.Alert("✅ bosun doctor: all checks pass again")
+	}
 }

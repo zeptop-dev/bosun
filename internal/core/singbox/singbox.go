@@ -213,6 +213,22 @@ func (c *Core) InboundStats(ctx context.Context, reset bool) (map[string]spec.Tr
 	return v2stats.QueryInbounds(ctx, conn, queryStatsMethod, "inbound>>>", reset)
 }
 
+// OutboundStats implements core.OutboundStatser.
+func (c *Core) OutboundStats(ctx context.Context, reset bool) (map[string]spec.Traffic, error) {
+	c.mu.Lock()
+	if c.conn == nil {
+		conn, err := grpcraw.Dial(c.opt.StatsListen)
+		if err != nil {
+			c.mu.Unlock()
+			return nil, err
+		}
+		c.conn = conn
+	}
+	conn := c.conn
+	c.mu.Unlock()
+	return v2stats.QueryOutbounds(ctx, conn, queryStatsMethod, "outbound>>>", reset)
+}
+
 // effectiveLogLevel returns the sing-box log level to run with: the
 // configured one, raised to info when device limits are in use.
 func effectiveLogLevel(configured string, limited bool) string {
