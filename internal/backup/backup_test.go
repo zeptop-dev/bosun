@@ -2,6 +2,7 @@ package backup
 
 import (
 	"bytes"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum, _, err := Restore(dst, bytes.NewReader(buf.Bytes()), fresh.Username()+":other")
+	sum, _, err := Restore(dst, bytes.NewReader(buf.Bytes()), fresh.Username()+":other", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +67,7 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatal("files outside the allow-list must not travel")
 	}
 	// Garbage is refused, and so is a managed-mode archive.
-	if _, _, err := Restore(dst, bytes.NewReader([]byte("nope")), ""); err == nil {
+	if _, _, err := Restore(dst, bytes.NewReader([]byte("nope")), "", ""); err == nil {
 		t.Fatal("garbage accepted")
 	}
 }
@@ -79,7 +80,7 @@ func TestRestoreRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = os.WriteFile(filepath.Join(dir, "local.json"), []byte(`{"mode":"local","admin":{"username":"current","password_hash":"h2"}}`), 0o600)
-	sum, rollback, err := Restore(dir, &buf, "current:h2")
+	sum, rollback, err := Restore(dir, &buf, "current:h2", "")
 	if err != nil || rollback == nil || !sum.AdminChanged {
 		t.Fatalf("restore: %+v %v", sum, err)
 	}
@@ -91,5 +92,29 @@ func TestRestoreRollback(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "local.json")); !strings.Contains(string(b), "current") {
 		t.Fatalf("rollback did not restore: %s", b)
+	}
+}
+
+func TestSealOpen(t *testing.T) {
+	var sealed bytes.Buffer
+	if err := Seal(&sealed, []byte("hello"), "pw"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(bytes.NewReader(sealed.Bytes()), ""); err == nil {
+		t.Fatal("missing passphrase should fail")
+	}
+	if _, err := Open(bytes.NewReader(sealed.Bytes()), "nope"); err == nil {
+		t.Fatal("wrong passphrase should fail")
+	}
+	r, err := Open(bytes.NewReader(sealed.Bytes()), "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := io.ReadAll(r); string(b) != "hello" {
+		t.Fatalf("got %q", b)
+	}
+	plain, _ := Open(strings.NewReader("plain tar"), "")
+	if b, _ := io.ReadAll(plain); string(b) != "plain tar" {
+		t.Fatalf("plain passthrough: %q", b)
 	}
 }

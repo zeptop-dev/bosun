@@ -494,7 +494,12 @@
     "shaperOn": "{{n}} ユーザーを {{iface}} で制限中",
     "shaperUnsupported": "制限は設定済みですが nft/tc がない（または Linux ではない）ため未適用",
     "mitaQuotas": "mita ネイティブ配額",
-    "mitaQuotasHint": "各ユーザーの通信量上限を mita 自身の quotas にも書き込み、パネル停止中もコアが遮断します。ウィンドウはリセット周期（月次は 31 日ローリング）なので、月初リセット直後は mita が数日遮断することがあります。"
+    "mitaQuotasHint": "各ユーザーの通信量上限を mita 自身の quotas にも書き込み、パネル停止中もコアが遮断します。ウィンドウはリセット周期（月次は 31 日ローリング）なので、月初リセット直後は mita が数日遮断することがあります。",
+    "tokenKeptHint": "保存済み。空欄で維持、- を入力で消去。",
+    "decoyAllowPrivate": "内部上流を許可",
+    "decoyAllowPrivateHint": "上流がループバック/プライベートアドレスの場合のみ必要。既定では拒否し、パネル自身やローカルサービスが偽装サイトの背後に露出しないようにします。",
+    "decoyInsecure": "上流証明書を検証しない",
+    "decoyInsecureHint": "自己署名証明書の https 上流向け。"
   },
   "logs": {
     "title": "ログ",
@@ -566,7 +571,9 @@
     "restored": "復元しました",
     "summary": "復元: インバウンド {{inbounds}}、ユーザー {{users}}、転送 {{forwards}}、入口 {{ingresses}}",
     "adminChanged": "管理者ログインが変更されました。再ログインしてください",
-    "managedHint": "Captain 管理中のため設定はパネル側にあります。ダウンロードのみ可能で、復元はできません。"
+    "managedHint": "Captain 管理中のため設定はパネル側にあります。ダウンロードのみ可能で、復元はできません。",
+    "passphrase": "バックアップのパスフレーズ",
+    "passphraseHint": "設定するとアーカイブを AES-256-GCM で封印し、復元時にも必要になります。空欄なら平文ダウンロード。アーカイブには管理者、ユーザー、TOTP、API トークン、WARP 鍵など全ての秘密が含まれます。"
   },
   "outbound": {
     "title": "アウトバウンド",

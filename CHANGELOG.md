@@ -1,0 +1,64 @@
+# Changelog
+
+One entry per release tag, newest first, condensed from the commit subjects
+between that tag and the previous one (`git log --format=%s <prev>..<tag>`).
+Merge commits and formatting-only commits are left out. Binaries and
+`SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
+from there (Settings → Version and updates, or from Captain's node list).
+
+- **v0.29.0** (2026-09-15) — agent: retry a failed apply on the next pull (30 s floor), keep unacknowledged traffic deltas across failed reports, refresh firewall openings after forwards start
+- **v0.28.0** (2026-09-15) — Hardening: tag/listen validation everywhere (nft/realm/file-name safe), ingress guard only interpolates literal IPs, per-core override denylist (spec.CheckOverride), agent drops inbounds with unsafe tags from any panel
+- **v0.27.0** (2026-09-15) — Realm forward backend, strict ingress nft guard for mita, firewall auto-open (ufw/firewalld), OpenRC installer, mita native quotas, restore rollback, standalone subscription templates + designer (pkg/subdesign), Line.Extra client fields, derived port pool
+- **v0.26.0** (2026-09-15) — subscription: {{proxy_names:tag=…}} and {{proxy_names:match=…}} filters for proxy groups
+- **v0.25.1** (2026-09-15) — ui: drop unused import in OverridesCard
+- **v0.25.0** (2026-09-15) — core: per-core config overrides (deep-merged JSON per node), standalone /api/overrides + settings card; subscription: Egern renderer (proxies list per the Egern docs, policy-group template with {{proxy_names}}, UA and ?client=egern detection)
+- **v0.24.1** (2026-09-15) — automatic Cloudflare DNS records for the panel domain, decoy site and TLS inbound names when a token is set; SOCKS5 quick recipe
+- **v0.24.0** (2026-09-15) — per-user speed limits: cores route each limited user through a fwmark outbound (xray sockopt.mark / sing-box routing_mark), kernel shaper (nft connmark + tc HTB/fq_codel on egress and an ifb for ingress), node default + per-user values, doctor check, xray restart key now covers outbounds/routing/DNS
+- **v0.23.0** (2026-09-15) — panel IP allow-list, extra share links merged into subscriptions, Telegram bot (doctor alerts, /status, /id), per-outbound traffic counters; routing depth: geosite/geoip rules (xray dat files extracted on install, sing-box remote rule sets), URL-test balancers, node DNS servers, per-inbound sniffing toggle (sing-box sniff action)
+- **v0.22.0** (2026-09-15) — per-inbound traffic counters (xray + sing-box stats), reported to panels and shown in the inbounds table; WireGuard inbound on xray: server keypair, per-user keys derived from the server key, tunnel addresses by user id; subscription renders .conf (also as share text/QR), clash and sing-box wireguard entries; naive exposed in the form; warp: locale strings; WARP: node-side Cloudflare registration (keys stay on the node), WireGuard outbound rendered for xray and sing-box (endpoint), standalone API and routing-page card with AI/streaming rule template, warp_register job for panels; xray fallbacks (VLESS/Trojan over TCP+TLS) with a form editor; decoy site: self-hosted HTTPS site on loopback with an automatic certificate for REALITY to steal; standalone panel: TOTP second factor and personal API tokens (Authorization: Bearer bsn_…); standalone users: device limit (native on sing-box, hold-back on other cores) and quota reset cycles (every N days / monthly)
+- **v0.21.3** (2026-09-14) — ui: listen row stays flat behind a line ingress; the bind-IP hint moves under the ingress selector
+- **v0.21.2** (2026-09-14) — ui: form hints render under inputs so rows line up, equal-height recipe cards, compact key-generation buttons with clearer tooltips, tidier fallback-limit row
+- **v0.21.1** (2026-09-14) — realityscan: drop Google, detect cross-host redirects, refresh the default pool (30 self-hosted sites across US/JP/EU verified today)
+- **v0.21.0** (2026-09-14) — reality: target scanner with CDN detection (auto-pick in the inbound form), fallback rate limit rendered for xray by default, xray preferred for REALITY, doctor check for CDN targets, panel job channel (State.Jobs / Report.Jobs)
+- **v0.20.1** (2026-09-14) — ui: brand in the header instead of a page title, nav links drop focus after click, header badges same size and aligned
+- **v0.20.0** (2026-09-14) — ui: light console look (grey page, white bordered cards, indigo accent), sidebar with grouped nav, language/theme switch and account card, page title in header, node info tiles on overview
+- **v0.19.1** (2026-09-14) — panel: sessions survive restarts; upgrade/restart shows a blocking overlay and reloads when the service is back
+- **v0.19.0** (2026-09-13) — subscription: pkg/subscription (moved from Captain) renders the standalone /sub per client; sharelink folded in
+- **v0.18.2** (2026-09-13) — ui: copy works over plain HTTP (execCommand fallback); nav puts Outbound next to Inbounds
+- **v0.18.1** (2026-09-13) — ui: line ingresses live under Inbounds; forwards and landing routing merged into one Outbound page
+- **v0.18.0** (2026-09-13) — doctor: ?fresh=1 bypasses the cache; ui reads lowercase summary keys; merge: mieru knobs, snell core, nftables forwards; merge: ui for mieru knobs, snell, nft forwards, doctor, backup; merge: doctor + standalone backup/restore; mieru mtu/multiplexing/handshake knobs and BOTH transport; Snell core (snell-server v5/v4); nftables forward backend with preserve_source; doctor: read-only self-check (agent every 10 min, report.doctor, GET /api/doctor, bosun doctor); backup: standalone archive/restore (GET /api/backup, POST /api/backup/restore, Store.Reload, bosun backup create|restore); ui: mieru MTU/multiplexing/handshake and TCP+UDP, Snell v5 recipe and fields, nftables forward backend, Doctor page, backup and restore card; six locales
+- **v0.17.5** (2026-09-13) — ui: custom mieru pattern opens a JSON editor pre-filled with every field
+- **v0.17.4** (2026-09-13) — ui: mieru strategy presets (IPLC / public / stealth / custom) in the inbound form, as in Captain
+- **v0.17.3** (2026-09-13) — ui: drop the mieru-only IPLC recipe; any recipe rides the selected line ingress
+- **v0.17.2** (2026-09-13) — ingress: reserved ports; line-only nodes default new inbounds to their ingress; line RTT uses the reserved port before any inbound
+- **v0.17.1** (2026-09-13) — komari: ping_target key, bosun <version> as agent version, public IPv4/IPv6 in basicInfo (refreshed hourly), version set in supervisor mode
+- **v0.17.0** (2026-09-13) — komari: report to a Komari server as an agent (auto-discovery, metrics, ping tasks); standalone settings + UI
+- **v0.16.2** (2026-09-13) — ui: highlight the selected quick-setup recipe
+- **v0.16.1** (2026-09-13) — ui: wait for the session refetch before leaving the login page (login needed two attempts)
+- **v0.16.0** (2026-09-13) — merge: standalone parity frontend (ingresses, routing, certificates, probe pages; six languages); ui: standalone parity — line ingresses, routing, certificates, probe pages; ingress picker + IPLC recipe; zh-TW/ja/ru/ko; merge: standalone parity backend (ingresses, routing, certificates, probe, admin set, interactive installer); standalone parity: line ingresses, landing outbounds/routes, operator certificates, probe settings with line RTT tasks, pkg/sharelink, admin set, interactive installer; install: wait for the first-start login line instead of printing an empty one; readme/tests: documentation addresses
+- **v0.15.0** (2026-09-13) — probe: tasks may bind a source address (tcp/icmp) to measure a dedicated line from its NIC
+- **v0.14.0** (2026-09-13) — probe: configurable carrier targets; standalone probe section in config; /metrics exposure
+- **v0.13.0** (2026-09-13) — certs: pushed PEM pairs from the panel take precedence for the names they cover
+- **v0.12.1** (2026-09-13) — probe: download tasks (spec + runner) — completes the previous commit; probe: download throughput tasks (ttfb + Mbps, 10 min minimum interval)
+- **v0.12.0** (2026-09-13) — outbounds: core-agnostic remote outbounds rendered per core, default outbound, inbound route match
+- **v0.11.1** (2026-09-13) — spec: give load1/load5/load15 their own json tags (duplicate tags made encoding/json drop all three)
+- **v0.11.0** (2026-09-13) — probe: host sampler (load, net rates, connections, uptime, host info, reachability), carrier + task latency runner, beat loop and Captain Beat endpoint
+- **v0.10.0** (2026-09-13) — singbox: report online client IPs per user from the log (device limits)
+- **v0.9.0** (2026-09-12) — config: BOSUN_CAPTAIN/BOSUN_PAIR env select the Captain driver (docker one-liner from the panel)
+- **v0.8.0** (2026-09-12) — captain driver: long-poll watcher so panel edits apply within seconds
+- **v0.7.1** (2026-09-12) — links: default connection address falls back to the inbound TLS domain; install.sh: uninstall command
+- **v0.7.0** (2026-09-11) — feat: automatic certificates (Let's Encrypt via certmagic; HTTP-01 or Cloudflare DNS-01) for inbounds and the panel; docs: compose install guide
+- **v0.6.0** (2026-09-11) — feat: self-update from GitHub Releases (check, apply, rollback, restart) and panel-requested upgrades; ci: register singbox workflow
+- **v0.5.0** (2026-09-11) — Move to GitHub: module path github.com/zeptop-dev/bosun, GitHub Actions, releases as download source; docs: MIT license; ci: push images without attestation manifests
+- **v0.4.2** (2026-09-11) — ci: docker buildx needs its own context under dind
+- **v0.4.1** (2026-09-11) — deploy: Dockerfile, compose, multi-arch image publish to GitLab registry and Docker Hub
+- **v0.4.0** (2026-09-11) — feat: standalone mode with built-in web panel, Captain takeover and detach; docs: move install section
+- **v0.3.1** (2026-09-11) — ci: gofmt only tracked files; add systemd unit and installer
+- **v0.3.0** (2026-09-11) — feat: online device reporting (Xray online-IP API, Hysteria auth addresses)
+- **v0.2.1** (2026-09-11) — spec: Reality.PublicKey for subscription output
+- **v0.2.0** (2026-09-11) — feat: Captain driver, per-inbound scoped users
+- **v0.1.0** (2026-09-11) — refactor: module path gitlab.com/boyang-hu/bosun; public pkg/spec and pkg/agentproto; chore: project moved to boyang-hu namespace; registry URL updated; ci: trigger pipeline after runner verification; ci: GitLab pipeline publishing bosun and CI-built sing-box; installer uses the registry; feat: built-in TCP/UDP relay with probes, Prometheus metrics endpoint; feat(core): official Hysteria 2 adapter; feat: core installer with tested-version manifest; docs: pin down the REALITY incompatibility to xtls/reality 8cdf7bf; feat(core): Xray adapter with hot user updates; feat(core): mita adapter for mieru; feat: managed-mode agent with sing-box core and Xboard driver
+
+Other tags: `singbox-1.14.0` (2026-09-11) is not a bosun release but the
+pre-release that carries the CI-built sing-box 1.14.0 binaries (with the
+stats API) that the installer downloads.

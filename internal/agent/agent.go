@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/zeptop-dev/bosun/internal/doctor"
 	"github.com/zeptop-dev/bosun/internal/komari"
@@ -94,6 +95,9 @@ type Agent struct {
 	pendingTraffic  map[int64]*spec.UserTraffic
 	pendingInbound  map[string]spec.Traffic
 	pendingOutbound map[string]spec.Traffic
+	// counters for /metrics
+	applyErrors, reportFailures atomic.Int64
+	lastApplyOK, lastReportOK   atomic.Int64 // unix seconds
 	// reportNow asks the run loop for an out-of-band report (job results).
 	reportNow chan struct{}
 	// Jobs handed down by the panel: which ran, which are running, and
@@ -536,6 +540,11 @@ func (a *Agent) apply(ctx context.Context) error {
 	a.lastAttempt = time.Now()
 	err := a.applyInner(ctx)
 	a.dirty = err != nil
+	if err != nil {
+		a.applyErrors.Add(1)
+	} else {
+		a.lastApplyOK.Store(time.Now().Unix())
+	}
 	a.setStatus(func(s *Status) {
 		s.LastApply = time.Now()
 		s.LastError = ""
@@ -851,6 +860,7 @@ func (a *Agent) report(ctx context.Context) bool {
 			// The deltas stay in the pending maps and go out with the next
 			// report; job results are requeued the same way.
 			a.requeueJobResults(full.Jobs)
+			a.reportFailures.Add(1)
 			a.log.Error("report failed; traffic deltas kept for the next attempt", "users", len(list), "err", err)
 			a.statusMu.Lock()
 			a.lastReportErr = err.Error()
@@ -858,6 +868,7 @@ func (a *Agent) report(ctx context.Context) bool {
 			return false
 		}
 		a.pendingTraffic, a.pendingInbound, a.pendingOutbound = map[int64]*spec.UserTraffic{}, map[string]spec.Traffic{}, map[string]spec.Traffic{}
+		a.lastReportOK.Store(time.Now().Unix())
 		a.log.Debug("report sent", "users", len(list), "state_changed", changed)
 		a.statusMu.Lock()
 		a.lastReport, a.lastReportErr = time.Now(), ""
@@ -957,6 +968,24 @@ func (a *Agent) ProbeResults() []spec.PingResult { return a.probes.Results() }
 
 func (a *Agent) registerMetrics() {
 	m := a.metrics
+	m.Describe("bosun_apply_errors_total", "counter", "applies that failed (a core rejected or could not start its config)")
+	m.Describe("bosun_report_failures_total", "counter", "reports the panel did not accept")
+	m.Describe("bosun_last_apply_success_timestamp_seconds", "gauge", "unix time of the last successful apply (0 = never)")
+	m.Describe("bosun_last_report_success_timestamp_seconds", "gauge", "unix time of the last accepted report (0 = never or standalone)")
+	m.Describe("bosun_apply_dirty", "gauge", "1 while the last apply failed and a retry is pending")
+	m.Add(func() []metrics.Sample {
+		dirty := 0.0
+		if a.dirty {
+			dirty = 1
+		}
+		return []metrics.Sample{
+			{Name: "bosun_apply_errors_total", Value: float64(a.applyErrors.Load())},
+			{Name: "bosun_report_failures_total", Value: float64(a.reportFailures.Load())},
+			{Name: "bosun_last_apply_success_timestamp_seconds", Value: float64(a.lastApplyOK.Load())},
+			{Name: "bosun_last_report_success_timestamp_seconds", Value: float64(a.lastReportOK.Load())},
+			{Name: "bosun_apply_dirty", Value: dirty},
+		}
+	})
 	m.Describe("bosun_core_running", "gauge", "1 if the core process is running")
 	m.Describe("bosun_users", "gauge", "users currently provisioned")
 	m.Describe("bosun_forward_up", "gauge", "1 if the forward target answered the last probe")

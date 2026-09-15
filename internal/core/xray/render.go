@@ -226,6 +226,11 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		}
 		var fbs []m
 		for _, f := range ib.Fallbacks {
+			if strings.Contains(f.Dest, "/") || strings.Contains(f.Dest, "\\") {
+				// A unix socket dest would hand every failed handshake to
+				// that socket as root (think docker.sock); ports only.
+				return nil, fmt.Errorf("xray: inbound %q: fallback dest must be a port or host:port", ib.Tag)
+			}
 			fb := m{"dest": fallbackDest(f.Dest)}
 			if f.Name != "" {
 				fb["name"] = f.Name

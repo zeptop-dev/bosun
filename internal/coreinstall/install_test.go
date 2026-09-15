@@ -163,6 +163,7 @@ func TestSumsURLAndFallback(t *testing.T) {
 	if _, err := inst.Install(context.Background(), rel); err == nil {
 		t.Fatal("expected failure without token")
 	}
+	inst.RegistryBase = srv.URL
 	inst.Headers = map[string]string{"Deploy-Token": "tok"}
 	path, err := inst.Install(context.Background(), rel)
 	if err != nil {

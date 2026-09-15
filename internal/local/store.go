@@ -791,7 +791,7 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 		node.Overrides[name] = json.RawMessage(raw)
 	}
 	if st := s.st.Settings; st.DecoyEnabled && st.DecoyDomain != "" {
-		node.Decoy = &spec.Decoy{Domain: st.DecoyDomain, Port: spec.DefaultDecoyPort, Upstream: st.DecoyUpstream, ACME: st.DecoyACME}
+		node.Decoy = &spec.Decoy{Domain: st.DecoyDomain, Port: spec.DefaultDecoyPort, Upstream: st.DecoyUpstream, ACME: st.DecoyACME, AllowPrivate: st.DecoyAllowPrivate, Insecure: st.DecoyInsecure}
 	}
 	bindFor := map[string]string{}
 	for _, g := range s.st.Ingresses {

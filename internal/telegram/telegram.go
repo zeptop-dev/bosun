@@ -167,7 +167,9 @@ func (b *Bot) Run(ctx context.Context) {
 			case "/start", "/id":
 				reply = fmt.Sprintf("bosun bot. Your chat id: <code>%d</code>", chat)
 			case "/status":
-				if s.ChatID != 0 && chat != s.ChatID {
+				if s.ChatID == 0 {
+					reply = "set the chat id in Settings first (see /id)"
+				} else if chat != s.ChatID {
 					reply = "not your node"
 				} else if b.Status != nil {
 					reply = b.Status(ctx)

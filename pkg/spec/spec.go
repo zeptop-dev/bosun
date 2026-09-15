@@ -442,6 +442,12 @@ type Decoy struct {
 	Port     int    `json:"port,omitempty"`     // default 4443
 	Upstream string `json:"upstream,omitempty"` // e.g. http://127.0.0.1:8080
 	ACME     string `json:"acme,omitempty"`     // "http" or "dns"
+	// AllowPrivate lets Upstream point at loopback/private/link-local
+	// addresses (the panel itself, docker services); off by default so a
+	// panel operator cannot expose local services through the decoy.
+	AllowPrivate bool `json:"allow_private,omitempty"`
+	// Insecure skips TLS verification toward an https Upstream.
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // DefaultDecoyPort is the loopback port the decoy site listens on.

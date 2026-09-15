@@ -355,10 +355,29 @@ func cmdRun(args []string) error {
 		return err
 	}
 	if initialPassword != "" {
-		log.Warn("web panel login created; change it after signing in", "username", "admin", "password", initialPassword)
+		// Printed, not logged: the log ring is readable from the panel and
+		// journald keeps it forever.
+		fmt.Fprintf(os.Stderr, "web panel login created: username admin, password %s (change it after signing in)\n", initialPassword)
+		log.Warn("web panel login created; the password was printed on stderr at first start")
 	}
 	settings := store.Settings()
 	panelTLS := cfg.Web.Cert != "" || settings.PanelDomain != ""
+	for _, c := range cfg.Web.TrustedProxies {
+		if _, n, err := net.ParseCIDR(strings.TrimSpace(c)); err == nil {
+			ui.TrustedProxies = append(ui.TrustedProxies, n)
+		} else if ip := net.ParseIP(strings.TrimSpace(c)); ip != nil {
+			bits := 32
+			if ip.To4() == nil {
+				bits = 128
+			}
+			ui.TrustedProxies = append(ui.TrustedProxies, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+		}
+	}
+	if !panelTLS {
+		if host, _, err := net.SplitHostPort(cfg.Web.Listen); err == nil && host != "127.0.0.1" && host != "localhost" && host != "::1" {
+			log.Warn("web panel serves plain HTTP on a non-loopback address; set a panel domain (Settings) or web.cert/key, or bind 127.0.0.1 behind a reverse proxy", "listen", cfg.Web.Listen)
+		}
+	}
 	bot := &telegram.Bot{Log: log, Settings: func() telegram.Settings {
 		st := store.Settings()
 		return telegram.Settings{Token: st.TelegramToken, ChatID: st.TelegramChatID, Notify: st.TelegramNotify}

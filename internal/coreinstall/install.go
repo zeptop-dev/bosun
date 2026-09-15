@@ -32,6 +32,9 @@ type Installer struct {
 	// Musl prefers the "<GOOS>/<GOARCH>-musl" asset when one exists (Alpine);
 	// detected from /etc/alpine-release by New.
 	Musl bool
+	// RegistryBase is the only URL prefix Headers are sent to (default
+	// RegistryBase); tests point it at a local server.
+	RegistryBase string
 }
 
 // New returns an installer rooted at root.
@@ -131,8 +134,16 @@ func (i *Installer) fetch(ctx context.Context, url string, limit int64) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	for k, v := range i.Headers {
-		req.Header.Set(k, v)
+	// Registry credentials go only to bosun's own package host, never to
+	// upstream download sites.
+	base := i.RegistryBase
+	if base == "" {
+		base = RegistryBase
+	}
+	if strings.HasPrefix(url, base) {
+		for k, v := range i.Headers {
+			req.Header.Set(k, v)
+		}
 	}
 	resp, err := i.HTTP.Do(req)
 	if err != nil {

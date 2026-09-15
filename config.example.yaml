@@ -49,6 +49,9 @@ web:
   # cert: /etc/bosun/panel.crt
   # key: /etc/bosun/panel.key
   # state_file: /var/lib/bosun/local.json
+  # Reverse proxies whose X-Forwarded-For the panel believes (login
+  # limiter, allow-list); empty = none.
+  # trusted_proxies: ["127.0.0.1"]
 
 # Local certificates for inbounds with standard TLS (not needed for REALITY).
 certs:

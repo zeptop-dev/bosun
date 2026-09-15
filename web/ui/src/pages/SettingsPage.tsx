@@ -22,7 +22,7 @@ export default function SettingsPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api.get<Settings>('/api/settings') })
   const status = useQuery({ queryKey: ['status'], queryFn: () => api.get<Status>('/api/status'), refetchInterval: 5_000 })
   const cores = useQuery({ queryKey: ['cores'], queryFn: () => api.get<CoreRelease[]>('/api/cores') })
-  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http', user_speed_limit_mbps: 0, mita_quotas: false, panel_allow_cidrs: [], extra_links: '', telegram_token: '', telegram_chat_id: 0, telegram_notify: true } })
+  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http', decoy_allow_private: false, decoy_insecure: false, user_speed_limit_mbps: 0, mita_quotas: false, panel_allow_cidrs: [], extra_links: '', telegram_token: '', telegram_chat_id: 0, telegram_notify: true } })
   useEffect(() => { if (settings.data) sform.setValues(settings.data) }, [settings.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const saveSettings = useMutation({ mutationFn: (v: Settings) => api.put<{ ok: boolean; dns?: DNSResult[] }>('/api/settings', v), onSuccess: (r) => { toast.ok(t('common.saved')); dnsToast(r.dns); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['links'] }) }, onError: toast.err })
   const aform = useForm({ initialValues: { Username: me?.username ?? 'admin', Password: '', Confirm: '' }, validate: { Confirm: (v, all) => (v === all.Password ? null : t('settings.mismatch')) } })
@@ -45,7 +45,7 @@ export default function SettingsPage() {
             <Title order={6} mt="xs">{t('settings.certs')}</Title>
             <Text size="xs" c="dimmed">{t('settings.certsHint')}</Text>
             <TextInput label={t('settings.acmeEmail')} placeholder="you@example.com" {...sform.getInputProps('acme_email')} />
-            <PasswordInput label={t('settings.cfToken')} description={t('settings.cfTokenHint')} {...sform.getInputProps('cloudflare_token')} />
+            <PasswordInput label={t('settings.cfToken')} description={settings.data?.has_cloudflare_token ? t('settings.tokenKeptHint') : t('settings.cfTokenHint')} placeholder={settings.data?.has_cloudflare_token ? '••••••••' : ''} {...sform.getInputProps('cloudflare_token')} />
             <Group grow align="flex-end">
               <TextInput label={t('settings.panelDomain')} description={t('settings.panelDomainHint')} placeholder="node.example.com" {...sform.getInputProps('panel_domain')} />
               <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...sform.getInputProps('panel_acme')} />
@@ -59,7 +59,11 @@ export default function SettingsPage() {
                   <TextInput label={t('settings.decoyDomain')} description={t('settings.decoyDomainHint')} placeholder="www.example.com" required {...sform.getInputProps('decoy_domain')} />
                   <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...sform.getInputProps('decoy_acme')} />
                 </Group>
-                <TextInput label={t('settings.decoyUpstream')} description={t('settings.decoyUpstreamHint')} placeholder="http://127.0.0.1:8080" {...sform.getInputProps('decoy_upstream')} />
+                <TextInput label={t('settings.decoyUpstream')} description={t('settings.decoyUpstreamHint')} placeholder="https://www.example.com" {...sform.getInputProps('decoy_upstream')} />
+                {sform.values.decoy_upstream && <Group grow>
+                  <Switch label={t('settings.decoyAllowPrivate')} description={t('settings.decoyAllowPrivateHint')} {...sform.getInputProps('decoy_allow_private', { type: 'checkbox' })} />
+                  <Switch label={t('settings.decoyInsecure')} description={t('settings.decoyInsecureHint')} {...sform.getInputProps('decoy_insecure', { type: 'checkbox' })} />
+                </Group>}
                 {s?.agent?.decoy && <Text size="xs" c={s.agent.decoy.error ? 'red' : s.agent.decoy.cert_ready ? 'teal' : 'orange'}>{s.agent.decoy.error ? s.agent.decoy.error : s.agent.decoy.cert_ready ? t('settings.decoyReady', { port: s.agent.decoy.port }) : t('settings.decoyPending')}</Text>}
               </>
             )}
@@ -72,7 +76,7 @@ export default function SettingsPage() {
             <Title order={6} mt="xs">{t('settings.telegram')}</Title>
             <Text size="xs" c="dimmed">{t('settings.telegramHint')}</Text>
             <Group grow align="flex-start">
-              <PasswordInput label={t('settings.telegramToken')} placeholder="123456:ABC…" {...sform.getInputProps('telegram_token')} />
+              <PasswordInput label={t('settings.telegramToken')} description={settings.data?.has_telegram_token ? t('settings.tokenKeptHint') : undefined} placeholder={settings.data?.has_telegram_token ? '••••••••' : '123456:ABC…'} {...sform.getInputProps('telegram_token')} />
               <NumberInput label={t('settings.telegramChat')} description={t('settings.telegramChatHint')} hideControls value={sform.values.telegram_chat_id || ''} onChange={(v) => sform.setFieldValue('telegram_chat_id', Number(v) || 0)} />
             </Group>
             <Switch label={t('settings.telegramNotify')} {...sform.getInputProps('telegram_notify', { type: 'checkbox' })} />

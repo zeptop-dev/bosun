@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -154,6 +155,9 @@ type CaptainPanel struct {
 	PairCode  string        `yaml:"pair_code"`  // one-time; ignored once a token is stored
 	TokenFile string        `yaml:"token_file"` // default <data_dir>/captain.token
 	Timeout   time.Duration `yaml:"timeout"`
+	// AllowInsecure permits a plain-http panel URL (lab use only): the
+	// node token and every config the panel pushes would travel in clear.
+	AllowInsecure bool `yaml:"allow_insecure"`
 }
 
 // XboardPanel configures the Xboard driver.
@@ -172,6 +176,9 @@ type Web struct {
 	Key    string `yaml:"key"`
 	// StateFile holds the local objects; default <data_dir>/local.json.
 	StateFile string `yaml:"state_file"`
+	// TrustedProxies are reverse proxies (CIDRs) whose X-Forwarded-For the
+	// panel believes for the login limiter and the allow-list.
+	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
 // Cert is one certificate/key pair.
@@ -236,6 +243,9 @@ func Load(path string) (*Config, error) {
 	if c.Panel.Driver == "captain" {
 		if c.Panel.Captain == nil || c.Panel.Captain.URL == "" {
 			return nil, fmt.Errorf("config: panel.captain.url is required when driver is captain")
+		}
+		if strings.HasPrefix(strings.ToLower(c.Panel.Captain.URL), "http://") && !c.Panel.Captain.AllowInsecure {
+			return nil, fmt.Errorf("config: panel.captain.url is plain http; use https or set panel.captain.allow_insecure: true")
 		}
 		if c.Panel.Captain.TokenFile == "" {
 			c.Panel.Captain.TokenFile = filepath.Join(c.DataDir, "captain.token")

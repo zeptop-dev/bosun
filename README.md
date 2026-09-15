@@ -1,12 +1,15 @@
 # Bosun
 
 Single-server node agent. Runs upstream proxy cores as child processes and is
-driven by a management panel. Standalone mode with a local UI comes later; the
-first cut is managed mode only.
+driven either by its own built-in web panel (`panel.driver: local`, the
+default) or headless by a management panel (Captain, or Xboard's UniProxy
+API). Changes per release: [CHANGELOG.md](CHANGELOG.md).
 
 ## Status
 
-Working vertical slice, verified end to end against sing-box 1.14.0:
+Verified end to end against the manifest's tested releases (sing-box
+1.14.0, Xray 26.3.27, mita 3.36.1, Hysteria 2.12.2; see the table under
+"Run"):
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
 - Per-inbound user lists (`spec.Inbound.ScopedUsers`): an inbound restricted to a user group only provisions that group; the mita adapter runs one instance per inbound because mita users are global to a process.
@@ -16,23 +19,27 @@ Working vertical slice, verified end to end against sing-box 1.14.0:
 - mita adapter (official mieru server): config file + `mita run` as a child, gRPC over a unix socket for hot user reload, proxy restart on port change, and per-user counters (deltas computed by bosun). Verified with the official mieru client. Inbounds carry the client knobs too: `mieru_mtu` (server `mtu` and the link's `mtu=`), `mieru_multiplexing` (`MULTIPLEXING_OFF|LOW|MIDDLE|HIGH`), `mieru_handshake` (`HANDSHAKE_NO_WAIT|STANDARD`), and `mieru_transport: BOTH` binds TCP at the port and UDP at port+1 in one inbound (the `mierus://` link lists both).
 - Snell adapter (Surge's closed-source `snell-server`, v5 default, v4 selectable): one process per inbound, `snell-server.conf` with the shared `psk`, optional `obfs` http/tls and `obfs-host`. Snell has no users, so every client shares the PSK and traffic cannot be attributed per user; the share "link" is a Surge proxy line (`NAME = snell, host, port, psk=…, version=5`), which Surge, Loon and mihomo import.
 - Per-user traffic via each core's own control plane, hand-encoded protobuf, no generated stubs (`internal/core/grpcraw`).
-- Built-in relay (`internal/forward`): TCP and UDP port forwarding to the next hop with per-rule byte and connection counters and a TCP probe of the target (5 s retry while down, 30 s while up). Rules come from the config file with Xboard; a panel that manages forwarding supplies them through the `panel.ForwardSource` interface. Verified e2e: mihomo connecting to the relay port reaches an Xray REALITY landing behind it.
+- Built-in relay (`internal/forward`): TCP and UDP port forwarding to the next hop with per-rule byte and connection counters and a TCP probe of the target (5 s retry while down, 30 s while up). Rules come from the config file with Xboard; a panel that manages forwarding (Captain) supplies them through the `panel.ForwardSource` interface. Two more backends per rule: nftables kernel DNAT and a supervised realm process (see "Forwarding chains"). Verified e2e: mihomo connecting to the relay port reaches an Xray REALITY landing behind it.
 - Online devices: cores that know which IPs a user connects from report them (Xray via its online-IP stats API, Hysteria from auth callbacks); the panel uses them for device limits. Upstream sing-box and mita expose no per-user connection info, so inbounds on those cores do not count toward device limits.
 - Prometheus endpoint (`metrics_listen`, `/metrics`): core running state, provisioned users, and per-forward up/rtt/connections/bytes. No client library.
 - Supervised child process: log relay, restart with backoff, graceful stop.
-- Core installer with a tested-version manifest (`internal/coreinstall`): leave `binary` empty and bosun downloads the newest release it has verified, checks its sha256, and installs it under `<data_dir>/cores/<core>/<version>/`. Releases known to break deployments are marked `broken` and only installed when named explicitly. sing-box is built from the upstream tag with the stats API tag (needs a Go toolchain until CI ships binaries).
+- Core installer with a tested-version manifest (`internal/coreinstall`): leave `binary` empty and bosun downloads the newest release it has verified, checks its sha256, and installs it under `<data_dir>/cores/<core>/<version>/`. Releases known to break deployments are marked `broken` and only installed when named explicitly. sing-box is downloaded from bosun's own CI build of the upstream tag with the stats API tag (GitHub pre-release `singbox-<version>`); when that build is missing it is built from source, which needs a Go toolchain on the node.
 - Config validated with `sing-box check` before every start or apply.
-
-Not yet: panel-managed forwarding (needs Captain), kernel-path forwarding (nftables), local UI, traffic spool on push failure, CI-built sing-box.
+- Failed applies are retried on the next pull and unacknowledged traffic deltas are kept across failed reports, so a panel outage loses no accounting.
 
 Core selection: `cores.order` in the config is the preference; an inbound goes to the first core that supports its protocol, transport and cipher. XHTTP only runs on Xray, HTTP/2 transport and Shadowsocks 2022 multi-user only on sing-box, mieru only on mita. Hysteria2 runs on sing-box (default) or the official server when `hysteria` is listed first.
 
 ## Layout
 
 ```
-cmd/bosun/            entry point: run | render | version
+cmd/bosun/            entry point: run | render | core list|install | admin set|reset-password | doctor | backup create|restore | version
 pkg/spec/             core-agnostic (public, imported by Captain) node / inbound / user model
-internal/core/        Core interface, registry, inbound -> core assignment
+pkg/agentproto/       wire types between Captain and bosun (pair, state, report, beat, jobs)
+pkg/subscription/     subscription renderers per client (Clash/mihomo, Stash, sing-box, Surge, Surfboard, Loon, QX, Egern, URI list, WireGuard), used by Captain too
+pkg/subdesign/        visual subscription designer: proxy groups + ACL4SSR rules -> every template
+pkg/selfupdate/       GitHub Releases check, atomic binary swap, rollback, restart (shared with Captain)
+pkg/wg/               WireGuard key helpers shared by node and panel
+internal/core/        Core interface, registry, inbound -> core assignment, per-core config overrides
 internal/core/subprocess/   child process supervisor
 internal/core/grpcraw/      raw gRPC invoke for hand-encoded protobuf
 internal/core/v2stats/      V2Ray-lineage StatsService client (sing-box and Xray)
@@ -40,11 +47,32 @@ internal/core/singbox/      sing-box renderer, stats client, process driver
 internal/core/xray/         Xray renderer, HandlerService hot user updates, process driver
 internal/core/mita/         mieru server (mita) renderer, RPC client, process driver
 internal/core/hysteria/     Hysteria 2 renderer, auth endpoint, stats client, process driver
-internal/panel/       Driver interface
+internal/core/snell/        Surge snell-server driver, one process per inbound
+internal/coreinstall/ tested-version manifest, download + sha256 check, source builds
+internal/panel/       Driver interface (and ForwardSource for panels that manage forwarding)
+internal/panel/captain/     Captain driver: pairing, ETag/long-poll state, reports, beats, jobs
 internal/panel/xboard/      Xboard UniProxy v1 driver
-internal/forward/     TCP/UDP relay with probes and counters
-internal/metrics/     Prometheus text exposition
+internal/local/       standalone mode: inbounds, users, forwards and settings in <data_dir>/local.json
+internal/ui/          built-in web panel: JSON API over the local store + embedded SPA (read-only under a panel)
+web/                  the panel frontend (web/ui, Vite) embedded via web/embed.go
+internal/authutil/    password hashing and random identifiers for the panel login
 internal/agent/       managed-mode loop: pull -> render -> apply, stats -> push
+internal/forward/     TCP/UDP userspace relay with probes and counters; nftables and realm backends
+internal/ingressguard/ nftables input guard for cores that cannot bind one address (mita behind a line)
+internal/firewall/    opens bosun's own ports in ufw / firewalld and closes them again
+internal/certs/       ACME certificates for inbounds and the panel (HTTP-01 / Cloudflare DNS-01), pushed PEM pairs
+internal/dns/         Cloudflare records for the panel domain, decoy site and TLS inbound names
+internal/decoy/       the node's own HTTPS site on loopback for REALITY to steal
+internal/realityscan/ REALITY target scanner with CDN detection
+internal/warp/        Cloudflare WARP registration and WireGuard outbound
+internal/shaper/      per-user bandwidth limits with nft connmark + tc
+internal/probe/       latency checks for the panel's status page (carrier probe points, icmp/tcp/http/download tasks), attached to every beat
+internal/komari/      reports the node to a Komari server as an agent
+internal/doctor/      read-only self-check (listeners, certs, ports, firewall, disk, panel, clock)
+internal/backup/      standalone backup archive and restore
+internal/telegram/    Bot API client for the standalone panel (doctor alerts, /status)
+internal/logring/     recent log records in memory for the panel's log view
+internal/metrics/     Prometheus text exposition
 internal/config/      YAML config
 internal/sysinfo/     host status snapshot
 ```
@@ -88,7 +116,7 @@ Docker installed (`curl -fsSL https://get.docker.com | sh`), then:
 mkdir -p /opt/bosun && cd /opt/bosun
 curl -fsSLO https://raw.githubusercontent.com/zeptop-dev/bosun/master/deploy/docker-compose.yml
 docker compose up -d
-docker compose logs bosun 2>&1 | grep password=     # first-start login
+docker compose logs bosun 2>&1 | grep 'web panel login'   # first-start login, printed on stderr once
 ```
 
 Open `http://<server>:2053/` (or reach it over an SSH tunnel:
@@ -229,7 +257,11 @@ objects, and restarts the agent on the Captain driver; the panel turns read-only
 state the panel pushed. `bosun admin reset-password` recovers a lost login.
 
 `panel.driver: captain` or `xboard` pins headless managed mode from the config
-file; `web:` may still be set for read-only diagnostics.
+file; `web:` may still be set for read-only diagnostics. `panel.captain.url`
+has to be https (`panel.captain.allow_insecure: true` allows plain http for a
+lab, where the node token and every pushed config travel in clear).
+`web.trusted_proxies` names the reverse proxies whose `X-Forwarded-For` the
+panel's login limiter and allow-list believe.
 
 ### Doctor
 
@@ -255,8 +287,13 @@ obtained again. Restore (`POST /api/backup/restore`, local mode only)
 validates the archive, refuses one taken while managed, writes the files
 atomically and reloads the store in place, so cores reconfigure at once;
 the archive's admin login wins and existing sessions end when it differs.
-`bosun backup create [-o FILE]` and `bosun backup restore FILE` do the same
-from the shell (restore wants the service stopped, or `--force`).
+The archive carries every node secret (admin hash, TOTP, API-token hashes,
+user credentials, WARP key, Cloudflare and Telegram tokens), so it can be
+sealed with a passphrase (AES-256-GCM under an argon2id key) and the panel
+asks for one by default; restore takes the same passphrase.
+`bosun backup create [-o FILE] [-passphrase P]` and
+`bosun backup restore FILE [-passphrase P]` do the same from the shell
+(restore wants the service stopped, or `--force`).
 
 ## Run
 
@@ -280,6 +317,7 @@ Current manifest:
 | hysteria | 2.12.2 | tested | official Hysteria 2 server |
 | snell | 5.0.0 | caution | Surge snell-server v5 (official zip, digest pinned); not verified end to end |
 | snell | 4.1.1 | caution | Surge snell-server v4 for older clients |
+| realm | 2.9.6 | caution | zhboner/realm for the `realm` forward backend; not verified end to end |
 
 ## sing-box binary and CI
 
@@ -302,7 +340,11 @@ releases/download/<tag>/bosun-linux-{amd64,arm64}                     + SHA256SU
 The installer downloads sing-box from there and verifies it against the
 published SHA256SUMS. If the download is not available (workflow not run for
 that version yet), the installer falls back to building from source, which
-needs a Go toolchain on the node. Note sing-box has no runtime user API: every
+needs a Go toolchain on the node. `cores.registry_token` in config.yaml is
+a leftover from the GitLab package registry days: it is sent as a
+`Deploy-Token` header, and only to bosun's own release downloads on GitHub,
+which are public and need no token, so leave it unset (the comment next to
+it in `config.example.yaml` still describes the GitLab setup). Note sing-box has no runtime user API: every
 user or inbound change is a config rewrite plus restart, batched per pull interval.
 
 ## Xray binary and REALITY interop
@@ -336,8 +378,8 @@ temp dir automatically when the data dir path is too long.
 
 ## License
 
-MIT, see `LICENSE`. bosun runs sing-box, Xray, mita and Hysteria as separate
-processes from their upstream release binaries and talks to them over their
+MIT, see `LICENSE`. bosun runs sing-box, Xray, mita, Hysteria, snell-server
+and realm as separate processes from their upstream release binaries and talks to them over their
 own APIs and config files; none of their code is linked or copied, so their
 licenses (GPL-3 for sing-box and mieru) do not extend to bosun. The sing-box
 stats client re-implements the wire format from the public proto definition.

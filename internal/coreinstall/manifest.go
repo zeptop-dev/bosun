@@ -59,6 +59,10 @@ var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2r
 
 // singboxCI points at the sing-box builds the bosun CI publishes as a
 // GitHub pre-release tagged singbox-<version> (workflow singbox.yml).
+// RegistryBase is where bosun's own CI-built assets live; the optional
+// registry token is sent there and nowhere else.
+const RegistryBase = "https://github.com/zeptop-dev/bosun/releases/download/"
+
 func singboxCI(version, arch string) Asset {
 	base := "https://github.com/zeptop-dev/bosun/releases/download/singbox-" + version + "/"
 	return Asset{URL: base + "sing-box-" + version + "-linux-" + arch, SumsURL: base + "SHA256SUMS", Archive: "raw"}
