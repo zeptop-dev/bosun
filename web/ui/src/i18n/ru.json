@@ -400,7 +400,9 @@
     "resetEvery": "Интервал (дней)",
     "overDevices": "Превышен лимит устройств",
     "overDevicesUntil": "Пауза до {{at}}",
-    "resetsOn": "сброс {{date}}"
+    "resetsOn": "сброс {{date}}",
+    "speedLimit": "Лимит скорости (Мбит/с)",
+    "speedLimitHint": "0 = значение узла"
   },
   "forwards": {
     "title": "Перенаправления",
@@ -479,7 +481,11 @@
     "telegramToken": "Токен бота",
     "telegramChat": "ID чата",
     "telegramChatHint": "Отправьте боту /id",
-    "telegramNotify": "Слать оповещения"
+    "telegramNotify": "Слать оповещения",
+    "speedLimit": "Лимит скорости на пользователя (Мбит/с)",
+    "speedLimitHint": "0 = нет. Для пользователей без своего лимита, чтобы один не занял весь канал. Нужен Linux с nft и tc; только протоколы xray / sing-box; при изменении набора ограниченных пользователей sing-box перезапускается.",
+    "shaperOn": "{{n}} пользователей ограничены на {{iface}}",
+    "shaperUnsupported": "Лимиты заданы, но на хосте нет nft/tc (или не Linux); без ограничений"
   },
   "logs": {
     "title": "Журнал",

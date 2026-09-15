@@ -400,7 +400,9 @@
     "resetEvery": "间隔（天）",
     "overDevices": "超设备数",
     "overDevicesUntil": "暂停到 {{at}}",
-    "resetsOn": "{{date}} 重置"
+    "resetsOn": "{{date}} 重置",
+    "speedLimit": "限速（Mbps）",
+    "speedLimitHint": "0 用节点统一值"
   },
   "forwards": {
     "title": "转发",
@@ -479,7 +481,11 @@
     "telegramToken": "机器人 Token",
     "telegramChat": "聊天 ID",
     "telegramChatHint": "给机器人发 /id 就能拿到",
-    "telegramNotify": "发送告警"
+    "telegramNotify": "发送告警",
+    "speedLimit": "每用户限速（Mbps）",
+    "speedLimitHint": "0 不限。对没有单独限速的用户生效，防止个别用户吃光带宽。需要 Linux 且有 nft 和 tc，只对 Xray / sing-box 承载的协议生效；限速用户变动时 sing-box 会重启一次。",
+    "shaperOn": "已对 {{n}} 个用户限速，接口 {{iface}}",
+    "shaperUnsupported": "已配置限速，但这台机器没有 nft/tc（或不是 Linux），用户暂不受限"
   },
   "logs": {
     "title": "日志",

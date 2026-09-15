@@ -60,7 +60,7 @@ func (a *Agent) Doctor(ctx context.Context) doctor.Report {
 	return doctor.Run(ctx, doctor.Deps{
 		Node: n, Users: users, Cores: cores, CoresKnown: true, Forwards: fwds, Certs: certs, Host: host,
 		Managed: managed, LastReport: lastReport, LastError: lastErr, PushInterval: a.driver.Intervals().Push,
-		KomariEnabled: ks.Enabled, KomariError: ks.LastError, Assign: assign,
+		KomariEnabled: ks.Enabled, KomariError: ks.LastError, Assign: assign, Shaper: a.Status().Shaper,
 	})
 }
 

@@ -14,8 +14,8 @@ import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
 import { Copy } from '../components/Copy'
 
-type Values = { name: string; uuid: string; password: string; enabled: boolean; quota_gib: number; expires_at: Date | null; inbound_tags: string[]; device_limit: number; reset_mode: string; reset_days: number }
-const empty: Values = { name: '', uuid: '', password: '', enabled: true, quota_gib: 0, expires_at: null, inbound_tags: [], device_limit: 0, reset_mode: '', reset_days: 30 }
+type Values = { name: string; uuid: string; password: string; enabled: boolean; quota_gib: number; expires_at: Date | null; inbound_tags: string[]; device_limit: number; reset_mode: string; reset_days: number; speed_limit_mbps: number }
+const empty: Values = { name: '', uuid: '', password: '', enabled: true, quota_gib: 0, expires_at: null, inbound_tags: [], device_limit: 0, reset_mode: '', reset_days: 30, speed_limit_mbps: 0 }
 
 export default function UsersPage() {
   const { t } = useTranslation()
@@ -30,7 +30,7 @@ export default function UsersPage() {
   const links = useQuery({ queryKey: ['links', sel?.id], queryFn: () => api.get<{ links: Link[]; sub_url: string }>(`/api/users/${sel!.id}/links`), enabled: sel !== null })
   const invalidate = () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['status'] }); qc.invalidateQueries({ queryKey: ['links'] }) }
   const form = useForm<Values>({ initialValues: empty, validate: { name: (v) => (v.trim() ? null : t('form.required')) } })
-  const payload = (v: Values) => ({ name: v.name, uuid: v.uuid, password: v.password, enabled: v.enabled, quota_bytes: Math.round(v.quota_gib * 2 ** 30), expires_at: v.expires_at ? v.expires_at.toISOString() : null, inbound_tags: v.inbound_tags, device_limit: v.device_limit, reset_mode: v.reset_mode, reset_days: v.reset_days })
+  const payload = (v: Values) => ({ name: v.name, uuid: v.uuid, password: v.password, enabled: v.enabled, quota_bytes: Math.round(v.quota_gib * 2 ** 30), expires_at: v.expires_at ? v.expires_at.toISOString() : null, inbound_tags: v.inbound_tags, device_limit: v.device_limit, reset_mode: v.reset_mode, reset_days: v.reset_days, speed_limit_mbps: v.speed_limit_mbps })
   const save = useMutation({
     mutationFn: (v: Values) => editing === 'new' ? api.post('/api/users', payload(v)) : api.put(`/api/users/${(editing as User).id}`, payload(v)),
     onSuccess: () => { toast.ok(t('common.saved')); setEditing(null); invalidate() }, onError: toast.err,
@@ -39,7 +39,7 @@ export default function UsersPage() {
   const reset = useMutation({ mutationFn: (id: number) => api.post(`/api/users/${id}/reset`), onSuccess: () => { toast.ok(t('common.saved')); invalidate() }, onError: toast.err })
   const rotate = useMutation({ mutationFn: (id: number) => api.post(`/api/users/${id}/rotate`), onSuccess: () => { toast.ok(t('common.saved')); invalidate() }, onError: toast.err })
   const open = (u: User | 'new') => {
-    form.setValues(u === 'new' ? empty : { name: u.name, uuid: u.uuid, password: u.password, enabled: u.enabled, quota_gib: u.quota_bytes / 2 ** 30, expires_at: u.expires_at ? new Date(u.expires_at) : null, inbound_tags: u.inbound_tags ?? [], device_limit: u.device_limit ?? 0, reset_mode: u.reset_mode ?? '', reset_days: u.reset_days || 30 })
+    form.setValues(u === 'new' ? empty : { name: u.name, uuid: u.uuid, password: u.password, enabled: u.enabled, quota_gib: u.quota_bytes / 2 ** 30, expires_at: u.expires_at ? new Date(u.expires_at) : null, inbound_tags: u.inbound_tags ?? [], device_limit: u.device_limit ?? 0, reset_mode: u.reset_mode ?? '', reset_days: u.reset_days || 30, speed_limit_mbps: u.speed_limit_mbps ?? 0 })
     setEditing(u)
   }
   // Snell has one shared PSK, so a per-user restriction cannot apply to it.
@@ -84,6 +84,7 @@ export default function UsersPage() {
           </Group>
           <Group grow align="flex-start">
             <NumberInput label={t('users.deviceLimit')} description={t('users.deviceLimitHint')} min={0} {...form.getInputProps('device_limit')} />
+            <NumberInput label={t('users.speedLimit')} description={t('users.speedLimitHint')} min={0} {...form.getInputProps('speed_limit_mbps')} />
             <Select label={t('users.resetMode')} description={t('users.resetModeHint')} data={[{ value: '', label: t('users.resetNever') }, { value: 'days', label: t('users.resetDays') }, { value: 'monthly', label: t('users.resetMonthly') }]} allowDeselect={false} {...form.getInputProps('reset_mode')} />
             {form.values.reset_mode === 'days' && <NumberInput label={t('users.resetEvery')} min={1} max={365} {...form.getInputProps('reset_days')} />}
           </Group>

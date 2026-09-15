@@ -50,7 +50,7 @@ export interface Inbound {
 export interface User {
   id: number; name: string; uuid: string; password: string; sub_token: string; enabled: boolean
   quota_bytes: number; expires_at: string | null; up: number; down: number; created_at: string; inbound_tags?: string[]
-  device_limit?: number; reset_mode?: string; reset_days?: number; reset_at?: string | null
+  speed_limit_mbps?: number; device_limit?: number; reset_mode?: string; reset_days?: number; reset_at?: string | null
   online: string[]; usable: boolean; over_devices?: boolean; over_devices_until?: string
 }
 export interface Forward { tag: string; listen?: string; port: number; protocol: string; target: string; backend?: string; preserve_source?: boolean; status: ForwardStatus | null }
@@ -59,14 +59,15 @@ export interface DoctorReport { at: string; checks: DoctorCheck[]; summary: { ok
 export interface RestoreResult { inbounds: number; users: number; forwards: number; ingresses: number; admin_changed: boolean }
 export interface ForwardStatus { tag: string; up: boolean; rtt_ms: number; last_error?: string; active_conn: number; total_conn: number; bytes_in: number; bytes_out: number }
 export interface Host { cpu_percent?: number; mem_total?: number; mem_used?: number; swap_total?: number; swap_used?: number; disk_total?: number; disk_used?: number }
-export interface AgentStatus { decoy?: DecoyStatus; panel: string; ready: boolean; inbounds: number; users: number; last_pull: string; last_apply: string; last_error?: string; core_running: Record<string, boolean>; core_inbounds: Record<string, number>; assign: Record<string, string>; skipped?: Record<string, string> }
+export interface ShaperStatus { supported: boolean; interface?: string; users: number; error?: string }
+export interface AgentStatus { decoy?: DecoyStatus; shaper?: ShaperStatus; panel: string; ready: boolean; inbounds: number; users: number; last_pull: string; last_apply: string; last_error?: string; core_running: Record<string, boolean>; core_inbounds: Record<string, number>; assign: Record<string, string>; skipped?: Record<string, string> }
 export interface Status {
   version: string; uptime_seconds: number; mode: Mode; fixed: string; managed: { url: string; paired_at: string } | null; has_snapshot: boolean
   agent: AgentStatus | null; host: Host; forwards: ForwardStatus[]; online_users: number; users: number; inbounds: number
   total_up: number; total_down: number; history: { day: number; up: number; down: number }[]; last_report: string
   certs: CertStatus[]; pings?: Ping[]
 }
-export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string; decoy_enabled: boolean; decoy_domain: string; decoy_upstream: string; decoy_acme: string; panel_allow_cidrs: string[]; extra_links: string; telegram_token: string; telegram_chat_id: number; telegram_notify: boolean }
+export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string; decoy_enabled: boolean; decoy_domain: string; decoy_upstream: string; decoy_acme: string; user_speed_limit_mbps: number; panel_allow_cidrs: string[]; extra_links: string; telegram_token: string; telegram_chat_id: number; telegram_notify: boolean }
 export interface CertStatus { domain: string; method: string; not_after: string; error?: string; updated: string }
 export interface Link { tag: string; name: string; uri: string }
 export interface CoreRelease { Core: string; Version: string; Status: string; Note: string; Installed: boolean }

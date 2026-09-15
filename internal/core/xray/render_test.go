@@ -314,3 +314,33 @@ func TestBalancerGeoDNS(t *testing.T) {
 		t.Fatal("balancer rendered as an outbound")
 	}
 }
+
+func TestSpeedLimitOutbounds(t *testing.T) {
+	node := &spec.Node{UserSpeedLimitMbps: 20}
+	users := []spec.User{{ID: 1, Name: "a", UUID: "7f3a4b2c-1d5e-4f6a-9b8c-0d1e2f3a4b5c"}, {ID: 2, Name: "b", UUID: "8f3a4b2c-1d5e-4f6a-9b8c-0d1e2f3a4b5c", SpeedLimitMbps: 5}}
+	ib := spec.Inbound{Tag: "v", Protocol: spec.VLESS, Port: 8080}
+	b, st, err := render(node, []spec.Inbound{ib}, users, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, want := range []string{`"tag": "limit-1"`, `"tag": "limit-2"`, `"mark": 65537`, `"user": [
+          "b"
+        ]`, `"outboundTag": "limit-2"`} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %s in\n%s", want, s)
+		}
+	}
+	// Dropping a limited user changes the key (restart), unlike a plain user change.
+	_, st2, _ := render(node, []spec.Inbound{ib}, users[:1], renderOptions{})
+	if st.inboundsKey == st2.inboundsKey {
+		t.Fatal("limited user set change must change the key")
+	}
+	plain := &spec.Node{}
+	plainUsers := []spec.User{users[0], {ID: 3, Name: "c", UUID: "9f3a4b2c-1d5e-4f6a-9b8c-0d1e2f3a4b5c"}}
+	_, p1, _ := render(plain, []spec.Inbound{ib}, plainUsers, renderOptions{})
+	_, p2, _ := render(plain, []spec.Inbound{ib}, plainUsers[:1], renderOptions{})
+	if p1.inboundsKey != p2.inboundsKey {
+		t.Fatal("plain user change must keep the key")
+	}
+}

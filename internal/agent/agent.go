@@ -22,6 +22,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/forward"
 	"github.com/zeptop-dev/bosun/internal/metrics"
 	"github.com/zeptop-dev/bosun/internal/panel"
+	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/internal/sysinfo"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -55,6 +56,8 @@ type Agent struct {
 	Decoy *decoy.Server
 	// Alert delivers an operator notification (Telegram); nil = none.
 	Alert func(text string)
+	// Shaper enforces per-user speed limits in the kernel; nil = none.
+	Shaper *shaper.Shaper
 	// WARPAccount / SaveWARP read and persist the node's Cloudflare WARP
 	// identity (local store); nil disables from_node WARP outbounds.
 	WARPAccount func() *spec.WARPAccount
@@ -124,6 +127,8 @@ type Status struct {
 	Skipped map[string]string `json:"skipped,omitempty"`
 	// Decoy is the self-hosted site state (nil when not configured).
 	Decoy *decoy.Status `json:"decoy,omitempty"`
+	// Shaper is the per-user speed limit state (nil when unused).
+	Shaper *shaper.Status `json:"shaper,omitempty"`
 }
 
 // Status returns a snapshot of the agent state.
@@ -528,6 +533,45 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	} else {
 		node = &resolved
 	}
+	// Per-user speed limits: the kernel shaper must exist for the marks
+	// the cores stamp to mean anything; without it the limits are ignored
+	// (and the doctor says so).
+	var limits []shaper.Limit
+	for _, u := range a.users {
+		if l := node.EffectiveSpeedLimit(u); l > 0 {
+			limits = append(limits, shaper.Limit{UserID: u.ID, Mbps: l})
+		}
+	}
+	if a.Shaper == nil || !a.Shaper.Supported() {
+		if len(limits) > 0 {
+			cp := *node
+			cp.UserSpeedLimitMbps = 0
+			node = &cp
+			users := make([]spec.User, 0, len(a.users))
+			for _, u := range a.users {
+				u.SpeedLimitMbps = 0
+				users = append(users, u)
+			}
+			a.users = users
+			a.log.Warn("speed limits configured but shaping is unavailable on this host (needs Linux with nft and tc)")
+		}
+		limits = nil
+	}
+	defer func() {
+		if a.Shaper != nil {
+			if err := a.Shaper.Apply(ctx, limits); err != nil {
+				a.log.Error("speed limit shaper", "err", err)
+			}
+			st := a.Shaper.Status()
+			a.setStatus(func(s *Status) {
+				if st.Users == 0 && st.Error == "" {
+					s.Shaper = nil
+				} else {
+					s.Shaper = &st
+				}
+			})
+		}
+	}()
 	byTag := map[string]string{}
 	perCore := map[string]int{}
 	for name, list := range assign {

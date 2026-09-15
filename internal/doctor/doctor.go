@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -81,6 +82,8 @@ type Deps struct {
 	KomariError   string
 	// Assign maps inbound tag to the core serving it (for core-specific advice).
 	Assign map[string]string
+	// Shaper is the speed-limit state (nil = no limits configured).
+	Shaper *shaper.Status
 	// Dial overrides TCP connects (tests).
 	Dial func(ctx context.Context, addr string) error
 	// Lookup overrides DNS resolution (tests).
@@ -103,7 +106,7 @@ func Run(ctx context.Context, d Deps) Report {
 	rep := Report{At: now(), Checks: []Check{}}
 	checks := []func(context.Context, *Deps) []Check{
 		checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
-		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality,
+		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality, checkShaper,
 	}
 	for _, fn := range checks {
 		cctx, cancel := context.WithTimeout(ctx, perCheck)
@@ -528,4 +531,21 @@ func uniq(in []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// checkShaper reports on per-user speed limits.
+func checkShaper(_ context.Context, d *Deps) []Check {
+	c := Check{ID: "shaper", Name: "Per-user speed limits", Status: Skip, Detail: "no limits configured"}
+	if d.Shaper == nil {
+		return []Check{c}
+	}
+	switch {
+	case !d.Shaper.Supported:
+		c.Status, c.Detail = Warn, "limits are configured but this host cannot shape (needs Linux with nft and tc); users run unlimited"
+	case d.Shaper.Error != "":
+		c.Status, c.Detail = Fail, d.Shaper.Error
+	default:
+		c.Status, c.Detail = OK, fmt.Sprintf("%d users shaped on %s", d.Shaper.Users, d.Shaper.Interface)
+	}
+	return []Check{c}
 }

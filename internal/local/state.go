@@ -189,6 +189,8 @@ type Settings struct {
 	// ExtraLinks are share links (one per line) appended to every user's
 	// subscription: nodes elsewhere that this panel does not manage.
 	ExtraLinks string `json:"extra_links"`
+	// UserSpeedLimitMbps caps every user without a limit of their own.
+	UserSpeedLimitMbps int `json:"user_speed_limit_mbps"`
 	// Telegram alerts and /status.
 	TelegramToken  string `json:"telegram_token"`
 	TelegramChatID int64  `json:"telegram_chat_id"`
@@ -227,6 +229,8 @@ type User struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	// InboundTags restricts the user to these inbounds; empty = all.
 	InboundTags []string `json:"inbound_tags,omitempty"`
+	// SpeedLimitMbps caps this user (0 = the node default, see Settings).
+	SpeedLimitMbps int `json:"speed_limit_mbps,omitempty"`
 	// DeviceLimit caps distinct client IPs seen at once (0 = unlimited).
 	// sing-box enforces it natively; for the other cores the store drops
 	// the user for a few minutes when the online list exceeds it.
@@ -277,5 +281,5 @@ func (u User) Spec() spec.User {
 	if pw == "" {
 		pw = u.UUID
 	}
-	return spec.User{ID: u.ID, Name: u.UUID, UUID: u.UUID, Password: pw, DeviceLimit: u.DeviceLimit}
+	return spec.User{ID: u.ID, Name: u.UUID, UUID: u.UUID, Password: pw, DeviceLimit: u.DeviceLimit, SpeedLimitMbps: u.SpeedLimitMbps}
 }

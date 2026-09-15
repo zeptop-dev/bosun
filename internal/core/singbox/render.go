@@ -67,6 +67,28 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	if node.DefaultOutbound != "" {
 		final = node.DefaultOutbound
 	}
+	var limitRules []any
+	for _, u := range users {
+		l := node.EffectiveSpeedLimit(u)
+		if l <= 0 {
+			continue
+		}
+		var base m
+		if node.DefaultOutbound != "" {
+			for _, o := range outs {
+				if om, ok := o.(m); ok && om["tag"] == node.DefaultOutbound {
+					base = cloneM(om)
+				}
+			}
+		}
+		if base == nil {
+			base = m{"type": "direct"}
+		}
+		base["tag"] = spec.SpeedTag(u.ID)
+		base["routing_mark"] = spec.SpeedMark(u.ID)
+		outs = append(outs, base)
+		limitRules = append(limitRules, m{"auth_user": []string{u.Name}, "outbound": spec.SpeedTag(u.ID)})
+	}
 
 	cfg := m{
 		"log": m{"level": opt.LogLevel, "timestamp": true},
@@ -80,6 +102,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		"outbounds": outs,
 	}
 	rules, sets := renderRoutes(node.Routes)
+	rules = append(rules, limitRules...)
 	route := m{"rules": append(sniffRules(inbounds), rules...), "final": final}
 	if len(sets) > 0 {
 		route["rule_set"] = sets
@@ -490,6 +513,18 @@ func outboundTags(node *spec.Node) []string {
 	for _, o := range node.Outbounds {
 		if o.WARP == nil { // endpoints have no stats entry
 			out = append(out, o.Tag)
+		}
+	}
+	return out
+}
+
+func cloneM(src m) m {
+	out := m{}
+	for k, v := range src {
+		if sub, ok := v.(m); ok {
+			out[k] = cloneM(sub)
+		} else {
+			out[k] = v
 		}
 	}
 	return out

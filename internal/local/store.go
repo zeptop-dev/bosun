@@ -514,6 +514,7 @@ func (s *Store) UpdateUser(u User) error {
 		cur.ExpiresAt = u.ExpiresAt
 		cur.InboundTags = u.InboundTags
 		cur.DeviceLimit = u.DeviceLimit
+		cur.SpeedLimitMbps = u.SpeedLimitMbps
 		if cur.ResetMode != u.ResetMode || cur.ResetDays != u.ResetDays {
 			cur.ResetMode, cur.ResetDays = u.ResetMode, u.ResetDays
 			cur.ResetAt = cur.NextReset(time.Now())
@@ -750,7 +751,7 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	}
 	node := &spec.Node{ID: "local", Forwards: append([]spec.Forward(nil), s.st.Forwards...),
 		Outbounds: append([]spec.Outbound(nil), s.st.Outbounds...), Routes: append([]spec.RouteRule(nil), s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound,
-		Certificates: append([]spec.Certificate(nil), s.st.Certificates...), DNS: append([]string(nil), s.st.DNS...)}
+		Certificates: append([]spec.Certificate(nil), s.st.Certificates...), DNS: append([]string(nil), s.st.DNS...), UserSpeedLimitMbps: s.st.Settings.UserSpeedLimitMbps}
 	if s.st.Settings.ACMEEmail != "" || s.st.Settings.CloudflareToken != "" {
 		node.ACME = &spec.ACME{Email: s.st.Settings.ACMEEmail, CloudflareToken: s.st.Settings.CloudflareToken}
 	}
