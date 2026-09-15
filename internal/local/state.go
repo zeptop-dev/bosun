@@ -172,6 +172,12 @@ type Settings struct {
 	PanelDomain string `json:"panel_domain"`
 	// PanelACME is the challenge for the panel certificate: "http" or "dns".
 	PanelACME string `json:"panel_acme"`
+	// Decoy site ("steal yourself"): a real HTTPS site for DecoyDomain on
+	// loopback that REALITY inbounds can use as their handshake target.
+	DecoyEnabled  bool   `json:"decoy_enabled"`
+	DecoyDomain   string `json:"decoy_domain"`
+	DecoyUpstream string `json:"decoy_upstream"`
+	DecoyACME     string `json:"decoy_acme"`
 }
 
 // Inbound is a spec.Inbound plus local bookkeeping.

@@ -230,7 +230,13 @@
     "tlsHint": "REALITY 不需要证书；TLS 需要该域名的证书",
     "generateKeypair": "生成公/私钥",
     "generateKey": "生成密钥",
-    "ingressBindHint": "监听地址留空则绑定到入口本地 IP {{ip}}。"
+    "ingressBindHint": "监听地址留空则绑定到入口本地 IP {{ip}}。",
+    "fallbacks": "回落",
+    "fallbacksHint": "不是本协议的连接（浏览器、探测）交给本机其它服务，比如 80 端口的网站；可按 SNI、ALPN、路径分流。仅 Xray 内核。",
+    "fallbackAdd": "添加规则",
+    "fallbackDest": "目标",
+    "useDecoy": "使用本机伪装站 {{domain}}",
+    "useDecoyHint": "SNI 设为伪装站域名，握手目标指向 127.0.0.1:4443"
   },
   "ingress": {
     "title": "专线入口",
@@ -432,7 +438,16 @@
     "certList": "自动证书",
     "domain": "域名",
     "expires": "到期",
-    "certOk": "正常"
+    "certOk": "正常",
+    "decoy": "伪装站点（偷自己）",
+    "decoyHint": "bosun 在本机回环上用自动证书跑一个真实的 HTTPS 站点，REALITY 入站把它当握手目标：探测者拿到的是你自己域名的真证书，回落流量也不会转到别人的服务器。域名要解析到本机；用 HTTP 验证需要 80 端口空闲，否则选 DNS 验证。",
+    "decoyEnabled": "启用伪装站点",
+    "decoyDomain": "站点域名",
+    "decoyDomainHint": "解析到本机的域名，也会成为 REALITY 的 SNI",
+    "decoyUpstream": "上游站点（可选）",
+    "decoyUpstreamHint": "留空用内置的占位页面；填 http(s) 地址则反向代理到你自己的网站",
+    "decoyReady": "站点已就绪，监听 127.0.0.1:{{port}}",
+    "decoyPending": "正在申请证书…"
   },
   "logs": {
     "title": "日志",

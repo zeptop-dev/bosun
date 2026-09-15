@@ -28,6 +28,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/core/snell"
 	"github.com/zeptop-dev/bosun/internal/core/xray"
 	"github.com/zeptop-dev/bosun/internal/coreinstall"
+	"github.com/zeptop-dev/bosun/internal/decoy"
 	"github.com/zeptop-dev/bosun/internal/local"
 	"github.com/zeptop-dev/bosun/internal/logring"
 	"github.com/zeptop-dev/bosun/internal/metrics"
@@ -310,6 +311,8 @@ func cmdRun(args []string) error {
 		return err
 	}
 	defer cm.Stop()
+	dc := decoy.New(cm, log)
+	defer dc.Stop()
 
 	// Headless managed mode without a web panel: the original single agent.
 	if e.driver != nil && cfg.Web == nil {
@@ -317,6 +320,7 @@ func cmdRun(args []string) error {
 		ag.Version = version
 		ag.Upgrade = upgradeHook(log, upd)
 		ag.Certs = cm
+		ag.Decoy = dc
 		current.ag = ag
 		return ag.Run(ctx)
 	}
@@ -330,7 +334,7 @@ func cmdRun(args []string) error {
 	}
 	settings := store.Settings()
 	panelTLS := cfg.Web.Cert != "" || settings.PanelDomain != ""
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm,
+	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc,
 		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
@@ -390,6 +394,7 @@ type supervisor struct {
 	// upgrade handles a panel-requested release change.
 	upgrade func(string)
 	certs   *certs.Manager
+	decoy   *decoy.Server
 	onAgent func(*agent.Agent)
 
 	mu      sync.Mutex
@@ -442,6 +447,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Version = version
 		ag.Upgrade = s.upgrade
 		ag.Certs = s.certs
+		ag.Decoy = s.decoy
 		if s.onAgent != nil {
 			s.onAgent(ag)
 		}

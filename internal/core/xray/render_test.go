@@ -255,3 +255,20 @@ func TestRealityFallbackLimit(t *testing.T) {
 		t.Fatal("limit rendered although off")
 	}
 }
+
+func TestFallbacks(t *testing.T) {
+	ib := spec.Inbound{Tag: "f", Protocol: spec.VLESS, Port: 443, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "www.example.com", CertPath: "/c", KeyPath: "/k"},
+		Fallbacks: []spec.Fallback{{Dest: "80"}, {Path: "/ws", Dest: "127.0.0.1:8080", Xver: 1}}}
+	out, err := renderInbound(ib, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fbs := out["settings"].(m)["fallbacks"].([]m)
+	if len(fbs) != 2 || fbs[0]["dest"] != 80 || fbs[1]["dest"] != "127.0.0.1:8080" || fbs[1]["path"] != "/ws" || fbs[1]["xver"] != 1 {
+		t.Fatalf("fallbacks: %v", fbs)
+	}
+	ib.TLS.Mode = spec.TLSReality
+	if _, err := renderInbound(ib, nil); err == nil {
+		t.Fatal("fallbacks accepted with REALITY")
+	}
+}

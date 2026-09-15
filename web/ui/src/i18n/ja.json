@@ -230,7 +230,13 @@
     "tlsHint": "REALITY は証明書不要、TLS はそのドメインの証明書が必要",
     "generateKeypair": "鍵ペアを生成",
     "generateKey": "鍵を生成",
-    "ingressBindHint": "待受アドレスを空にすると回線側 IP {{ip}} にバインドします。"
+    "ingressBindHint": "待受アドレスを空にすると回線側 IP {{ip}} にバインドします。",
+    "fallbacks": "フォールバック",
+    "fallbacksHint": "このプロトコル以外の接続（ブラウザ、探測）を 80 番のサイトなど別のローカルサービスへ渡します。SNI・ALPN・パスで振り分け可。Xray のみ。",
+    "fallbackAdd": "ルール追加",
+    "fallbackDest": "転送先",
+    "useDecoy": "おとりサイト {{domain}} を使う",
+    "useDecoyHint": "SNI をおとりドメインに、ハンドシェイク先を 127.0.0.1:4443 に設定"
   },
   "ingress": {
     "title": "専用線入口",
@@ -432,7 +438,16 @@
     "certList": "自動証明書",
     "domain": "ドメイン",
     "expires": "有効期限",
-    "certOk": "正常"
+    "certOk": "正常",
+    "decoy": "おとりサイト（自前ドメイン）",
+    "decoyHint": "bosun がループバック上で自ドメインの本物の HTTPS サイトを提供し、REALITY がそれをハンドシェイク先にします。探測者は自分のドメインの正規証明書を見るだけで、フォールバック通信も外部へ出ません。ドメインはこのノードに向ける必要があり、HTTP 検証は 80 番が空いている必要があります（なければ DNS）。",
+    "decoyEnabled": "おとりサイトを有効化",
+    "decoyDomain": "サイトのドメイン",
+    "decoyDomainHint": "このノードに解決するドメイン。REALITY の SNI にもなります",
+    "decoyUpstream": "アップストリーム（任意）",
+    "decoyUpstreamHint": "空なら内蔵ページ、http(s) URL ならリバースプロキシ",
+    "decoyReady": "サイト稼働中 127.0.0.1:{{port}}",
+    "decoyPending": "証明書を取得中…"
   },
   "logs": {
     "title": "ログ",

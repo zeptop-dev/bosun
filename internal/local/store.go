@@ -754,6 +754,9 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	if s.st.Settings.ACMEEmail != "" || s.st.Settings.CloudflareToken != "" {
 		node.ACME = &spec.ACME{Email: s.st.Settings.ACMEEmail, CloudflareToken: s.st.Settings.CloudflareToken}
 	}
+	if st := s.st.Settings; st.DecoyEnabled && st.DecoyDomain != "" {
+		node.Decoy = &spec.Decoy{Domain: st.DecoyDomain, Port: spec.DefaultDecoyPort, Upstream: st.DecoyUpstream, ACME: st.DecoyACME}
+	}
 	bindFor := map[string]string{}
 	for _, g := range s.st.Ingresses {
 		bindFor[g.ID] = g.BindIP

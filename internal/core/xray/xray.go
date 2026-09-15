@@ -76,6 +76,7 @@ func (c *Core) Capabilities() core.Capabilities {
 		Protocols:     []spec.Protocol{spec.VLESS, spec.VMess, spec.Trojan, spec.Shadowsocks, spec.SOCKS, spec.HTTP},
 		Transports:    []string{"ws", "grpc", "httpupgrade", "xhttp"},
 		HotUserReload: true,
+		Fallbacks:     true,
 	}
 }
 
