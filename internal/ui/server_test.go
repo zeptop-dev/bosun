@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/zeptop-dev/bosun/internal/authutil"
 	"io"
 	"log/slog"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -227,4 +229,63 @@ func TestRealityScanEndpoint(t *testing.T) {
 	if err := json.Unmarshal(body, &out); err != nil || len(out) != 1 || out[0]["feasible"] != false {
 		t.Fatalf("unexpected %s", body)
 	}
+}
+
+// Second factor and API tokens on the standalone panel.
+func TestTOTPAndAPITokens(t *testing.T) {
+	store, pw, err := local.Open(filepath.Join(t.TempDir(), "local.json"), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(New(Deps{Store: store, Version: "test", Log: slog.Default()}).Handler())
+	defer srv.Close()
+	jar, _ := cookiejar.New(nil)
+	c := &client{t: t, srv: srv, http: &http.Client{Jar: jar}}
+	if code, _ := c.do("POST", "/api/login", map[string]string{"Username": "admin", "Password": pw}); code != 200 {
+		t.Fatal("login")
+	}
+	code, body := c.do("POST", "/api/2fa/setup", nil)
+	var setup struct{ Secret, URI string }
+	if code != 200 || json.Unmarshal(body, &setup) != nil || setup.Secret == "" {
+		t.Fatalf("setup: %d %s", code, body)
+	}
+	if code, _ := c.do("POST", "/api/2fa/enable", map[string]string{"Code": "000000"}); code != 400 {
+		t.Fatalf("wrong code accepted: %d", code)
+	}
+	if code, _ := c.do("POST", "/api/2fa/enable", map[string]string{"Code": authutil.TOTPCode(setup.Secret, time.Now())}); code != 200 {
+		t.Fatalf("enable: %d", code)
+	}
+	// A new session now needs the code.
+	jar2, _ := cookiejar.New(nil)
+	c2 := &client{t: t, srv: srv, http: &http.Client{Jar: jar2}}
+	if code, _ := c2.do("POST", "/api/login", map[string]string{"Username": "admin", "Password": pw}); code != 428 {
+		t.Fatalf("login without code: %d", code)
+	}
+	if code, _ := c2.do("POST", "/api/login", map[string]string{"Username": "admin", "Password": pw, "Code": authutil.TOTPCode(setup.Secret, time.Now())}); code != 200 {
+		t.Fatalf("login with code: %d", code)
+	}
+	// API token: created once, usable as a bearer, revoked.
+	code, body = c.do("POST", "/api/tokens", map[string]string{"Name": "script"})
+	var tok struct {
+		ID    int64
+		Token string
+	}
+	if code != 200 || json.Unmarshal(body, &tok) != nil || !strings.HasPrefix(tok.Token, "bsn_") {
+		t.Fatalf("create token: %d %s", code, body)
+	}
+	req, _ := http.NewRequest("GET", srv.URL+"/api/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tok.Token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("bearer: %v %v", err, resp)
+	}
+	resp.Body.Close()
+	if code, _ := c.do("DELETE", "/api/tokens/"+strconv.FormatInt(tok.ID, 10), nil); code != 200 {
+		t.Fatal("revoke")
+	}
+	resp, _ = http.DefaultClient.Do(req)
+	if resp.StatusCode != 401 {
+		t.Fatalf("revoked token still works: %d", resp.StatusCode)
+	}
+	resp.Body.Close()
 }

@@ -17,7 +17,9 @@
     "password": "密碼",
     "submit": "登入",
     "failed": "使用者名稱或密碼錯誤",
-    "hint": "初始密碼在 bosun 首次啟動的日誌裡；忘記了可以執行 bosun admin reset-password。"
+    "hint": "初始密碼在 bosun 首次啟動的日誌裡；忘記了可以執行 bosun admin reset-password。",
+    "code": "驗證器代碼",
+    "badCode": "驗證碼不正確"
   },
   "common": {
     "save": "儲存",
@@ -509,5 +511,29 @@
     "subtitle": "這台節點的流量往哪走：把連接埠原樣轉發到別的機器（做前置），或者從落地伺服器出去（做中轉）。",
     "tabForwards": "連接埠轉發",
     "tabRouting": "落地出站與分流"
+  },
+  "twofa": {
+    "title": "兩步驗證",
+    "hint": "給面板登入加一層 TOTP 驗證（Google Authenticator、1Password 等）。開啟後登入需要額外輸入 6 位驗證碼，API 權杖不受影響。",
+    "start": "開始設定",
+    "scan": "用驗證器掃描 QR code",
+    "manual": "或手動輸入金鑰：",
+    "code": "驗證碼",
+    "confirm": "確認開啟",
+    "enabled": "兩步驗證已開啟",
+    "disable": "關閉",
+    "disabled": "兩步驗證已關閉",
+    "on": "已開啟"
+  },
+  "tokens": {
+    "title": "API 權杖",
+    "hint": "給指令碼用的長期權杖，權限等同面板登入，明文只顯示一次。請求頭加 Authorization: Bearer 即可呼叫任何 /api 介面。被 Captain 接管後建議改用 Captain 的 API。",
+    "name": "名稱",
+    "create": "產生權杖",
+    "showOnce": "請立即複製，之後不會再顯示：",
+    "created": "建立於",
+    "lastUsed": "最近使用",
+    "neverUsed": "未使用",
+    "example": "呼叫範例（任何 /api 介面都可以）："
   }
 }

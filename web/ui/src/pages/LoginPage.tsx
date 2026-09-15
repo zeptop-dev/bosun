@@ -3,7 +3,7 @@ import { useForm } from '@mantine/form'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { Brand } from '../components/AppLayout'
 import { pageBackground } from '../theme'
@@ -14,10 +14,11 @@ export default function LoginPage() {
   const { refresh } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const form = useForm({ initialValues: { Username: '', Password: '' } })
+  const [needCode, setNeedCode] = useState(false)
+  const form = useForm({ initialValues: { Username: '', Password: '', Code: '' } })
   const submit = form.onSubmit(async (v) => {
     setBusy(true); setError('')
-    try { await api.post('/api/login', v); await refresh(); nav('/') } catch (e) { setError(e instanceof Error ? e.message : t('login.failed')) } finally { setBusy(false) }
+    try { await api.post('/api/login', v); await refresh(); nav('/') } catch (e) { if (e instanceof ApiError && e.status === 428) setNeedCode(true); else setError(needCode ? t('login.badCode') : t('login.failed')) } finally { setBusy(false) }
   })
   return (
     <Center h="100vh" p="md" style={{ background: pageBackground }}>
@@ -31,6 +32,7 @@ export default function LoginPage() {
             </div>
             <TextInput label={t('login.username')} required autoFocus {...form.getInputProps('Username')} />
             <PasswordInput label={t('login.password')} required {...form.getInputProps('Password')} />
+            {needCode && <TextInput label={t('login.code')} placeholder="123456" autoFocus {...form.getInputProps('Code')} />}
             {error && <Text c="red" size="sm">{error}</Text>}
             <Button type="submit" loading={busy}>{t('login.submit')}</Button>
             <Text size="xs" c="dimmed">{t('login.hint')}</Text>

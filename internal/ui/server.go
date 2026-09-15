@@ -139,6 +139,12 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/settings", auth(s.getSettings))
 	m.HandleFunc("PUT /api/settings", auth(s.putSettings))
 	m.HandleFunc("PUT /api/admin", auth(s.putAdmin))
+	m.HandleFunc("POST /api/2fa/setup", auth(s.totpSetup))
+	m.HandleFunc("POST /api/2fa/enable", auth(s.totpEnable))
+	m.HandleFunc("POST /api/2fa/disable", auth(s.totpDisable))
+	m.HandleFunc("GET /api/tokens", auth(s.listTokens))
+	m.HandleFunc("POST /api/tokens", auth(s.createToken))
+	m.HandleFunc("DELETE /api/tokens/{id}", auth(s.deleteToken))
 	m.HandleFunc("POST /api/keys/{kind}", auth(s.keys))
 
 	m.HandleFunc("POST /api/mode/adopt", auth(s.adopt))
@@ -193,6 +199,15 @@ func clientIP(r *http.Request) string {
 
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Personal API token (scripts): same access as the login.
+		if tok := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer")); tok != "" {
+			if s.d.Store.CheckAPIToken(tok) {
+				next(w, r)
+				return
+			}
+			fail(w, http.StatusUnauthorized, errors.New("invalid API token"))
+			return
+		}
 		c, err := r.Cookie(sessionCookie)
 		if err != nil {
 			fail(w, http.StatusUnauthorized, errors.New("not signed in"))
@@ -220,7 +235,7 @@ func (s *Server) local(next http.HandlerFunc) http.HandlerFunc {
 // ---- auth ------------------------------------------------------------------
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Username, Password string }
+	var in struct{ Username, Password, Code string }
 	if err := decode(r, &in); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
@@ -241,6 +256,22 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusUnauthorized, errors.New("invalid username or password"))
 		return
 	}
+	// Second factor: the password alone is not enough once TOTP is on.
+	if secret, enabled := s.d.Store.TOTP(); enabled {
+		if in.Code == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusPreconditionRequired)
+			_ = json.NewEncoder(w).Encode(map[string]any{"totp": true, "error": "authenticator code required"})
+			return
+		}
+		if !authutil.VerifyTOTP(secret, in.Code, time.Now()) {
+			s.mu.Lock()
+			s.failed[ip] = failure{count: f.count + 1, last: time.Now()}
+			s.mu.Unlock()
+			fail(w, http.StatusUnauthorized, errors.New("wrong authenticator code"))
+			return
+		}
+	}
 	tok := authutil.Token(32)
 	s.mu.Lock()
 	delete(s.failed, ip)
@@ -260,7 +291,63 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	mode, _, _ := s.d.Store.Mode()
-	ok(w, map[string]any{"username": s.d.Store.Username(), "version": s.d.Version, "mode": mode, "fixed": s.d.Fixed})
+	_, totp := s.d.Store.TOTP()
+	ok(w, map[string]any{"username": s.d.Store.Username(), "version": s.d.Version, "mode": mode, "fixed": s.d.Fixed, "totp": totp})
+}
+
+// totpSetup mints a pending secret; nothing is enforced until totpEnable
+// proves the authenticator produces matching codes.
+func (s *Server) totpSetup(w http.ResponseWriter, r *http.Request) {
+	secret := authutil.NewTOTPSecret()
+	if err := s.d.Store.SetTOTP(secret, false); err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	ok(w, map[string]string{"secret": secret, "uri": authutil.TOTPURI("bosun", s.d.Store.Username(), secret)})
+}
+
+func (s *Server) totpEnable(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Code string }
+	_ = decode(r, &in)
+	secret, _ := s.d.Store.TOTP()
+	if secret == "" || !authutil.VerifyTOTP(secret, in.Code, time.Now()) {
+		fail(w, http.StatusBadRequest, errors.New("wrong code"))
+		return
+	}
+	storeErr(w, s.d.Store.SetTOTP(secret, true))
+}
+
+func (s *Server) totpDisable(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Code string }
+	_ = decode(r, &in)
+	secret, enabled := s.d.Store.TOTP()
+	if enabled && !authutil.VerifyTOTP(secret, in.Code, time.Now()) {
+		fail(w, http.StatusBadRequest, errors.New("wrong code"))
+		return
+	}
+	storeErr(w, s.d.Store.SetTOTP("", false))
+}
+
+func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) { ok(w, s.d.Store.ListAPITokens()) }
+
+func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Name string }
+	_ = decode(r, &in)
+	tok, plain, err := s.d.Store.CreateAPIToken(in.Name)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	ok(w, map[string]any{"id": tok.ID, "name": tok.Name, "token": plain})
+}
+
+func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	storeErr(w, s.d.Store.DeleteAPIToken(id))
 }
 
 // ---- status ----------------------------------------------------------------
