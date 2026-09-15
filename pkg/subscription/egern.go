@@ -24,11 +24,11 @@ func (e Egern) Render(lines []Line, acct Account) ([]byte, error) {
 
 func (Egern) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 	proxies := []any{}
-	names := []string{}
+	names := []Named{}
 	for _, l := range lines {
 		if p := egernProxy(l); p != nil {
 			proxies = append(proxies, p)
-			names = append(names, l.Name)
+			names = append(names, Named{Name: l.Name, Tags: l.Tags})
 		}
 	}
 	if tpl == "" {
@@ -60,11 +60,13 @@ func (Egern) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 				}
 				expanded := make([]any, 0, len(list)+len(names))
 				for _, item := range list {
-					if s, ok := item.(string); ok && s == phNames {
-						for _, n := range names {
-							expanded = append(expanded, n)
+					if s, ok := item.(string); ok {
+						if list, ok := expandNames(s, names); ok {
+							for _, n := range list {
+								expanded = append(expanded, n)
+							}
+							continue
 						}
-						continue
 					}
 					expanded = append(expanded, item)
 				}

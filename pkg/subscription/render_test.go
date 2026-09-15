@@ -319,3 +319,36 @@ func TestEgern(t *testing.T) {
 		t.Fatalf("bare: %v %s", err, bare)
 	}
 }
+
+func TestProxyNameFilters(t *testing.T) {
+	lines := sample()
+	for i := range lines {
+		lines[i].Tags = nil
+	}
+	lines[0].Name, lines[0].Tags = "🇭🇰 HK-1", []string{"hk", "premium"}
+	lines[1].Name, lines[1].Tags = "🇯🇵 JP-1", []string{"jp"}
+	tpl := "proxy-groups:\n  - name: HK\n    type: select\n    proxies: [\"{{proxy_names:tag=HK}}\"]\n  - name: JP\n    type: select\n    proxies: [\"{{proxy_names:match=jp|日本}}\", DIRECT]\n  - name: NONE\n    type: select\n    proxies: [\"{{proxy_names:tag=nope}}\", DIRECT]\n"
+	out, err := Clash{}.RenderWith(lines, Account{}, tpl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "- name: HK\n    proxies:\n    - 🇭🇰 HK-1\n") && !strings.Contains(s, "HK-1") {
+		t.Fatalf("tag filter: %s", s)
+	}
+	if strings.Contains(s, "{{proxy_names") {
+		t.Fatalf("placeholder left: %s", s)
+	}
+	hk := s[strings.Index(s, "name: HK"):strings.Index(s, "name: JP")]
+	if strings.Contains(hk, "JP-1") || !strings.Contains(hk, "HK-1") {
+		t.Fatalf("HK group: %s", hk)
+	}
+	jp := s[strings.Index(s, "name: JP"):strings.Index(s, "name: NONE")]
+	if strings.Contains(jp, "HK-1") || !strings.Contains(jp, "JP-1") {
+		t.Fatalf("JP group: %s", jp)
+	}
+	ini, _ := Surge{}.RenderWith(lines, Account{}, "[Proxy]\n{{proxies}}\n[Proxy Group]\nJP = select, {{proxy_names:tag=jp}}\nALL = select, {{proxy_names}}\n")
+	if !strings.Contains(string(ini), "JP = select, 🇯🇵 JP-1\n") {
+		t.Fatalf("surge tag filter: %s", ini)
+	}
+}
