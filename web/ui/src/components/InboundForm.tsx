@@ -201,7 +201,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
               <UnstyledButton key={r.key} onClick={() => { setRecipe(r.key); apply(r) }} aria-pressed={recipe === r.key}>
                 <Card p="sm" withBorder style={{ height: '100%', borderColor: recipe === r.key ? 'var(--mantine-primary-color-filled)' : undefined, background: recipe === r.key ? 'var(--mantine-primary-color-light)' : undefined }}>
                   <Text size="sm" fw={600} c={recipe === r.key ? 'var(--mantine-primary-color-light-color)' : undefined}>{t(`inbounds.recipes.${r.key}`)}</Text>
-                  <Text size="xs" c="dimmed">{t(`inbounds.recipes.${r.key}Desc`)}</Text>
+                  <Text size="xs" c="dimmed" lh={1.35} lineClamp={2} mih="2.7em">{t(`inbounds.recipes.${r.key}Desc`)}</Text>
                 </Card>
               </UnstyledButton>
             ))}
@@ -235,8 +235,8 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           <Card p="sm">
             <Group grow align="flex-start">
               {tlsCapable
-                ? <Select label={t('inbounds.tls')} data={[{ value: 'none', label: t('inbounds.tlsNone') }, { value: 'tls', label: 'TLS' }, { value: 'reality', label: 'REALITY' }]} allowDeselect={false} {...form.getInputProps('tls')} />
-                : <TextInput label={t('inbounds.tls')} value="TLS" disabled />}
+                ? <Select label={t('inbounds.tls')} description={t('inbounds.tlsHint')} data={[{ value: 'none', label: t('inbounds.tlsNone') }, { value: 'tls', label: 'TLS' }, { value: 'reality', label: 'REALITY' }]} allowDeselect={false} {...form.getInputProps('tls')} />
+                : <TextInput label={t('inbounds.tls')} description={t('inbounds.tlsHint')} value="TLS" disabled />}
               {(v.tls !== 'none' || quic) && <TextInput label={t('inbounds.serverName')} description={v.tls === 'reality' ? t('inbounds.serverNameReality') : v.auto_cert ? t('inbounds.serverNameAuto') : t('inbounds.serverNameTls')} {...form.getInputProps('server_name')} />}
             </Group>
             {(v.tls === 'tls' || quic) && (
@@ -247,10 +247,10 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
             )}
             {v.tls === 'reality' && tlsCapable && (
               <Stack gap="xs" mt="sm">
-                <Group grow align="flex-end">
-                  <TextInput label={t('inbounds.realityPrivate')} required {...form.getInputProps('reality_private')} />
-                  <TextInput label={t('inbounds.realityPublic')} {...form.getInputProps('reality_public')} />
-                  <Tooltip label={t('inbounds.generate')}><ActionIcon variant="light" size="lg" onClick={genReality}><IconRefresh size={16} /></ActionIcon></Tooltip>
+                <Group align="flex-end" wrap="nowrap">
+                  <TextInput label={t('inbounds.realityPrivate')} required style={{ flex: 1 }} {...form.getInputProps('reality_private')} />
+                  <TextInput label={t('inbounds.realityPublic')} style={{ flex: 1 }} {...form.getInputProps('reality_public')} />
+                  <Tooltip label={t('inbounds.generateKeypair')}><ActionIcon variant="light" size="input-sm" aria-label={t('inbounds.generateKeypair')} onClick={genReality}><IconRefresh size={16} /></ActionIcon></Tooltip>
                 </Group>
                 <Group grow>
                   <TextInput label={t('inbounds.shortId')} {...form.getInputProps('reality_short')} />
@@ -259,11 +259,14 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
                 </Group>
                 <RealityScan current={v.handshake_server || v.server_name} scan={(hosts) => api.post<RealityResult[]>('/api/reality/scan', { hosts })}
                   onPick={(host) => form.setValues({ server_name: host, handshake_server: host, handshake_port: 443 })} />
-                <Group grow align="flex-end">
-                  <Switch label={t('inbounds.fallbackLimit')} description={t('inbounds.fallbackLimitHint')} checked={!v.fallback_off} onChange={(e) => form.setFieldValue('fallback_off', !e.currentTarget.checked)} />
-                  <NumberInput label={t('inbounds.fallbackAfter')} min={0} disabled={v.fallback_off} {...form.getInputProps('fallback_after_mb')} />
-                  <NumberInput label={t('inbounds.fallbackRate')} min={1} disabled={v.fallback_off} {...form.getInputProps('fallback_kbps')} />
-                </Group>
+                <div>
+                  <Group grow align="flex-end">
+                    <Switch label={t('inbounds.fallbackLimit')} mb={7} checked={!v.fallback_off} onChange={(e) => form.setFieldValue('fallback_off', !e.currentTarget.checked)} />
+                    <NumberInput label={t('inbounds.fallbackAfter')} min={0} disabled={v.fallback_off} {...form.getInputProps('fallback_after_mb')} />
+                    <NumberInput label={t('inbounds.fallbackRate')} min={1} disabled={v.fallback_off} {...form.getInputProps('fallback_kbps')} />
+                  </Group>
+                  <Text size="xs" c="dimmed" mt={4}>{t('inbounds.fallbackLimitHint')}</Text>
+                </div>
               </Stack>
             )}
           </Card>
@@ -283,10 +286,10 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
         )}
 
         {v.protocol === 'shadowsocks' && (
-          <Group grow align="flex-end">
-            <Select label={t('inbounds.cipher')} data={ciphers} allowDeselect={false} {...form.getInputProps('cipher')} />
-            {v.cipher.startsWith('2022') && <TextInput label={t('inbounds.serverKey')} required {...form.getInputProps('server_key')} />}
-            {v.cipher.startsWith('2022') && <Tooltip label={t('inbounds.generate')}><ActionIcon variant="light" size="lg" onClick={genKey}><IconRefresh size={16} /></ActionIcon></Tooltip>}
+          <Group align="flex-end" wrap="nowrap">
+            <Select label={t('inbounds.cipher')} data={ciphers} allowDeselect={false} style={{ flex: 1 }} {...form.getInputProps('cipher')} />
+            {v.cipher.startsWith('2022') && <TextInput label={t('inbounds.serverKey')} required style={{ flex: 1 }} {...form.getInputProps('server_key')} />}
+            {v.cipher.startsWith('2022') && <Tooltip label={t('inbounds.generateKey')}><ActionIcon variant="light" size="input-sm" aria-label={t('inbounds.generateKey')} onClick={genKey}><IconRefresh size={16} /></ActionIcon></Tooltip>}
           </Group>
         )}
         {v.protocol === 'hysteria2' && (
@@ -299,7 +302,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
         )}
         {v.protocol === 'tuic' && <Select label={t('inbounds.congestion')} data={['bbr', 'cubic', 'new_reno']} allowDeselect={false} {...form.getInputProps('congestion_control')} />}
         {v.protocol === 'mieru' && (
-          <Group grow align="flex-end">
+          <Group grow align="flex-start">
             <Select label={t('inbounds.mieruStrategy')} description={t('inbounds.mieruStrategyHint')} allowDeselect={false}
               data={[{ value: 'iplc', label: t('inbounds.mieru.iplc') }, { value: 'balanced', label: t('inbounds.mieru.balanced') }, { value: 'stealth', label: t('inbounds.mieru.stealth') }, { value: 'custom', label: t('inbounds.mieru.custom') }]}
               value={mieruStrategyOf(v.traffic_pattern)} onChange={(k) => k && form.setFieldValue('traffic_pattern', mieruPatternFor(k, v.traffic_pattern))} />
@@ -307,7 +310,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           </Group>
         )}
         {v.protocol === 'mieru' && (
-          <Group grow align="flex-end">
+          <Group grow align="flex-start">
             <NumberInput label={t('inbounds.mieruMtu')} description={t('inbounds.mieruMtuHint')} placeholder="1400" min={1280} max={1500} {...form.getInputProps('mieru_mtu')} />
             <Select label={t('inbounds.mieruMux')} description={t('inbounds.mieruMuxHint')} allowDeselect={false}
               data={[{ value: '', label: t('inbounds.clientDefault') }, { value: 'MULTIPLEXING_OFF', label: t('inbounds.muxOff') }, { value: 'MULTIPLEXING_LOW', label: t('inbounds.muxLow') }, { value: 'MULTIPLEXING_MIDDLE', label: t('inbounds.muxMiddle') }, { value: 'MULTIPLEXING_HIGH', label: t('inbounds.muxHigh') }]}
@@ -320,11 +323,11 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
         {v.protocol === 'snell' && (
           <Card p="sm">
             <Text size="xs" c="dimmed" mb="xs">{t('inbounds.snellHint')}</Text>
-            <Group grow align="flex-end">
-              <TextInput label={t('inbounds.snellPsk')} required {...form.getInputProps('snell_psk')} />
-              <Tooltip label={t('inbounds.generate')}><ActionIcon variant="light" size="lg" onClick={genPSK}><IconRefresh size={16} /></ActionIcon></Tooltip>
-              <Select label={t('inbounds.snellVersion')} data={[{ value: '5', label: 'v5' }, { value: '4', label: 'v4' }]} allowDeselect={false} value={String(v.snell_version)} onChange={(x) => form.setFieldValue('snell_version', Number(x) || 5)} />
-              <Select label={t('inbounds.snellObfs')} data={[{ value: '', label: t('common.none') }, { value: 'http', label: 'http' }, { value: 'tls', label: 'tls' }]} allowDeselect={false} {...form.getInputProps('snell_obfs')} />
+            <Group align="flex-end" wrap="nowrap">
+              <TextInput label={t('inbounds.snellPsk')} required style={{ flex: 1 }} {...form.getInputProps('snell_psk')} />
+              <Tooltip label={t('inbounds.generateKey')}><ActionIcon variant="light" size="input-sm" aria-label={t('inbounds.generateKey')} onClick={genPSK}><IconRefresh size={16} /></ActionIcon></Tooltip>
+              <Select style={{ flex: 1 }} label={t('inbounds.snellVersion')} data={[{ value: '5', label: 'v5' }, { value: '4', label: 'v4' }]} allowDeselect={false} value={String(v.snell_version)} onChange={(x) => form.setFieldValue('snell_version', Number(x) || 5)} />
+              <Select style={{ flex: 1 }} label={t('inbounds.snellObfs')} data={[{ value: '', label: t('common.none') }, { value: 'http', label: 'http' }, { value: 'tls', label: 'tls' }]} allowDeselect={false} {...form.getInputProps('snell_obfs')} />
               {v.snell_obfs && <TextInput label={t('inbounds.snellObfsHost')} placeholder="www.bing.com" {...form.getInputProps('snell_obfs_host')} />}
             </Group>
           </Card>
@@ -334,7 +337,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
         )}
 
         {!selectedIngress && !newIngress && (
-          <Group grow>
+          <Group grow align="flex-start">
             <TextInput label={t('inbounds.displayHost')} description={t('inbounds.displayHint')} {...form.getInputProps('display_host')} />
             <NumberInput label={t('inbounds.displayPort')} min={0} max={65535} {...form.getInputProps('display_port')} />
           </Group>
