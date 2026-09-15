@@ -176,6 +176,15 @@ func (i *Installer) download(ctx context.Context, a Asset, dest string) error {
 	} else {
 		i.Log.Warn("asset has no sha256 in the manifest; skipping verification", "url", a.URL)
 	}
+	// xray's zip ships geoip.dat/geosite.dat; it looks for them next to
+	// the binary, which is what geosite:/geoip: route rules need.
+	if a.Archive == "zip" && a.Member == "xray" {
+		for _, extra := range []string{"geoip.dat", "geosite.dat"} {
+			if data, err := extractZip(body, extra); err == nil {
+				_ = os.WriteFile(filepath.Join(filepath.Dir(dest), extra), data, 0o644)
+			}
+		}
+	}
 	bin, err := extract(a, body)
 	if err != nil {
 		return err

@@ -244,7 +244,9 @@
     "wgPublic": "伺服端公鑰",
     "wgAddress": "隧道網段（伺服端位址）",
     "wgAddressHint": "使用者位址從這個網段按編號分配",
-    "traffic": "流量"
+    "traffic": "流量",
+    "noSniff": "關閉目標嗅探",
+    "noSniffHint": "預設開啟：從 TLS/HTTP 標頭裡識別真實網域，網域分流才能生效。只有嗅探導致某些客戶端異常時才關。"
   },
   "ingress": {
     "title": "專線入口",
@@ -296,10 +298,21 @@
     "defaultHint": "沒有命中規則的流量走這裡，選一個出站等於整機中轉。",
     "rules": "分流規則",
     "match": "比對",
-    "matchHint": "逗號分隔：inbound:入站標籤、domain:example.com、full:網域、ip:1.2.3.0/24、protocol:bittorrent、port:443",
+    "matchHint": "逗號分隔：inbound:入站標籤、domain:example.com、full:網域、ip:1.2.3.0/24、geosite:netflix、geoip:cn、protocol:bittorrent、port:443",
     "to": "去向",
     "addRule": "新增規則",
-    "routeInbound": "入站 {{tag}} 走出站"
+    "routeInbound": "入站 {{tag}} 走出站",
+    "category": "常用分類",
+    "balancer": "負載均衡",
+    "balancerTag": "均衡器標籤",
+    "balancerMembers": "成員出站",
+    "balancerHint": "按 URL 測速選最快的成員；分流規則和預設出站都可以指向它",
+    "balancerStrategy": "策略",
+    "strategyUrltest": "最低延遲",
+    "strategyRandom": "隨機",
+    "addBalancer": "新增均衡器",
+    "dns": "DNS 伺服器",
+    "dnsHint": "核心解析出站網域用的伺服器，支援 1.1.1.1、tls://、https://；留空用系統 DNS"
   },
   "certs": {
     "title": "憑證",

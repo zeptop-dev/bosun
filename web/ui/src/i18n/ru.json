@@ -244,7 +244,9 @@
     "wgPublic": "Публичный ключ сервера",
     "wgAddress": "Сеть туннеля (адрес сервера)",
     "wgAddressHint": "Адреса клиентов назначаются из этой сети по id пользователя",
-    "traffic": "Трафик"
+    "traffic": "Трафик",
+    "noSniff": "Отключить сниффинг назначения",
+    "noSniffHint": "Включён по умолчанию: читает реальный хост из TLS/HTTP, чтобы работали доменные правила. Отключайте только если мешает клиенту."
   },
   "ingress": {
     "title": "Выделенные линии",
@@ -296,10 +298,21 @@
     "defaultHint": "Сюда идёт трафик, не подошедший ни под одно правило; выбор исходящего делает ретранслятором весь узел.",
     "rules": "Правила",
     "match": "Условие",
-    "matchHint": "Через запятую: inbound:тег, domain:example.com, full:хост, ip:1.2.3.0/24, protocol:bittorrent, port:443",
+    "matchHint": "Через запятую: inbound:тег, domain:example.com, full:хост, ip:1.2.3.0/24, geosite:netflix, geoip:cn, protocol:bittorrent, port:443",
     "to": "Куда",
     "addRule": "Добавить правило",
-    "routeInbound": "Входящее {{tag}} → исходящее"
+    "routeInbound": "Входящее {{tag}} → исходящее",
+    "category": "Категория",
+    "balancer": "Балансировщик",
+    "balancerTag": "Тег балансировщика",
+    "balancerMembers": "Участники",
+    "balancerHint": "Выбирает участника с лучшим URL-тестом; правила и выход по умолчанию могут указывать на него",
+    "balancerStrategy": "Стратегия",
+    "strategyUrltest": "Наименьшая задержка",
+    "strategyRandom": "Случайно",
+    "addBalancer": "Добавить балансировщик",
+    "dns": "DNS-серверы",
+    "dnsHint": "Резолверы для исходящих имён: 1.1.1.1, tls://…, https://…; пусто = системный DNS"
   },
   "certs": {
     "title": "Сертификаты",

@@ -49,6 +49,7 @@ type State struct {
 	Outbounds       []spec.Outbound  `json:"outbounds,omitempty"`
 	Routes          []spec.RouteRule `json:"routes,omitempty"`
 	DefaultOutbound string           `json:"default_outbound,omitempty"`
+	DNS             []string         `json:"dns,omitempty"`
 	// Certificates are operator-supplied PEM pairs used ahead of ACME.
 	Certificates []spec.Certificate `json:"certificates,omitempty"`
 	// Probe is the standalone monitoring configuration.

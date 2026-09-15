@@ -24,7 +24,7 @@ export type Values = {
   flow: string; cipher: string; server_key: string; obfs: string; obfs_password: string; up_mbps: number; down_mbps: number
   congestion_control: string; mieru_transport: string; traffic_pattern: string; mieru_mtu: number | string; mieru_multiplexing: string; mieru_handshake: string
   snell_psk: string; snell_version: number; snell_obfs: string; snell_obfs_host: string
-  wg_private: string; wg_public: string; wg_address: string; wg_mtu: number
+  wg_private: string; wg_public: string; wg_address: string; wg_mtu: number; no_sniff: boolean
   fallbacks: Fallback[]
   extra: string
 }
@@ -35,10 +35,10 @@ export const empty: Values = {
   transport: 'tcp', path: '', host: '', service_name: '', xhttp_mode: '',
   flow: '', cipher: '2022-blake3-aes-128-gcm', server_key: '', obfs: '', obfs_password: '', up_mbps: 0, down_mbps: 0,
   congestion_control: 'bbr', mieru_transport: 'TCP', traffic_pattern: '', mieru_mtu: '', mieru_multiplexing: '', mieru_handshake: '',
-  snell_psk: '', snell_version: 5, snell_obfs: '', snell_obfs_host: '', wg_private: '', wg_public: '', wg_address: '10.66.0.1/16', wg_mtu: 1420, fallbacks: [], extra: '{}',
+  snell_psk: '', snell_version: 5, snell_obfs: '', snell_obfs_host: '', wg_private: '', wg_public: '', wg_address: '10.66.0.1/16', wg_mtu: 1420, no_sniff: false, fallbacks: [], extra: '{}',
 }
 
-const known = new Set(['tag', 'remark', 'protocol', 'listen', 'port', 'core', 'enabled', 'display_host', 'display_port', 'ingress_id', 'tls', 'transport', 'flow', 'cipher', 'server_key', 'obfs', 'obfs_password', 'up_mbps', 'down_mbps', 'congestion_control', 'mieru_transport', 'traffic_pattern', 'assigned_core', 'scoped_users', 'users', 'mieru_mtu', 'mieru_multiplexing', 'mieru_handshake', 'snell_psk', 'snell_version', 'snell_obfs', 'snell_obfs_host', 'fallbacks', 'wg_private_key', 'wg_public_key', 'wg_address', 'wg_mtu'])
+const known = new Set(['tag', 'remark', 'protocol', 'listen', 'port', 'core', 'enabled', 'display_host', 'display_port', 'ingress_id', 'tls', 'transport', 'flow', 'cipher', 'server_key', 'obfs', 'obfs_password', 'up_mbps', 'down_mbps', 'congestion_control', 'mieru_transport', 'traffic_pattern', 'assigned_core', 'scoped_users', 'users', 'mieru_mtu', 'mieru_multiplexing', 'mieru_handshake', 'snell_psk', 'snell_version', 'snell_obfs', 'snell_obfs_host', 'fallbacks', 'wg_private_key', 'wg_public_key', 'wg_address', 'wg_mtu', 'no_sniff'])
 
 export function toValues(ib?: Inbound): Values {
   if (!ib) return empty
@@ -56,6 +56,7 @@ export function toValues(ib?: Inbound): Values {
     flow: ib.flow ?? '', cipher: ib.cipher ?? empty.cipher, server_key: ib.server_key ?? '', obfs: ib.obfs ?? '', obfs_password: ib.obfs_password ?? '',
     up_mbps: ib.up_mbps ?? 0, down_mbps: ib.down_mbps ?? 0, congestion_control: ib.congestion_control ?? 'bbr', mieru_transport: ib.mieru_transport ?? 'TCP', traffic_pattern: ib.traffic_pattern ?? '', mieru_mtu: ib.mieru_mtu || '', mieru_multiplexing: ib.mieru_multiplexing ?? '', mieru_handshake: ib.mieru_handshake ?? '',
     snell_psk: ib.snell_psk ?? '', snell_version: ib.snell_version || 5, snell_obfs: ib.snell_obfs ?? '', snell_obfs_host: ib.snell_obfs_host ?? '',
+    no_sniff: ib.no_sniff ?? false,
     wg_private: ib.wg_private_key ?? '', wg_public: ib.wg_public_key ?? '', wg_address: ib.wg_address || '10.66.0.1/16', wg_mtu: ib.wg_mtu || 1420,
     fallbacks: (ib.fallbacks ?? []).map((f) => ({ name: f.name ?? '', alpn: f.alpn ?? '', path: f.path ?? '', dest: f.dest, xver: f.xver ?? 0 })),
     extra: JSON.stringify(extra, null, 2),
@@ -88,6 +89,7 @@ export function toInbound(v: Values): Record<string, unknown> {
     if (v.mieru_multiplexing) out.mieru_multiplexing = v.mieru_multiplexing
     if (v.mieru_handshake) out.mieru_handshake = v.mieru_handshake
   }
+  if (v.no_sniff) out.no_sniff = true
   if (v.protocol === 'wireguard') { out.wg_private_key = v.wg_private; out.wg_public_key = v.wg_public; out.wg_address = v.wg_address; out.wg_mtu = Number(v.wg_mtu) || 1420 }
   if (v.protocol === 'naive') out.tls = { mode: 1, server_name: v.server_name, auto_cert: v.auto_cert, acme: v.auto_cert ? v.acme : '' }
   if (v.protocol === 'snell') {
@@ -398,6 +400,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
 
         <Button variant="subtle" size="xs" onClick={() => setAdvanced((a) => !a)} style={{ alignSelf: 'flex-start' }}>{advanced ? t('inbounds.hideAdvanced') : t('inbounds.showAdvanced')}</Button>
         <Collapse in={advanced}>
+          <Switch mb="sm" label={t('inbounds.noSniff')} description={t('inbounds.noSniffHint')} {...form.getInputProps('no_sniff', { type: 'checkbox' })} />
           <JsonInput label={t('inbounds.extra')} description={t('inbounds.extraHint')} autosize minRows={3} formatOnBlur {...form.getInputProps('extra')} />
         </Collapse>
 
