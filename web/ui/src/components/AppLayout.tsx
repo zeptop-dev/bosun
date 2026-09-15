@@ -1,4 +1,4 @@
-import { ActionIcon, AppShell, Avatar, Badge, Box, Burger, Divider, Group, Indicator, Menu, NavLink, ScrollArea, Stack, Text, ThemeIcon, Title, Tooltip, UnstyledButton, useMantineColorScheme } from '@mantine/core'
+import { ActionIcon, AppShell, Avatar, Badge, Box, Burger, Divider, Group, Indicator, Menu, NavLink, ScrollArea, Stack, Text, ThemeIcon, Tooltip, UnstyledButton, useMantineColorScheme } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconSettings, IconLogout, IconLanguage, IconFileText, IconRoute, IconCertificate, IconActivity, IconStethoscope, IconAnchor, IconSun, IconMoon, IconDotsVertical, IconChevronDown } from '@tabler/icons-react'
 import { languages } from '../i18n'
@@ -53,7 +53,6 @@ export function AppLayout() {
   const loc = useLocation()
   const { colorScheme, setColorScheme } = useMantineColorScheme()
   const active = (to: string) => (to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to))
-  const current = groups.flat().find((it) => active(it.to))
   const upd = useQuery({ queryKey: ['update'], queryFn: () => api.get<UpdateInfo>('/api/update'), staleTime: 10 * 60_000, refetchInterval: 30 * 60_000, retry: false })
   const lang = languages.find((l) => l.code === i18n.language) ?? languages[0]
   const dark = colorScheme === 'dark'
@@ -64,14 +63,13 @@ export function AppLayout() {
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <Box hiddenFrom="sm"><Brand name="bosun" /></Box>
-            <Title order={4} visibleFrom="sm">{current ? t(`nav.${current.key}`) : 'bosun'}</Title>
+            <UnstyledButton onClick={() => { nav('/'); close() }}><Brand name="bosun" /></UnstyledButton>
           </Group>
-          <Group gap="xs" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap" align="center">
             {me && <ModeBadge mode={me.mode} fixed={me.fixed} />}
             {me?.version && (
-              <Indicator disabled={!upd.data?.has_update} color="red" size={8} offset={2} processing>
-                <Badge size="sm" variant="default" style={{ cursor: 'pointer' }} onClick={() => nav('/settings')} title={upd.data?.has_update ? t('update.available', { version: upd.data.latest }) : undefined}>{me.version}</Badge>
+              <Indicator disabled={!upd.data?.has_update} color="red" size={8} offset={2} processing styles={{ root: { display: 'flex' } }}>
+                <Badge variant="light" color="gray" style={{ cursor: 'pointer' }} onClick={() => nav('/settings')} title={upd.data?.has_update ? t('update.available', { version: upd.data.latest }) : undefined}>{me.version}</Badge>
               </Indicator>
             )}
           </Group>
@@ -79,9 +77,6 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar>
-        <AppShell.Section h={56} px="md" style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-          <UnstyledButton onClick={() => { nav('/'); close() }}><Brand name="bosun" /></UnstyledButton>
-        </AppShell.Section>
         <AppShell.Section grow component={ScrollArea} type="auto" scrollbarSize={6} px="sm" py="sm">
           <Stack gap={0}>
             {groups.map((g, i) => (
@@ -89,7 +84,7 @@ export function AppLayout() {
                 {i > 0 && <Divider my="xs" />}
                 {g.map((it) => (
                   <NavLink key={it.to} component={UnstyledButton} label={t(`nav.${it.key}`)} leftSection={<it.icon size={18} stroke={1.7} />}
-                    variant="light" active={active(it.to)} onClick={() => { nav(it.to); close() }}
+                    variant="light" active={active(it.to)} onClick={(e) => { e.currentTarget.blur(); nav(it.to); close() }}
                     styles={{ root: { borderRadius: 8, marginBottom: 2 }, label: { fontWeight: 500 } }} />
                 ))}
               </Box>
