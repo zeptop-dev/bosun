@@ -171,7 +171,9 @@
       "snell5": "Snell v5",
       "snell5Desc": "Surge 公式 snell-server。共有 PSK を自動生成します。",
       "wireguard": "WireGuard",
-      "wireguardDesc": "UDP の端末全体 VPN。専用線・内部網向け。"
+      "wireguardDesc": "UDP の端末全体 VPN。専用線・内部網向け。",
+      "socks5": "SOCKS5",
+      "socks5Desc": "平文・ユーザー名パスワード認証。専用線・内部網・ローカル用。"
     },
     "serverNameAuto": "証明書のドメイン。DNS がこのマシンを指している必要があります",
     "autoCert": "自動証明書",
@@ -457,7 +459,7 @@
     "cfToken": "Cloudflare API トークン",
     "cfTokenHint": "DNS チャレンジのみ。権限 Zone.DNS 編集",
     "panelDomain": "パネルのドメイン",
-    "panelDomainHint": "自動証明書でパネルを HTTPS 配信します。保存後に再起動してください",
+    "panelDomainHint": "自動証明書でパネルを HTTPS 化（保存後に再起動）。Cloudflare トークンがあれば保存時に DNS レコードも作成",
     "certList": "自動証明書",
     "domain": "ドメイン",
     "expires": "有効期限",

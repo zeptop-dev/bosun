@@ -11,7 +11,7 @@ import { TwoFactorCard } from '../components/TwoFactorCard'
 import { TokensCard } from '../components/TokensCard'
 import { useAuth } from '../lib/auth'
 import { when } from '../lib/format'
-import { toast } from '../lib/notify'
+import { dnsToast, toast, type DNSResult } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
 
 export default function SettingsPage() {
@@ -23,7 +23,7 @@ export default function SettingsPage() {
   const cores = useQuery({ queryKey: ['cores'], queryFn: () => api.get<CoreRelease[]>('/api/cores') })
   const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http', user_speed_limit_mbps: 0, panel_allow_cidrs: [], extra_links: '', telegram_token: '', telegram_chat_id: 0, telegram_notify: true } })
   useEffect(() => { if (settings.data) sform.setValues(settings.data) }, [settings.data]) // eslint-disable-line react-hooks/exhaustive-deps
-  const saveSettings = useMutation({ mutationFn: (v: Settings) => api.put('/api/settings', v), onSuccess: () => { toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['links'] }) }, onError: toast.err })
+  const saveSettings = useMutation({ mutationFn: (v: Settings) => api.put<{ ok: boolean; dns?: DNSResult[] }>('/api/settings', v), onSuccess: (r) => { toast.ok(t('common.saved')); dnsToast(r.dns); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['links'] }) }, onError: toast.err })
   const aform = useForm({ initialValues: { Username: me?.username ?? 'admin', Password: '', Confirm: '' }, validate: { Confirm: (v, all) => (v === all.Password ? null : t('settings.mismatch')) } })
   const saveAdmin = useMutation({ mutationFn: (v: { Username: string; Password: string }) => api.put('/api/admin', v), onSuccess: () => { toast.ok(t('common.saved')); aform.setValues({ Password: '', Confirm: '' }); refresh() }, onError: toast.err })
   const mform = useForm({ initialValues: { url: '', pair_code: '' } })
