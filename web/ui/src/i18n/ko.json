@@ -609,5 +609,10 @@
     "outboundAdded": "WARP 아웃바운드 추가됨",
     "addTemplate": "자주 쓰는 규칙 추가",
     "templateHint": "AI 와 스트리밍 사이트를 WARP 로:"
+  },
+  "overrides": {
+    "title": "설정 오버라이드",
+    "hint": "코어별 JSON 이 최종 설정에 깊게 병합됩니다: 객체는 필드 단위 병합, 배열과 스칼라는 교체, null 은 필드 삭제. 패널에 없는 코어 옵션용. 잘못되면 코어가 뜨지 않으며 닥터에 표시됩니다.",
+    "invalid": "올바른 JSON 이 아님"
   }
 }

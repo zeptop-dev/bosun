@@ -4,6 +4,7 @@
 package spec
 
 import (
+	"encoding/json"
 	"strconv"
 	"time"
 )
@@ -362,6 +363,10 @@ type Node struct {
 	// DNS lists resolvers the cores use for outbound names ("1.1.1.1",
 	// "tls://1.1.1.1", "https://dns.google/dns-query"); empty = system.
 	DNS []string `json:"dns,omitempty"`
+	// Overrides are JSON objects deep-merged into each core's rendered
+	// config, keyed by core name ("xray", "singbox", "hysteria", "mita"):
+	// an escape hatch for options the panel does not model.
+	Overrides map[string]json.RawMessage `json:"overrides,omitempty"`
 	// Decoy is a real HTTPS site the node serves for itself on loopback so
 	// REALITY inbounds can "steal" their own domain instead of a third
 	// party's (nothing is relayed off-box when the fallback fires).

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 	"github.com/zeptop-dev/bosun/pkg/wg"
 )
@@ -146,6 +147,9 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	if len(node.DNS) > 0 {
 		cfg["dns"] = m{"servers": dnsServers(node.DNS)}
+	}
+	if err := core.ApplyOverride(cfg, node.Overrides["xray"]); err != nil {
+		return nil, nil, fmt.Errorf("xray: %w", err)
 	}
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	return b, st, err

@@ -609,5 +609,10 @@
     "outboundAdded": "WARP 出站已添加",
     "addTemplate": "添加常用分流模板",
     "templateHint": "把 AI 和流媒体站点分流到 WARP："
+  },
+  "overrides": {
+    "title": "配置覆盖",
+    "hint": "按内核填一段 JSON，会深合并进最终生成的配置：对象逐字段合并，数组和标量整体替换，值为 null 表示删除该字段。用来设置面板没有暴露的内核选项。改错了内核会起不来，体检里能看到。",
+    "invalid": "不是合法的 JSON"
   }
 }

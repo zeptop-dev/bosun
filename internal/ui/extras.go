@@ -24,6 +24,8 @@ func (s *Server) extraRoutes() {
 	m.HandleFunc("GET /api/routing", auth(s.getRouting))
 	m.HandleFunc("PUT /api/routing", auth(s.local(s.putRouting)))
 	m.HandleFunc("POST /api/routing/parse", auth(s.parseLinks))
+	m.HandleFunc("GET /api/overrides", auth(s.getOverrides))
+	m.HandleFunc("PUT /api/overrides", auth(s.local(s.putOverrides)))
 	m.HandleFunc("GET /api/warp", auth(s.getWARP))
 	m.HandleFunc("POST /api/warp/register", auth(s.registerWARP))
 	m.HandleFunc("PUT /api/warp/license", auth(s.licenseWARP))
@@ -255,4 +257,15 @@ func (s *Server) putKomari(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	storeErr(w, s.d.Store.SetKomari(k))
+}
+
+func (s *Server) getOverrides(w http.ResponseWriter, r *http.Request) { ok(w, s.d.Store.Overrides()) }
+
+func (s *Server) putOverrides(w http.ResponseWriter, r *http.Request) {
+	var in map[string]string
+	if err := decode(r, &in); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	storeErr(w, s.d.Store.SetOverrides(in))
 }

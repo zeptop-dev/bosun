@@ -87,12 +87,16 @@ func (c *Core) Capabilities() core.Capabilities {
 	return core.Capabilities{Protocols: []spec.Protocol{spec.Hysteria2}, HotUserReload: true}
 }
 
-func (c *Core) Render(_ *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
-	cfg, st, err := render(inbounds, users, renderOptions{
+func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
+	opt := renderOptions{
 		AuthURL:     "http://" + c.opt.AuthListen + "/auth",
 		StatsListen: c.opt.StatsListen,
 		StatsSecret: c.secret,
-	})
+	}
+	if node != nil {
+		opt.Override = node.Overrides["hysteria"]
+	}
+	cfg, st, err := render(inbounds, users, opt)
 	if err != nil {
 		return nil, err
 	}

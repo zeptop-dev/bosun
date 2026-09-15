@@ -56,6 +56,8 @@ type State struct {
 	Probe ProbeSettings `json:"probe"`
 	// Komari reports this node to a Komari server as an agent.
 	Komari spec.Komari `json:"komari"`
+	// Overrides are per-core JSON objects merged into the rendered config.
+	Overrides map[string]string `json:"overrides,omitempty"`
 	// OutboundTraffic is lifetime bytes per outbound tag.
 	OutboundTraffic map[string]spec.Traffic `json:"outbound_traffic,omitempty"`
 	// WARP is the Cloudflare account registered on this node (also used
