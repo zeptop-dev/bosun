@@ -119,7 +119,7 @@ func cmdBackup(args []string) error {
 			return err
 		}
 		defer f.Close()
-		sum, err := backup.Restore(dataDir, f, "")
+		sum, _, err := backup.Restore(dataDir, f, "")
 		if err != nil {
 			return err
 		}
@@ -128,9 +128,13 @@ func cmdBackup(args []string) error {
 	}
 }
 
-// serviceRunning is a best-effort look at systemd.
+// serviceRunning is a best-effort look at systemd (or OpenRC on Alpine).
 func serviceRunning() bool {
 	if _, err := exec.LookPath("systemctl"); err != nil {
+		if _, err := exec.LookPath("rc-service"); err == nil {
+			out, _ := exec.Command("rc-service", "bosun", "status").CombinedOutput()
+			return strings.Contains(string(out), "started")
+		}
 		return false
 	}
 	out, err := exec.Command("systemctl", "is-active", "bosun").Output()

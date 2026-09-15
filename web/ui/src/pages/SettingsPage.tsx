@@ -22,7 +22,7 @@ export default function SettingsPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api.get<Settings>('/api/settings') })
   const status = useQuery({ queryKey: ['status'], queryFn: () => api.get<Status>('/api/status'), refetchInterval: 5_000 })
   const cores = useQuery({ queryKey: ['cores'], queryFn: () => api.get<CoreRelease[]>('/api/cores') })
-  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http', user_speed_limit_mbps: 0, panel_allow_cidrs: [], extra_links: '', telegram_token: '', telegram_chat_id: 0, telegram_notify: true } })
+  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http', user_speed_limit_mbps: 0, mita_quotas: false, panel_allow_cidrs: [], extra_links: '', telegram_token: '', telegram_chat_id: 0, telegram_notify: true } })
   useEffect(() => { if (settings.data) sform.setValues(settings.data) }, [settings.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const saveSettings = useMutation({ mutationFn: (v: Settings) => api.put<{ ok: boolean; dns?: DNSResult[] }>('/api/settings', v), onSuccess: (r) => { toast.ok(t('common.saved')); dnsToast(r.dns); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['links'] }) }, onError: toast.err })
   const aform = useForm({ initialValues: { Username: me?.username ?? 'admin', Password: '', Confirm: '' }, validate: { Confirm: (v, all) => (v === all.Password ? null : t('settings.mismatch')) } })
@@ -64,6 +64,7 @@ export default function SettingsPage() {
               </>
             )}
             <NumberInput label={t('settings.speedLimit')} description={t('settings.speedLimitHint')} min={0} {...sform.getInputProps('user_speed_limit_mbps')} />
+            <Switch label={t('settings.mitaQuotas')} description={t('settings.mitaQuotasHint')} {...sform.getInputProps('mita_quotas', { type: 'checkbox' })} />
             {s?.agent?.shaper && <Text size="xs" c={s.agent.shaper.error ? 'red' : s.agent.shaper.supported ? 'teal' : 'orange'}>{s.agent.shaper.error ? s.agent.shaper.error : s.agent.shaper.supported ? t('settings.shaperOn', { n: s.agent.shaper.users, iface: s.agent.shaper.interface }) : t('settings.shaperUnsupported')}</Text>}
             <Title order={6} mt="xs">{t('settings.access')}</Title>
             <TagsInput label={t('settings.allowCidrs')} description={t('settings.allowCidrsHint')} placeholder="203.0.113.0/24" value={sform.values.panel_allow_cidrs ?? []} onChange={(v) => sform.setFieldValue('panel_allow_cidrs', v)} />

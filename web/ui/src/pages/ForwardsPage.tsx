@@ -49,7 +49,7 @@ export default function ForwardsPage() {
               <Table.Tr key={f.tag}>
                 <Table.Td><Text fw={600} size="sm">{f.tag}</Text></Table.Td>
                 <Table.Td><Text size="sm">{f.listen || '0.0.0.0'}:{f.port} <Badge variant="outline" color="gray" ml={4}>{f.protocol}</Badge></Text></Table.Td>
-                <Table.Td><Text size="sm" ff="monospace">{f.target}</Text>{f.backend === 'nft' && <Badge size="xs" variant="light" color="grape" ml={4}>nft{f.preserve_source ? ' · ' + t('forwards.preserveShort') : ''}</Badge>}</Table.Td>
+                <Table.Td><Text size="sm" ff="monospace">{f.target}</Text>{f.backend === 'realm' && <Badge size="xs" variant="light" color="indigo" ml={4}>realm</Badge>}{f.backend === 'nft' && <Badge size="xs" variant="light" color="grape" ml={4}>nft{f.preserve_source ? ' · ' + t('forwards.preserveShort') : ''}</Badge>}</Table.Td>
                 <Table.Td>{f.status ? <Badge color={f.status.up ? 'teal' : 'red'} title={f.status.last_error}>{f.status.up ? `${f.status.rtt_ms} ms` : t('forwards.down')}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
                 <Table.Td><Text size="sm">{f.status ? `${f.status.active_conn} / ${f.status.total_conn}` : '—'}</Text></Table.Td>
                 <Table.Td><Text size="sm">{f.status ? `↑ ${bytes(f.status.bytes_in)} ↓ ${bytes(f.status.bytes_out)}` : '—'}</Text></Table.Td>
@@ -72,7 +72,7 @@ export default function ForwardsPage() {
             <Select label={t('forwards.protocol')} data={['tcp', 'udp', 'both']} allowDeselect={false} {...form.getInputProps('protocol')} />
           </Group>
           <TextInput label={t('forwards.target')} description={form.values.backend === 'nft' ? t('forwards.targetNftHint') : t('forwards.targetHint')} placeholder="203.0.113.30:443" required {...form.getInputProps('target')} />
-          <Select label={t('forwards.backend')} description={form.values.backend === 'nft' ? t('forwards.backendNftHint') : t('forwards.backendRelayHint')} data={[{ value: '', label: t('forwards.backendRelay') }, { value: 'nft', label: t('forwards.backendNft') }]} allowDeselect={false} {...form.getInputProps('backend')} />
+          <Select label={t('forwards.backend')} description={form.values.backend === 'nft' ? t('forwards.backendNftHint') : form.values.backend === 'realm' ? t('forwards.backendRealmHint') : t('forwards.backendRelayHint')} data={[{ value: '', label: t('forwards.backendRelay') }, { value: 'nft', label: t('forwards.backendNft') }, { value: 'realm', label: t('forwards.backendRealm') }]} allowDeselect={false} {...form.getInputProps('backend')} />
           {form.values.backend === 'nft' && <Switch label={t('forwards.preserveSource')} description={t('forwards.preserveSourceHint')} {...form.getInputProps('preserve_source', { type: 'checkbox' })} />}
           <Group justify="flex-end"><Button variant="default" onClick={() => setEditing(null)}>{t('common.cancel')}</Button><Button type="submit" loading={save.isPending}>{t('common.save')}</Button></Group>
         </Stack></form>

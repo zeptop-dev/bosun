@@ -8,7 +8,8 @@
     "settings": "设置",
     "logs": "日志",
     "doctor": "体检",
-    "outbound": "出站"
+    "outbound": "出站",
+    "templates": "订阅模板"
   },
   "login": {
     "title": "登录 bosun",
@@ -276,7 +277,9 @@
     "deleteHint": "删除后用它的入站会变回直连，分享链接随之改变。",
     "empty": "没有专线入口。只有 IPLC 或专线在本机前面时才需要。",
     "reserved": "保留端口",
-    "reservedHint": "端口段里被服务商占用的端口（一般是 SSH 映射的那个），逗号分隔；配方选端口时跳过，入站也不能用"
+    "reservedHint": "端口段里被服务商占用的端口（一般是 SSH 映射的那个），逗号分隔；配方选端口时跳过，入站也不能用",
+    "derive": "按尾号派生",
+    "deriveHint": "nobrand 的 derived-tail 规则：本地地址末位 N，预留 N×100，自动池 N×100+1 到 N×100+99。"
   },
   "routing": {
     "title": "出站与落地",
@@ -432,7 +435,9 @@
     "targetNftHint": "IPv4 地址:端口（nftables 不解析域名）",
     "preserveSource": "保留源 IP",
     "preserveSourceHint": "不做 MASQUERADE，目标看到的是客户端真实 IP；目标服务器必须把回包路由回本机，否则不通。",
-    "preserveShort": "保留源 IP"
+    "preserveShort": "保留源 IP",
+    "backendRealm": "Realm（独立进程）",
+    "backendRealmHint": "由 bosun 安装并运行 zhboner/realm 中转，吞吐高，支持域名目标和 UDP；没有连接数和流量统计。"
   },
   "settings": {
     "title": "设置",
@@ -487,7 +492,9 @@
     "speedLimit": "每用户限速（Mbps）",
     "speedLimitHint": "0 不限。对没有单独限速的用户生效，防止个别用户吃光带宽。需要 Linux 且有 nft 和 tc，只对 Xray / sing-box 承载的协议生效；限速用户变动时 sing-box 会重启一次。",
     "shaperOn": "已对 {{n}} 个用户限速，接口 {{iface}}",
-    "shaperUnsupported": "已配置限速，但这台机器没有 nft/tc（或不是 Linux），用户暂不受限"
+    "shaperUnsupported": "已配置限速，但这台机器没有 nft/tc（或不是 Linux），用户暂不受限",
+    "mitaQuotas": "mita 原生配额",
+    "mitaQuotasHint": "把每个用户的流量额度也写进 mita 自己的 quotas，面板挂了内核照样拦。窗口取重置周期（按月重置按 31 天滚动），所以月初刚重置时 mita 可能还按滚动窗口拦几天。"
   },
   "logs": {
     "title": "日志",
@@ -614,5 +621,47 @@
     "title": "配置覆盖",
     "hint": "按内核填一段 JSON，会深合并进最终生成的配置：对象逐字段合并，数组和标量整体替换，值为 null 表示删除该字段。用来设置面板没有暴露的内核选项。改错了内核会起不来，体检里能看到。",
     "invalid": "不是合法的 JSON"
+  },
+  "subTemplates": {
+    "title": "订阅模板",
+    "subtitle": "每种客户端格式的订阅文档骨架。节点列表由 bosun 生成，其余部分（规则、策略组、General）可以在这里改。",
+    "format": "格式",
+    "customized": "已自定义",
+    "default": "内置默认",
+    "hintYaml": "YAML 模板：proxies 会被替换成节点；策略组 proxies 列表里的占位符会展开成全部节点名。占位符：",
+    "hintIni": "文本模板：占位符分别替换为节点行和逗号分隔的节点名。占位符：",
+    "hintNodeList": "Loon 和 Quantumult X 的远程订阅是节点列表，默认模板只有节点行；写成完整配置时需在客户端以配置方式导入。",
+    "reset": "恢复默认",
+    "modeDesign": "可视化",
+    "modeText": "文本",
+    "managedHint": "节点由 Captain 接管时，订阅模板在 Captain 里编辑；这里只读。"
+  },
+  "subDesign": {
+    "title": "可视化设计",
+    "hint": "先定义策略组，再按顺序排规则；点\"生成并应用\"会为全部客户端格式生成模板并覆盖当前模板。规则集来自 ACL4SSR，客户端自己从 GitHub 拉取。",
+    "loadPreset": "载入预设…",
+    "presetConfirm": "载入预设会替换现在编辑的策略组和规则（尚未应用的改动会丢失）。",
+    "groups": "策略组",
+    "addGroup": "添加策略组",
+    "groupsHint": "成员可以是全部节点、带某个标签的节点、名称匹配某个地区的节点，或其他策略组。url-test 自动选延迟最低的，fallback 按顺序选可用的，load-balance 轮流用。",
+    "groupName": "组名",
+    "members": "成员",
+    "noGroups": "还没有策略组，可以先载入一个预设。",
+    "memberServers": "节点",
+    "memberGroups": "策略组与内置",
+    "allServers": "全部节点",
+    "tag": "标签：{{tag}}",
+    "rules": "规则",
+    "addRule": "添加规则",
+    "rulesHint": "自上而下匹配，先命中先生效。GEOIP CN 放在国内域名/IP 之后，兜底策略处理剩下的全部流量。",
+    "final": "兜底策略",
+    "finalHint": "没有规则命中时走哪里",
+    "preview": "预览",
+    "save": "仅保存设计",
+    "saveHint": "保存设计但不改动模板",
+    "apply": "生成并应用",
+    "applyConfirm": "将为 mihomo、Stash、Surge、Surfboard、Loon、Quantumult X、Egern 生成模板并覆盖现有模板。",
+    "applied": "模板已生成并应用",
+    "applyHint": "生成的模板可以在\"文本\"里继续手改；下次再\"生成并应用\"会覆盖手改。占位符："
   }
 }

@@ -95,10 +95,72 @@ type stateShape struct {
 // Restore reads a tar.gz produced by Write, validates it and writes the
 // files into dataDir atomically (each file via a temp name + rename).
 // currentAdmin is the running login "username:hash" for AdminChanged.
-func Restore(dataDir string, r io.Reader, currentAdmin string) (Summary, error) {
+// The returned rollback puts every touched file back the way it was
+// (files that did not exist are removed); it is nil when nothing was
+// written. A write failure part-way rolls back before returning.
+func Restore(dataDir string, r io.Reader, currentAdmin string) (Summary, func() error, error) {
+	sum, files, err := load(r, currentAdmin)
+	if err != nil {
+		return Summary{}, nil, err
+	}
+	rollback, err := writeAll(dataDir, files)
+	if err != nil {
+		if rollback != nil {
+			_ = rollback()
+		}
+		return Summary{}, nil, err
+	}
+	return sum, rollback, nil
+}
+
+// writeAll writes the files, remembering the previous contents so the
+// whole set can be undone.
+func writeAll(dataDir string, files map[string][]byte) (func() error, error) {
+	type prev struct {
+		path    string
+		existed bool
+		data    []byte
+	}
+	var touched []prev
+	rollback := func() error {
+		var first error
+		for i := len(touched) - 1; i >= 0; i-- {
+			t := touched[i]
+			var err error
+			if t.existed {
+				err = os.WriteFile(t.path, t.data, 0o600)
+			} else {
+				err = os.Remove(t.path)
+			}
+			if err != nil && first == nil {
+				first = err
+			}
+		}
+		return first
+	}
+	for name, b := range files {
+		p := filepath.Join(dataDir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+			return rollback, err
+		}
+		old, readErr := os.ReadFile(p)
+		touched = append(touched, prev{path: p, existed: readErr == nil, data: old})
+		tmp := p + ".restore"
+		if err := os.WriteFile(tmp, b, 0o600); err != nil {
+			return rollback, err
+		}
+		if err := os.Rename(tmp, p); err != nil {
+			return rollback, err
+		}
+	}
+	return rollback, nil
+}
+
+// load parses and validates the archive without touching the disk.
+func load(r io.Reader, currentAdmin string) (Summary, map[string][]byte, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return Summary{}, errors.New("backup: not a gzip archive")
+		return Summary{}, nil, errors.New("backup: not a gzip archive")
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
@@ -109,54 +171,41 @@ func Restore(dataDir string, r io.Reader, currentAdmin string) (Summary, error) 
 			break
 		}
 		if err != nil {
-			return Summary{}, errors.New("backup: not a tar archive")
+			return Summary{}, nil, errors.New("backup: not a tar archive")
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
 		name := filepath.ToSlash(filepath.Clean(hdr.Name))
 		if strings.HasPrefix(name, "../") || strings.HasPrefix(name, "/") || strings.Contains(name, "/../") {
-			return Summary{}, errors.New("backup: refusing path " + hdr.Name)
+			return Summary{}, nil, errors.New("backup: refusing path " + hdr.Name)
 		}
 		if !allowed(name) {
 			continue
 		}
 		b, err := io.ReadAll(io.LimitReader(tr, 64<<20))
 		if err != nil {
-			return Summary{}, err
+			return Summary{}, nil, err
 		}
 		files[name] = b
 	}
 	raw, ok := files["local.json"]
 	if !ok {
-		return Summary{}, errors.New("backup: archive has no local.json")
+		return Summary{}, nil, errors.New("backup: archive has no local.json")
 	}
 	var st stateShape
 	if err := json.Unmarshal(raw, &st); err != nil {
-		return Summary{}, fmt.Errorf("backup: local.json: %w", err)
+		return Summary{}, nil, fmt.Errorf("backup: local.json: %w", err)
 	}
 	if st.Mode == "managed" {
-		return Summary{}, errors.New("backup: archive was taken while managed by a panel; detach it first")
+		return Summary{}, nil, errors.New("backup: archive was taken while managed by a panel; detach it first")
 	}
 	if st.Admin.Username == "" || st.Admin.PasswordHash == "" {
-		return Summary{}, errors.New("backup: local.json has no admin login")
+		return Summary{}, nil, errors.New("backup: local.json has no admin login")
 	}
 	sum := Summary{Inbounds: len(st.Inbounds), Users: len(st.Users), Forwards: len(st.Forwards), Ingresses: len(st.Ingresses),
 		AdminChanged: currentAdmin != "" && currentAdmin != st.Admin.Username+":"+st.Admin.PasswordHash}
-	for name, b := range files {
-		p := filepath.Join(dataDir, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
-			return Summary{}, err
-		}
-		tmp := p + ".restore"
-		if err := os.WriteFile(tmp, b, 0o600); err != nil {
-			return Summary{}, err
-		}
-		if err := os.Rename(tmp, p); err != nil {
-			return Summary{}, err
-		}
-	}
-	return sum, nil
+	return sum, files, nil
 }
 
 func allowed(name string) bool {

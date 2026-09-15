@@ -745,9 +745,17 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 			usable = append(usable, u)
 		}
 	}
+	// specOf is User.Spec plus the core-side quota window when enabled.
+	specOf := func(u User) spec.User {
+		su := u.Spec()
+		if s.st.Settings.MitaQuotas {
+			su.QuotaBytes, su.QuotaDays = u.QuotaWindow(now)
+		}
+		return su
+	}
 	nodeUsers := make([]spec.User, 0, len(usable))
 	for _, u := range usable {
-		nodeUsers = append(nodeUsers, u.Spec())
+		nodeUsers = append(nodeUsers, specOf(u))
 	}
 	node := &spec.Node{ID: "local", Forwards: append([]spec.Forward(nil), s.st.Forwards...),
 		Outbounds: append([]spec.Outbound(nil), s.st.Outbounds...), Routes: append([]spec.RouteRule(nil), s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound,
@@ -785,13 +793,13 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 		restricted := false
 		for _, u := range usable {
 			if len(u.InboundTags) == 0 {
-				scoped = append(scoped, u.Spec())
+				scoped = append(scoped, specOf(u))
 				continue
 			}
 			restricted = true
 			for _, t := range u.InboundTags {
 				if t == ib.Tag {
-					scoped = append(scoped, u.Spec())
+					scoped = append(scoped, specOf(u))
 					break
 				}
 			}

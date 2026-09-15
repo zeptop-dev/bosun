@@ -29,11 +29,15 @@ type Installer struct {
 	GOOS    string            // defaults to runtime.GOOS
 	GOARCH  string            // defaults to runtime.GOARCH
 	Headers map[string]string // extra request headers, e.g. a GitLab Deploy-Token
+	// Musl prefers the "<GOOS>/<GOARCH>-musl" asset when one exists (Alpine);
+	// detected from /etc/alpine-release by New.
+	Musl bool
 }
 
 // New returns an installer rooted at root.
 func New(root string, log *slog.Logger) *Installer {
-	return &Installer{Root: root, Log: log.With("component", "coreinstall"), HTTP: &http.Client{Timeout: 10 * time.Minute}, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
+	_, alpine := os.Stat("/etc/alpine-release")
+	return &Installer{Root: root, Log: log.With("component", "coreinstall"), HTTP: &http.Client{Timeout: 10 * time.Minute}, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Musl: alpine == nil}
 }
 
 func (i *Installer) platform() string { return i.GOOS + "/" + i.GOARCH }
@@ -91,6 +95,11 @@ func (i *Installer) Install(ctx context.Context, rel Release) (string, error) {
 
 	var err error
 	asset, hasAsset := rel.Assets[i.platform()]
+	if i.Musl {
+		if a, ok := rel.Assets[i.platform()+"-musl"]; ok {
+			asset, hasAsset = a, true
+		}
+	}
 	if hasAsset {
 		i.Log.Info("downloading", "core", rel.Core, "version", rel.Version, "url", asset.URL)
 		err = i.download(ctx, asset, tmp)

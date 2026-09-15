@@ -67,7 +67,7 @@ export interface Status {
   total_up: number; total_down: number; history: { day: number; up: number; down: number }[]; last_report: string
   certs: CertStatus[]; pings?: Ping[]
 }
-export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string; decoy_enabled: boolean; decoy_domain: string; decoy_upstream: string; decoy_acme: string; user_speed_limit_mbps: number; panel_allow_cidrs: string[]; extra_links: string; telegram_token: string; telegram_chat_id: number; telegram_notify: boolean }
+export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string; decoy_enabled: boolean; decoy_domain: string; decoy_upstream: string; decoy_acme: string; user_speed_limit_mbps: number; mita_quotas?: boolean; panel_allow_cidrs: string[]; extra_links: string; telegram_token: string; telegram_chat_id: number; telegram_notify: boolean }
 export interface CertStatus { domain: string; method: string; not_after: string; error?: string; updated: string }
 export interface Link { tag: string; name: string; uri: string }
 export interface CoreRelease { Core: string; Version: string; Status: string; Note: string; Installed: boolean }

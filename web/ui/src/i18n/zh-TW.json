@@ -8,7 +8,8 @@
     "settings": "設定",
     "logs": "日誌",
     "doctor": "健檢",
-    "outbound": "出站"
+    "outbound": "出站",
+    "templates": "訂閱範本"
   },
   "login": {
     "title": "登入 bosun",
@@ -276,7 +277,9 @@
     "deleteHint": "刪除後用它的入站會變回直連，分享連結隨之改變。",
     "empty": "沒有專線入口。只有 IPLC 或專線在本機前面時才需要。",
     "reserved": "保留連接埠",
-    "reservedHint": "連接埠段裡被服務商佔用的連接埠（一般是 SSH 對應的那個），逗號分隔；配方選連接埠時跳過，入站也不能用"
+    "reservedHint": "連接埠段裡被服務商佔用的連接埠（一般是 SSH 對應的那個），逗號分隔；配方選連接埠時跳過，入站也不能用",
+    "derive": "按尾號派生",
+    "deriveHint": "nobrand 的 derived-tail 規則：本地位址末位 N，預留 N×100，自動池 N×100+1 到 N×100+99。"
   },
   "routing": {
     "title": "出站與落地",
@@ -432,7 +435,9 @@
     "targetNftHint": "IPv4 位址:連接埠（nftables 不解析網域）",
     "preserveSource": "保留來源 IP",
     "preserveSourceHint": "不做 MASQUERADE，目標看到的是用戶端真實 IP；目標伺服器必須把回包路由回本機，否則不通。",
-    "preserveShort": "保留來源 IP"
+    "preserveShort": "保留來源 IP",
+    "backendRealm": "Realm（獨立行程）",
+    "backendRealmHint": "由 bosun 安裝並執行 zhboner/realm 中轉，吞吐高，支援網域目標和 UDP；沒有連線數和流量統計。"
   },
   "settings": {
     "title": "設定",
@@ -487,7 +492,9 @@
     "speedLimit": "每使用者限速（Mbps）",
     "speedLimitHint": "0 不限。對沒有單獨限速的使用者生效，防止個別使用者吃光頻寬。需要 Linux 且有 nft 和 tc，只對 Xray / sing-box 承載的協定生效；限速使用者變動時 sing-box 會重啟一次。",
     "shaperOn": "已對 {{n}} 個使用者限速，介面 {{iface}}",
-    "shaperUnsupported": "已設定限速，但這台機器沒有 nft/tc（或不是 Linux），使用者暫不受限"
+    "shaperUnsupported": "已設定限速，但這台機器沒有 nft/tc（或不是 Linux），使用者暫不受限",
+    "mitaQuotas": "mita 原生配額",
+    "mitaQuotasHint": "把每個使用者的流量額度也寫進 mita 自己的 quotas，面板掛了核心照樣攔。視窗取重置週期（按月重置按 31 天滾動），所以月初剛重置時 mita 可能還按滾動視窗攔幾天。"
   },
   "logs": {
     "title": "日誌",
@@ -614,5 +621,47 @@
     "title": "設定覆寫",
     "hint": "按核心填一段 JSON，會深合併進最終產生的設定：物件逐欄位合併，陣列和純量整體取代，值為 null 表示刪除該欄位。用來設定面板沒有暴露的核心選項。改錯了核心會起不來，體檢裡能看到。",
     "invalid": "不是合法的 JSON"
+  },
+  "subTemplates": {
+    "title": "訂閱範本",
+    "subtitle": "每種用戶端格式的訂閱文件骨架。節點列表由 bosun 產生，其餘部分（規則、策略群組、General）可以在這裡改。",
+    "format": "格式",
+    "customized": "已自訂",
+    "default": "內建預設",
+    "hintYaml": "YAML 範本：proxies 會被取代成節點；策略群組 proxies 列表裡的佔位符會展開成全部節點名。佔位符：",
+    "hintIni": "文字範本：佔位符分別取代為節點行和逗號分隔的節點名。佔位符：",
+    "hintNodeList": "Loon 和 Quantumult X 的遠端訂閱是節點列表，預設範本只有節點行；寫成完整設定時需在用戶端以設定方式匯入。",
+    "reset": "恢復預設",
+    "modeDesign": "視覺化",
+    "modeText": "文字",
+    "managedHint": "節點由 Captain 接管時，訂閱範本在 Captain 裡編輯；這裡唯讀。"
+  },
+  "subDesign": {
+    "title": "視覺化設計",
+    "hint": "先定義策略組，再按順序排規則；點「產生並套用」會為全部用戶端格式產生範本並覆蓋目前範本。規則集來自 ACL4SSR，用戶端自己從 GitHub 拉取。",
+    "loadPreset": "載入預設…",
+    "presetConfirm": "載入預設會取代目前編輯的策略組和規則（尚未套用的改動會遺失）。",
+    "groups": "策略組",
+    "addGroup": "新增策略組",
+    "groupsHint": "成員可以是全部節點、帶某個標籤的節點、名稱符合某個地區的節點，或其他策略組。url-test 自動選延遲最低的，fallback 按順序選可用的，load-balance 輪流用。",
+    "groupName": "組名",
+    "members": "成員",
+    "noGroups": "還沒有策略組，可以先載入一個預設。",
+    "memberServers": "節點",
+    "memberGroups": "策略組與內建",
+    "allServers": "全部節點",
+    "tag": "標籤：{{tag}}",
+    "rules": "規則",
+    "addRule": "新增規則",
+    "rulesHint": "由上而下比對，先命中先生效。GEOIP CN 放在國內網域/IP 之後，兜底策略處理剩下的全部流量。",
+    "final": "兜底策略",
+    "finalHint": "沒有規則命中時走哪裡",
+    "preview": "預覽",
+    "save": "僅儲存設計",
+    "saveHint": "儲存設計但不改動範本",
+    "apply": "產生並套用",
+    "applyConfirm": "將為 mihomo、Stash、Surge、Surfboard、Loon、Quantumult X、Egern 產生範本並覆蓋現有範本。",
+    "applied": "範本已產生並套用",
+    "applyHint": "產生的範本可以在「文字」裡繼續手改；下次再「產生並套用」會覆蓋手改。佔位符："
   }
 }

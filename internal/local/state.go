@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/subdesign"
 )
 
 // Mode is who owns the node's desired state.
@@ -58,6 +59,10 @@ type State struct {
 	Komari spec.Komari `json:"komari"`
 	// Overrides are per-core JSON objects merged into the rendered config.
 	Overrides map[string]string `json:"overrides,omitempty"`
+	// SubTemplates are the operator's subscription documents by format
+	// and SubDesign the visual designer that generates them.
+	SubTemplates map[string]string `json:"sub_templates,omitempty"`
+	SubDesign    *subdesign.Design `json:"sub_design,omitempty"`
 	// OutboundTraffic is lifetime bytes per outbound tag.
 	OutboundTraffic map[string]spec.Traffic `json:"outbound_traffic,omitempty"`
 	// WARP is the Cloudflare account registered on this node (also used
@@ -193,6 +198,11 @@ type Settings struct {
 	ExtraLinks string `json:"extra_links"`
 	// UserSpeedLimitMbps caps every user without a limit of their own.
 	UserSpeedLimitMbps int `json:"user_speed_limit_mbps"`
+	// MitaQuotas also writes each user's allowance into mita's own quotas
+	// so the core enforces it when the panel is down (nobrand parity).
+	// The window is the reset cycle, so a calendar-month reset becomes a
+	// rolling 31 days there.
+	MitaQuotas bool `json:"mita_quotas"`
 	// Telegram alerts and /status.
 	TelegramToken  string `json:"telegram_token"`
 	TelegramChatID int64  `json:"telegram_chat_id"`
@@ -284,4 +294,29 @@ func (u User) Spec() spec.User {
 		pw = u.UUID
 	}
 	return spec.User{ID: u.ID, Name: u.UUID, UUID: u.UUID, Password: pw, DeviceLimit: u.DeviceLimit, SpeedLimitMbps: u.SpeedLimitMbps}
+}
+
+// QuotaWindow is the rolling window a core-side quota should use: the
+// reset cycle when there is one, else the user's whole lifetime.
+func (u User) QuotaWindow(now time.Time) (bytes int64, days int) {
+	if u.QuotaBytes <= 0 {
+		return 0, 0
+	}
+	switch u.ResetMode {
+	case "days":
+		if u.ResetDays > 0 {
+			return u.QuotaBytes, u.ResetDays
+		}
+		return u.QuotaBytes, 30
+	case "monthly":
+		return u.QuotaBytes, 31
+	}
+	if u.ExpiresAt != nil {
+		d := int(u.ExpiresAt.Sub(u.CreatedAt).Hours()/24) + 1
+		if d < 1 {
+			d = 1
+		}
+		return u.QuotaBytes, d
+	}
+	return u.QuotaBytes, 36500
 }

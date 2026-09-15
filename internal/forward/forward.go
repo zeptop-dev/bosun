@@ -32,6 +32,7 @@ type Stats struct {
 	Protocol   string
 	Port       int
 	Target     string
+	Backend    string
 	Up         bool // last probe succeeded (tcp targets only; udp reports true)
 	RTT        time.Duration
 	LastError  string
@@ -69,6 +70,8 @@ type Manager struct {
 	rules map[string]*rule
 	// nftApplied is the nft script currently installed ("" = no table).
 	nftApplied string
+	// Realm runs the rules with Backend "realm"; nil rejects them.
+	Realm *Realm
 }
 
 // NewManager returns an empty manager.
@@ -101,10 +104,13 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 	}
 	var firstErr error
 	nftChanged := false
-	var nftRules []spec.Forward
+	var nftRules, realmRules []spec.Forward
 	for k, f := range want {
-		if f.Backend == "nft" {
+		switch f.Backend {
+		case "nft":
 			nftRules = append(nftRules, f)
+		case "realm":
+			realmRules = append(realmRules, f)
 		}
 		if _, running := m.rules[k]; running {
 			continue
@@ -114,6 +120,12 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 			m.rules[k] = startProbeOnly(f, m.log)
 			nftChanged = true
 			m.log.Info("nft forward added", "tag", f.Tag, "port", f.Port, "protocol", f.Protocol, "target", f.Target, "preserve_source", f.PreserveSource)
+			continue
+		}
+		if f.Backend == "realm" {
+			// realm does the relaying; bosun keeps the target probe.
+			m.rules[k] = startProbeOnly(f, m.log)
+			m.log.Info("realm forward added", "tag", f.Tag, "port", f.Port, "protocol", f.Protocol, "target", f.Target)
 			continue
 		}
 		r, err := start(f, m.log)
@@ -130,6 +142,22 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 	if nftChanged || (len(nftRules) == 0 && m.nftApplied != "") || (len(nftRules) > 0 && m.nftApplied == "") {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		m.applyNFT(ctx, nftRules)
+		cancel()
+	}
+	if len(realmRules) > 0 || (m.Realm != nil && m.Realm.applied != "") {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := m.Realm.apply(ctx, realmRules); err != nil {
+			m.log.Error("realm", "err", err)
+			for _, f := range realmRules {
+				if r, ok := m.rules[key(f)]; ok {
+					r.setProbe(false, 0, err)
+					r.nftBroken = true
+				}
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
 		cancel()
 	}
 	return firstErr
@@ -158,6 +186,11 @@ func (m *Manager) Stop() {
 		m.applyNFT(ctx, nil)
 		cancel()
 	}
+	if m.Realm != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		m.Realm.stop(ctx)
+		cancel()
+	}
 }
 
 // Snapshot returns current stats for every rule, sorted by tag.
@@ -168,7 +201,7 @@ func (m *Manager) Snapshot() []Stats {
 	for _, r := range m.rules {
 		r.probeMu.Lock()
 		s := Stats{
-			Tag: r.spec.Tag, Protocol: r.spec.Protocol, Port: r.spec.Port, Target: r.spec.Target,
+			Tag: r.spec.Tag, Protocol: r.spec.Protocol, Port: r.spec.Port, Target: r.spec.Target, Backend: r.spec.Backend,
 			Up: r.up, RTT: r.rtt, LastError: r.lastError,
 			ActiveConn: r.active.Load(), TotalConn: r.total.Load(),
 			BytesIn: r.bytesIn.Load(), BytesOut: r.bytesOut.Load(),
@@ -195,9 +228,9 @@ func validate(forwards []spec.Forward) error {
 			return fmt.Errorf("forward %q: protocol must be tcp, udp or both", f.Tag)
 		}
 		switch f.Backend {
-		case "", "nft":
+		case "", "nft", "realm":
 		default:
-			return fmt.Errorf("forward %q: backend must be empty (relay) or nft", f.Tag)
+			return fmt.Errorf("forward %q: backend must be empty (relay), nft or realm", f.Tag)
 		}
 		if f.PreserveSource && f.Backend != "nft" {
 			return fmt.Errorf("forward %q: preserve_source needs the nft backend", f.Tag)

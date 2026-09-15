@@ -1,0 +1,22 @@
+#!/sbin/openrc-run
+# bosun node agent (Alpine / OpenRC). Installed by scripts/install.sh.
+description="bosun node agent"
+command="/usr/local/bin/bosun"
+command_args="run -c /etc/bosun/config.yaml"
+command_background=false
+supervisor=supervise-daemon
+respawn_delay=3
+respawn_max=0
+directory="/var/lib/bosun"
+output_log="/var/log/bosun.log"
+error_log="/var/log/bosun.log"
+rc_ulimit="-n 1048576"
+
+depend() {
+	need net
+	after firewall
+}
+
+start_pre() {
+	checkpath -d -m 0750 /var/lib/bosun
+}

@@ -12,6 +12,7 @@ import LogsPage from './pages/LogsPage'
 import CertificatesPage from './pages/CertificatesPage'
 import ProbePage from './pages/ProbePage'
 import DoctorPage from './pages/DoctorPage'
+import TemplatesPage from './pages/TemplatesPage'
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { me, loading } = useAuth()
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/" element={<OverviewPage />} />
           <Route path="/inbounds" element={<InboundsPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/forwards" element={<ForwardsPage />} />
           <Route path="/ingresses" element={<Navigate to="/inbounds" replace />} />
           <Route path="/routing" element={<Navigate to="/forwards" replace />} />

@@ -1,5 +1,5 @@
 #!/bin/sh
-# bosun installer for Linux (systemd). Usage:
+# bosun installer for Linux (systemd, or OpenRC on Alpine). Usage:
 #   sh install.sh                                   standalone: asks for the panel login and port
 #   sh install.sh --yes                             standalone with defaults (admin / random / :2053)
 #   sh install.sh --captain https://captain.example.com --pair ABCD-EFGH
@@ -27,13 +27,22 @@ while [ $# -gt 0 ]; do
 done
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
-command -v systemctl >/dev/null || { echo "systemd is required" >&2; exit 1; }
+# Init system: systemd, or OpenRC (Alpine).
+if command -v systemctl >/dev/null; then INIT=systemd
+elif command -v rc-service >/dev/null; then INIT=openrc
+else echo "systemd or OpenRC is required" >&2; exit 1; fi
 
 if [ "$ACTION" = uninstall ]; then
   echo "This stops bosun and its cores and removes /usr/local/bin/bosun, /etc/bosun$( [ "$KEEP_DATA" = 1 ] || echo ' and /var/lib/bosun (cores, certificates, local state)')."
   if [ -r /dev/tty ]; then printf 'Type yes to continue: ' >/dev/tty; read -r ans </dev/tty; [ "$ans" = yes ] || { echo "aborted"; exit 1; }; fi
-  systemctl disable --now bosun 2>/dev/null || true
-  rm -f /etc/systemd/system/bosun.service; systemctl daemon-reload
+  if [ "$INIT" = systemd ]; then
+    systemctl disable --now bosun 2>/dev/null || true
+    rm -f /etc/systemd/system/bosun.service; systemctl daemon-reload
+  else
+    rc-service bosun stop 2>/dev/null || true
+    rc-update del bosun default 2>/dev/null || true
+    rm -f /etc/init.d/bosun
+  fi
   rm -rf /usr/local/bin/bosun /usr/local/bin/bosun.backup /usr/local/bin/bosun.backup.version /etc/bosun
   [ "$KEEP_DATA" = 1 ] || rm -rf /var/lib/bosun
   echo "bosun removed."
@@ -148,13 +157,23 @@ if [ "$FIRST_INSTALL" = 1 ] && [ -z "$CAPTAIN" ]; then
   fi
 fi
 
-curl -fsSL -o /etc/systemd/system/bosun.service "https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.service"
-systemctl daemon-reload
-systemctl enable --now bosun
-systemctl restart bosun
-sleep 2
-systemctl --no-pager --lines=5 status bosun || true
-echo "bosun $VERSION installed. Logs: journalctl -u bosun -f"
+if [ "$INIT" = systemd ]; then
+  curl -fsSL -o /etc/systemd/system/bosun.service "https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.service"
+  systemctl daemon-reload
+  systemctl enable --now bosun
+  systemctl restart bosun
+  sleep 2
+  systemctl --no-pager --lines=5 status bosun || true
+  echo "bosun $VERSION installed. Logs: journalctl -u bosun -f"
+else
+  curl -fsSL -o /etc/init.d/bosun "https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.initd"
+  chmod 0755 /etc/init.d/bosun
+  rc-update add bosun default >/dev/null 2>&1 || true
+  rc-service bosun restart || rc-service bosun start
+  sleep 2
+  rc-service bosun status || true
+  echo "bosun $VERSION installed. Logs: tail -f /var/log/bosun.log"
+fi
 if [ -z "$CAPTAIN" ]; then
   echo
   PORT=$(grep -E '^\s*listen:' /etc/bosun/config.yaml | sed -n 's/.*listen: *"\{0,1\}\([^"]*\)"\{0,1\}.*/\1/p' | head -1)
