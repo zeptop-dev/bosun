@@ -147,7 +147,6 @@
     "ingressHint": "Clients dial {{host}}; local port range {{ports}}.",
     "ingressNewHint": "The line ingress is created first, then the inbound.",
     "ingressNewFields": "Copy these from the provider's network information page:",
-    "listenIngressHint": "blank = bind to the ingress address {{ip}}",
     "showAdvanced": "Advanced: extra JSON fields",
     "hideAdvanced": "Hide advanced",
     "extra": "Extra fields",
@@ -228,7 +227,8 @@
     "realityNeedsNode": "Save the node first to probe from it.",
     "tlsHint": "REALITY needs no certificate; TLS needs one for the name",
     "generateKeypair": "Generate key pair",
-    "generateKey": "Generate key"
+    "generateKey": "Generate key",
+    "ingressBindHint": "Leave the listen address blank to bind the line IP {{ip}}."
   },
   "ingress": {
     "title": "Line ingresses",

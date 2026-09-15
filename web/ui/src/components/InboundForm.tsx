@@ -213,7 +213,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           <Select label={t('inbounds.protocol')} data={protocols} required allowDeselect={false} {...form.getInputProps('protocol')} />
         </Group>
         <Select label={t('inbounds.ingress')}
-          description={newIngress ? t('inbounds.ingressNewHint') : selectedIngress ? t('inbounds.ingressHint', { host: clientHost(selectedIngress) || t('ingress.noEntry'), ports: selectedIngress.port_from ? `${selectedIngress.port_from}–${selectedIngress.port_to}` : t('ingress.anyPort') }) : t('inbounds.ingressDirectHint')}
+          description={newIngress ? t('inbounds.ingressNewHint') : selectedIngress ? (t('inbounds.ingressHint', { host: clientHost(selectedIngress) || t('ingress.noEntry'), ports: selectedIngress.port_from ? `${selectedIngress.port_from}–${selectedIngress.port_to}` : t('ingress.anyPort') }) + (selectedIngress.bind_ip ? ' ' + t('inbounds.ingressBindHint', { ip: selectedIngress.bind_ip }) : '')) : t('inbounds.ingressDirectHint')}
           allowDeselect={false}
           data={[{ value: '', label: t('inbounds.ingressDirect') }, ...ingresses.map((g) => ({ value: g.id, label: ingressLabel(g) })), { value: 'new', label: t('inbounds.ingressNew') }]}
           value={newIngress ? 'new' : v.ingress_id} onChange={onIngress} />
@@ -225,7 +225,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           </Stack>
         )}
         <Group grow>
-          <TextInput label={t('inbounds.listen')} placeholder={selectedIngress?.bind_ip || '::'} description={selectedIngress?.bind_ip ? t('inbounds.listenIngressHint', { ip: selectedIngress.bind_ip }) : undefined} {...form.getInputProps('listen')} />
+          <TextInput label={t('inbounds.listen')} placeholder={selectedIngress?.bind_ip || '::'} {...form.getInputProps('listen')} />
           <NumberInput label={t('inbounds.port')} min={1} max={65535} required {...form.getInputProps('port')} />
           <Select label={t('inbounds.core')} data={cores.map((c) => ({ value: c, label: c || t('inbounds.coreAuto') }))} allowDeselect={false} {...form.getInputProps('core')} />
           <Switch mt={24} label={t('inbounds.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
