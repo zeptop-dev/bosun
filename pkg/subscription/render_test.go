@@ -251,7 +251,7 @@ func TestStashAndTemplates(t *testing.T) {
 		t.Fatalf("surge template:\n%s", s)
 	}
 	// Defaults exist for every templated format and nothing else.
-	if names := TemplateNames(); strings.Join(names, ",") != "clash,loon,qx,stash,surfboard,surge" {
+	if names := TemplateNames(); strings.Join(names, ",") != "clash,egern,loon,qx,stash,surfboard,surge" {
 		t.Fatalf("template names: %v", names)
 	}
 	if DefaultTemplate("singbox") != "" || DefaultTemplate("loon") != "{{proxies}}\n" {
@@ -293,5 +293,29 @@ func TestWireGuardRendering(t *testing.T) {
 	}
 	if Pick("wg", "").Name() != "wireguard" {
 		t.Fatal("alias")
+	}
+}
+
+func TestEgern(t *testing.T) {
+	out, err := Egern{}.Render(sample(), Account{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{"proxies:", "- vless:", "user_id:", "- hysteria2:", "auth:", "- select:", "name: PROXY", "- default:", "policy: PROXY", "reality:", "public_key:"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("egern missing %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "{{proxy_names}}") || strings.Contains(s, "mieru") {
+		t.Fatalf("egern output:\n%s", s)
+	}
+	if Pick("", "Egern/2.20 iOS").Name() != "egern" || Pick("egern", "").Name() != "egern" {
+		t.Fatal("egern detection")
+	}
+	// A bare template (no policy groups) still yields a proxies list.
+	bare, err := Egern{}.RenderWith(sample(), Account{}, "proxies: []\n")
+	if err != nil || !strings.Contains(string(bare), "- vless:") || strings.Contains(string(bare), "policy_groups") {
+		t.Fatalf("bare: %v %s", err, bare)
 	}
 }

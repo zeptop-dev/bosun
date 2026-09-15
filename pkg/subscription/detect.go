@@ -13,6 +13,7 @@ var renderers = map[string]Renderer{
 	"qx":        QuantumultX{},
 	"uri":       URIList{},
 	"wireguard": WireGuardConf{},
+	"egern":     Egern{},
 }
 
 // Aliases users may pass in ?client=.
@@ -39,6 +40,8 @@ func Pick(client, userAgent string) Renderer {
 	}
 	ua := strings.ToLower(userAgent)
 	switch {
+	case strings.Contains(ua, "egern"):
+		return renderers["egern"]
 	case strings.Contains(ua, "stash"):
 		return renderers["stash"]
 	case strings.Contains(ua, "clash"), strings.Contains(ua, "mihomo"):
