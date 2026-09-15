@@ -201,3 +201,30 @@ func mustListen(t *testing.T, addr string) net.Listener {
 	t.Fatalf("cannot rebind %s", addr)
 	return nil
 }
+
+// The REALITY scan endpoint probes from the node; a closed local port must
+// come back as one unusable row rather than an error.
+func TestRealityScanEndpoint(t *testing.T) {
+	store, pw, err := local.Open(filepath.Join(t.TempDir(), "local.json"), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(New(Deps{Store: store, Version: "test", Log: slog.Default()}).Handler())
+	defer srv.Close()
+	jar, _ := cookiejar.New(nil)
+	c := &client{t: t, srv: srv, http: &http.Client{Jar: jar}}
+	if code, _ := c.do("POST", "/api/login", map[string]string{"Username": "admin", "Password": pw}); code != 200 {
+		t.Fatal("login")
+	}
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	addr := ln.Addr().String()
+	ln.Close()
+	code, body := c.do("POST", "/api/reality/scan", map[string]any{"hosts": []string{addr}})
+	if code != 200 {
+		t.Fatalf("scan: %d %s", code, body)
+	}
+	var out []map[string]any
+	if err := json.Unmarshal(body, &out); err != nil || len(out) != 1 || out[0]["feasible"] != false {
+		t.Fatalf("unexpected %s", body)
+	}
+}

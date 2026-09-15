@@ -69,6 +69,54 @@ type Reality struct {
 	ShortIDs        []string `json:"short_ids,omitempty"`
 	HandshakeServer string   `json:"handshake_server,omitempty"`
 	HandshakePort   int      `json:"handshake_port,omitempty"`
+	// FallbackLimit throttles connections that fail REALITY authentication
+	// and are relayed to the handshake target (xray limitFallbackUpload /
+	// limitFallbackDownload), so a node found by "preferred IP" scanners
+	// is useless as a free relay. nil = on with defaults; Off disables.
+	FallbackLimit *FallbackLimit `json:"fallback_limit,omitempty"`
+}
+
+// FallbackLimit is a token bucket applied to unauthenticated REALITY
+// connections after AfterBytes have passed in that direction.
+type FallbackLimit struct {
+	Off              bool  `json:"off,omitempty"`
+	AfterBytes       int64 `json:"after_bytes,omitempty"`
+	BytesPerSec      int64 `json:"bytes_per_sec,omitempty"`
+	BurstBytesPerSec int64 `json:"burst_bytes_per_sec,omitempty"`
+}
+
+// Fallback limit defaults: the first megabyte flows freely so the target's
+// front page still loads for a probe, then 64 KiB/s.
+const (
+	DefaultFallbackAfterBytes  int64 = 1 << 20
+	DefaultFallbackBytesPerSec int64 = 64 << 10
+	DefaultFallbackBurst       int64 = 256 << 10
+)
+
+// EffectiveFallbackLimit returns the limit to render and whether it is on.
+func (r *Reality) EffectiveFallbackLimit() (FallbackLimit, bool) {
+	lim := FallbackLimit{AfterBytes: DefaultFallbackAfterBytes, BytesPerSec: DefaultFallbackBytesPerSec, BurstBytesPerSec: DefaultFallbackBurst}
+	if r == nil {
+		return lim, false
+	}
+	if r.FallbackLimit != nil {
+		if r.FallbackLimit.Off {
+			return lim, false
+		}
+		if r.FallbackLimit.AfterBytes > 0 {
+			lim.AfterBytes = r.FallbackLimit.AfterBytes
+		}
+		if r.FallbackLimit.BytesPerSec > 0 {
+			lim.BytesPerSec = r.FallbackLimit.BytesPerSec
+		}
+		if r.FallbackLimit.BurstBytesPerSec > 0 {
+			lim.BurstBytesPerSec = r.FallbackLimit.BurstBytesPerSec
+		}
+	}
+	if lim.BurstBytesPerSec < lim.BytesPerSec {
+		lim.BurstBytesPerSec = lim.BytesPerSec
+	}
+	return lim, true
 }
 
 // Transport is the stream transport under VLESS/VMess/Trojan.

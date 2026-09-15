@@ -234,13 +234,19 @@ func renderStream(ib spec.Inbound) (m, error) {
 		}
 		r := t.Reality
 		ss["security"] = "reality"
-		ss["realitySettings"] = m{
+		rs := m{
 			"show":        false,
 			"target":      r.HandshakeServer + ":" + strconv.Itoa(r.HandshakePort),
 			"serverNames": []string{t.ServerName},
 			"privateKey":  r.PrivateKey,
 			"shortIds":    r.ShortIDs,
 		}
+		if lim, on := r.EffectiveFallbackLimit(); on {
+			bucket := m{"afterBytes": lim.AfterBytes, "bytesPerSec": lim.BytesPerSec, "burstBytesPerSec": lim.BurstBytesPerSec}
+			rs["limitFallbackUpload"] = bucket
+			rs["limitFallbackDownload"] = bucket
+		}
+		ss["realitySettings"] = rs
 	default:
 		if t.CertPath == "" || t.KeyPath == "" {
 			return nil, fmt.Errorf("tls requires certificate and key paths")

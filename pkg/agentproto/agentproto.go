@@ -9,6 +9,7 @@
 package agentproto
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -43,6 +44,25 @@ type State struct {
 	Probe *spec.Probe `json:"probe,omitempty"`
 	// Komari asks the node to also report to a Komari server.
 	Komari *spec.Komari `json:"komari,omitempty"`
+	// Jobs are one-off tasks the node should run once; results ride on a
+	// later Report and the panel then drops the job from the state.
+	Jobs []Job `json:"jobs,omitempty"`
+}
+
+// Job is a one-off task. Kinds: "reality_scan" with params
+// {"hosts": ["www.example.com"], "port": 443} (empty hosts = default pool).
+type Job struct {
+	ID     string          `json:"id"`
+	Kind   string          `json:"kind"`
+	Params json.RawMessage `json:"params,omitempty"`
+}
+
+// JobResult is the outcome of a Job.
+type JobResult struct {
+	ID     string          `json:"id"`
+	Kind   string          `json:"kind"`
+	Result json.RawMessage `json:"result,omitempty"`
+	Error  string          `json:"error,omitempty"`
 }
 
 // Beat is the light, frequent host sample sent while probing is enabled.
@@ -64,6 +84,8 @@ type Report struct {
 	// Doctor is the node's latest self-check, sent when it changed and at
 	// least every 30 minutes.
 	Doctor *DoctorReport `json:"doctor,omitempty"`
+	// Jobs are results of State.Jobs finished since the last report.
+	Jobs []JobResult `json:"jobs,omitempty"`
 }
 
 // DoctorCheck is one verdict of the node's self-check.

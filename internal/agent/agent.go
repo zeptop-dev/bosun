@@ -53,6 +53,14 @@ type Agent struct {
 	// kick re-applies the current state (after a certificate renewal).
 	kick         chan struct{}
 	forceRestart bool
+	// reportNow asks the run loop for an out-of-band report (job results).
+	reportNow chan struct{}
+	// Jobs handed down by the panel: which ran, which are running, and
+	// results waiting for the next report.
+	jobsMu      sync.Mutex
+	jobsDone    map[string]bool
+	jobsRunning map[string]bool
+	jobResults  []agentproto.JobResult
 
 	// Probe beats: host sampler and latency runner, driven by the panel's
 	// probe config when the driver is a panel.Beater.
@@ -133,7 +141,7 @@ func (a *Agent) ForwardStats() []forward.Stats { return a.fwd.Snapshot() }
 
 // New builds an agent. metrics may be nil.
 func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metrics.Registry, log *slog.Logger) *Agent {
-	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), kick: make(chan struct{}, 1)}
+	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), kick: make(chan struct{}, 1), reportNow: make(chan struct{}, 1), jobsDone: map[string]bool{}, jobsRunning: map[string]bool{}}
 	if mreg != nil {
 		a.registerMetrics()
 	}
@@ -156,6 +164,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.log.Error("forwards", "err", err)
 	}
 	a.setStatus(func(s *Status) { s.Ready = true })
+	a.runJobs(ctx)
 
 	var wake <-chan struct{}
 	if n, ok := a.driver.(panel.Notifier); ok {
@@ -235,7 +244,10 @@ func (a *Agent) Run(ctx context.Context) error {
 			// Coalesce bursts of edits before rendering.
 			time.Sleep(300 * time.Millisecond)
 			a.pullApply(ctx)
+			a.runJobs(ctx)
 			reconfigureBeat()
+		case <-a.reportNow:
+			a.report(ctx)
 		case <-a.kick:
 			if a.node != nil {
 				if err := a.apply(ctx); err != nil {
@@ -263,6 +275,7 @@ func (a *Agent) Run(ctx context.Context) error {
 					a.log.Error("forwards", "err", err)
 				}
 			}
+			a.runJobs(ctx)
 			if niv := a.driver.Intervals(); niv != iv {
 				iv = niv
 				pull.Reset(iv.Pull)
@@ -285,6 +298,7 @@ func (a *Agent) Run(ctx context.Context) error {
 					if err := a.applyForwards(ctx); err != nil {
 						a.log.Error("forwards", "err", err)
 					}
+					a.runJobs(ctx)
 				}
 			}
 		}
@@ -575,10 +589,14 @@ func (a *Agent) report(ctx context.Context) bool {
 	host := sysinfo.Snapshot(ctx)
 
 	if rep, ok := a.driver.(panel.Reporter); ok {
-		changed, err := rep.Report(ctx, a.buildReport(list, host))
+		full := a.buildReport(list, host)
+		full.Jobs = a.takeJobResults()
+		changed, err := rep.Report(ctx, full)
 		if err != nil {
 			// Counters were already reset; this delta is lost. A persistent
-			// spool is a later improvement.
+			// spool is a later improvement. Job results are kept for the
+			// next attempt.
+			a.requeueJobResults(full.Jobs)
 			a.log.Error("report failed", "users", len(list), "err", err)
 			a.statusMu.Lock()
 			a.lastReportErr = err.Error()

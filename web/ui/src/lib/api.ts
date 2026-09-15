@@ -30,7 +30,8 @@ export const api = {
 export type Mode = 'local' | 'managed'
 export interface Me { username: string; version: string; mode: Mode; fixed: string }
 
-export interface TLS { mode: number; server_name?: string; alpn?: string[]; auto_cert?: boolean; acme?: string; reality?: { private_key: string; public_key?: string; short_ids?: string[]; handshake_server?: string; handshake_port?: number } }
+export interface TLS { mode: number; server_name?: string; alpn?: string[]; auto_cert?: boolean; acme?: string; reality?: { private_key: string; public_key?: string; short_ids?: string[]; handshake_server?: string; handshake_port?: number; fallback_limit?: FallbackLimit } }
+export interface FallbackLimit { off?: boolean; after_bytes?: number; bytes_per_sec?: number; burst_bytes_per_sec?: number }
 export interface Transport { type: string; path?: string; host?: string; service_name?: string; mode?: string }
 export interface Inbound {
   tag: string; protocol: string; listen?: string; port: number; core?: string

@@ -27,10 +27,14 @@ func (a *Agent) Doctor(ctx context.Context) doctor.Report {
 	}
 	var cores []doctor.CoreState
 	assigned := map[string]int{}
+	assign := map[string]string{}
 	if node != nil {
 		if byCore, err := a.reg.Assign(node.Inbounds); err == nil {
 			for name, ibs := range byCore {
 				assigned[name] = len(ibs)
+				for _, ib := range ibs {
+					assign[ib.Tag] = name
+				}
 			}
 		}
 	}
@@ -55,7 +59,7 @@ func (a *Agent) Doctor(ctx context.Context) doctor.Report {
 	return doctor.Run(ctx, doctor.Deps{
 		Node: n, Users: users, Cores: cores, CoresKnown: true, Forwards: fwds, Certs: certs, Host: host,
 		Managed: managed, LastReport: lastReport, LastError: lastErr, PushInterval: a.driver.Intervals().Push,
-		KomariEnabled: ks.Enabled, KomariError: ks.LastError,
+		KomariEnabled: ks.Enabled, KomariError: ks.LastError, Assign: assign,
 	})
 }
 

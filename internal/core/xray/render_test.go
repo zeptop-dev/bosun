@@ -238,3 +238,20 @@ func TestDecodeIPMap(t *testing.T) {
 		t.Fatalf("ips=%v err=%v", ips, err)
 	}
 }
+
+func TestRealityFallbackLimit(t *testing.T) {
+	ib := spec.Inbound{Tag: "r", Protocol: spec.VLESS, Port: 443, TLS: &spec.TLS{Mode: spec.TLSReality, ServerName: "www.apple.com", Reality: &spec.Reality{PrivateKey: "k", HandshakeServer: "www.apple.com", HandshakePort: 443}}}
+	out, err := renderInbound(ib, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs := out["streamSettings"].(m)["realitySettings"].(m)
+	if rs["limitFallbackUpload"] == nil || rs["limitFallbackDownload"] == nil {
+		t.Fatalf("fallback limit missing: %v", rs)
+	}
+	ib.TLS.Reality.FallbackLimit = &spec.FallbackLimit{Off: true}
+	out, _ = renderInbound(ib, nil)
+	if out["streamSettings"].(m)["realitySettings"].(m)["limitFallbackUpload"] != nil {
+		t.Fatal("limit rendered although off")
+	}
+}

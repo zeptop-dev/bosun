@@ -18,6 +18,7 @@ func (s *Server) doctorBackupRoutes() {
 	m := s.mux
 	auth := s.requireAuth
 	m.HandleFunc("GET /api/doctor", auth(s.getDoctor))
+	m.HandleFunc("POST /api/reality/scan", auth(s.realityScan))
 	m.HandleFunc("GET /api/backup", auth(s.getBackup))
 	m.HandleFunc("POST /api/backup/restore", auth(s.local(s.restoreBackup)))
 }

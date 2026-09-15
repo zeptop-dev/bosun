@@ -3,7 +3,8 @@ import { useForm } from '@mantine/form'
 import { IconRefresh } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type Inbound, type Ingress, type IngressInput } from '../lib/api'
+import { api, type FallbackLimit, type Inbound, type Ingress, type IngressInput } from '../lib/api'
+import { RealityScan, type RealityResult } from './RealityScan'
 import { toast } from '../lib/notify'
 import { IngressFields, clientHost, emptyIngress, ingressPayload, type IngressValues } from './IngressFields'
 
@@ -16,7 +17,7 @@ const ciphers = ['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-bla
 export type Values = {
   tag: string; remark: string; protocol: string; listen: string; port: number; core: string; enabled: boolean
   display_host: string; display_port: number; ingress_id: string
-  tls: 'none' | 'tls' | 'reality'; auto_cert: boolean; acme: string; server_name: string; reality_private: string; reality_public: string; reality_short: string; handshake_server: string; handshake_port: number
+  tls: 'none' | 'tls' | 'reality'; auto_cert: boolean; acme: string; server_name: string; reality_private: string; reality_public: string; reality_short: string; handshake_server: string; handshake_port: number; fallback_off: boolean; fallback_after_mb: number; fallback_kbps: number
   transport: string; path: string; host: string; service_name: string; xhttp_mode: string
   flow: string; cipher: string; server_key: string; obfs: string; obfs_password: string; up_mbps: number; down_mbps: number
   congestion_control: string; mieru_transport: string; traffic_pattern: string; mieru_mtu: number | string; mieru_multiplexing: string; mieru_handshake: string
@@ -26,7 +27,7 @@ export type Values = {
 
 export const empty: Values = {
   tag: '', remark: '', protocol: 'vless', listen: '', port: 443, core: '', enabled: true, display_host: '', display_port: 0, ingress_id: '',
-  tls: 'none', auto_cert: false, acme: 'http', server_name: '', reality_private: '', reality_public: '', reality_short: '', handshake_server: '', handshake_port: 443,
+  tls: 'none', auto_cert: false, acme: 'http', server_name: '', reality_private: '', reality_public: '', reality_short: '', handshake_server: '', handshake_port: 443, fallback_off: false, fallback_after_mb: 1, fallback_kbps: 64,
   transport: 'tcp', path: '', host: '', service_name: '', xhttp_mode: '',
   flow: '', cipher: '2022-blake3-aes-128-gcm', server_key: '', obfs: '', obfs_password: '', up_mbps: 0, down_mbps: 0,
   congestion_control: 'bbr', mieru_transport: 'TCP', traffic_pattern: '', mieru_mtu: '', mieru_multiplexing: '', mieru_handshake: '',
@@ -46,6 +47,7 @@ export function toValues(ib?: Inbound): Values {
     display_host: ib.display_host ?? '', display_port: ib.display_port ?? 0, ingress_id: ib.ingress_id ?? '',
     tls: tlsMode, auto_cert: ib.tls?.auto_cert ?? false, acme: ib.tls?.acme || 'http', server_name: ib.tls?.server_name ?? '', reality_private: ib.tls?.reality?.private_key ?? '', reality_public: ib.tls?.reality?.public_key ?? '',
     reality_short: ib.tls?.reality?.short_ids?.[0] ?? '', handshake_server: ib.tls?.reality?.handshake_server ?? '', handshake_port: ib.tls?.reality?.handshake_port ?? 443,
+    fallback_off: ib.tls?.reality?.fallback_limit?.off ?? false, fallback_after_mb: Math.round((ib.tls?.reality?.fallback_limit?.after_bytes || 1048576) / 1048576), fallback_kbps: Math.round((ib.tls?.reality?.fallback_limit?.bytes_per_sec || 65536) / 1024),
     transport: ib.transport?.type ?? 'tcp', path: ib.transport?.path ?? '', host: ib.transport?.host ?? '', service_name: ib.transport?.service_name ?? '', xhttp_mode: ib.transport?.mode ?? '',
     flow: ib.flow ?? '', cipher: ib.cipher ?? empty.cipher, server_key: ib.server_key ?? '', obfs: ib.obfs ?? '', obfs_password: ib.obfs_password ?? '',
     up_mbps: ib.up_mbps ?? 0, down_mbps: ib.down_mbps ?? 0, congestion_control: ib.congestion_control ?? 'bbr', mieru_transport: ib.mieru_transport ?? 'TCP', traffic_pattern: ib.traffic_pattern ?? '', mieru_mtu: ib.mieru_mtu || '', mieru_multiplexing: ib.mieru_multiplexing ?? '', mieru_handshake: ib.mieru_handshake ?? '',
@@ -54,11 +56,18 @@ export function toValues(ib?: Inbound): Values {
   }
 }
 
+function fallbackLimit(v: Values): FallbackLimit | undefined {
+  if (v.fallback_off) return { off: true }
+  const after = Math.max(0, Number(v.fallback_after_mb) || 0) * 1048576, rate = Math.max(0, Number(v.fallback_kbps) || 0) * 1024
+  if ((after === 1048576 || after === 0) && (rate === 65536 || rate === 0)) return undefined
+  return { after_bytes: after || undefined, bytes_per_sec: rate || undefined }
+}
+
 export function toInbound(v: Values): Record<string, unknown> {
   const out: Record<string, unknown> = { ...JSON.parse(v.extra || '{}'), tag: v.tag, remark: v.remark, protocol: v.protocol, listen: v.listen, port: v.port, core: v.core, enabled: v.enabled, display_host: v.display_host, display_port: v.display_port, ingress_id: v.ingress_id }
   const stream = ['vless', 'vmess', 'trojan', 'shadowsocks', 'anytls', 'socks', 'http'].includes(v.protocol)
   const quic = ['hysteria2', 'tuic'].includes(v.protocol)
-  if (v.tls === 'reality') out.tls = { mode: 2, server_name: v.server_name, reality: { private_key: v.reality_private, public_key: v.reality_public, short_ids: v.reality_short ? [v.reality_short] : [], handshake_server: v.handshake_server || v.server_name, handshake_port: v.handshake_port || 443 } }
+  if (v.tls === 'reality') out.tls = { mode: 2, server_name: v.server_name, reality: { private_key: v.reality_private, public_key: v.reality_public, short_ids: v.reality_short ? [v.reality_short] : [], handshake_server: v.handshake_server || v.server_name, handshake_port: v.handshake_port || 443, fallback_limit: fallbackLimit(v) } }
   else if (v.tls === 'tls' || quic) out.tls = { mode: 1, server_name: v.server_name, auto_cert: v.auto_cert, acme: v.auto_cert ? v.acme : '' }
   if (stream && v.transport !== 'tcp') out.transport = { type: v.transport, path: v.path, host: v.host, service_name: v.service_name, mode: v.xhttp_mode }
   if (v.protocol === 'vless' && v.flow) out.flow = v.flow
@@ -247,6 +256,13 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
                   <TextInput label={t('inbounds.shortId')} {...form.getInputProps('reality_short')} />
                   <TextInput label={t('inbounds.handshakeServer')} placeholder={v.server_name} {...form.getInputProps('handshake_server')} />
                   <NumberInput label={t('inbounds.handshakePort')} {...form.getInputProps('handshake_port')} />
+                </Group>
+                <RealityScan current={v.handshake_server || v.server_name} scan={(hosts) => api.post<RealityResult[]>('/api/reality/scan', { hosts })}
+                  onPick={(host) => form.setValues({ server_name: host, handshake_server: host, handshake_port: 443 })} />
+                <Group grow align="flex-end">
+                  <Switch label={t('inbounds.fallbackLimit')} description={t('inbounds.fallbackLimitHint')} checked={!v.fallback_off} onChange={(e) => form.setFieldValue('fallback_off', !e.currentTarget.checked)} />
+                  <NumberInput label={t('inbounds.fallbackAfter')} min={0} disabled={v.fallback_off} {...form.getInputProps('fallback_after_mb')} />
+                  <NumberInput label={t('inbounds.fallbackRate')} min={1} disabled={v.fallback_off} {...form.getInputProps('fallback_kbps')} />
                 </Group>
               </Stack>
             )}
