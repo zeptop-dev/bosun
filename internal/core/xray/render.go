@@ -156,12 +156,47 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		return nil, fmt.Errorf("xray: inbound %q: unsupported protocol %s", ib.Tag, ib.Protocol)
 	}
 
+	if len(ib.Fallbacks) > 0 {
+		if ib.Protocol != spec.VLESS && ib.Protocol != spec.Trojan {
+			return nil, fmt.Errorf("xray: inbound %q: fallbacks need VLESS or Trojan", ib.Tag)
+		}
+		if ib.TransportType() != "tcp" || ib.TLS == nil || ib.TLS.Mode != spec.TLSStandard {
+			return nil, fmt.Errorf("xray: inbound %q: fallbacks need TCP with standard TLS", ib.Tag)
+		}
+		var fbs []m
+		for _, f := range ib.Fallbacks {
+			fb := m{"dest": fallbackDest(f.Dest)}
+			if f.Name != "" {
+				fb["name"] = f.Name
+			}
+			if f.ALPN != "" {
+				fb["alpn"] = f.ALPN
+			}
+			if f.Path != "" {
+				fb["path"] = f.Path
+			}
+			if f.Xver > 0 {
+				fb["xver"] = f.Xver
+			}
+			fbs = append(fbs, fb)
+		}
+		in["settings"].(m)["fallbacks"] = fbs
+	}
 	ss, err := renderStream(ib)
 	if err != nil {
 		return nil, fmt.Errorf("xray: inbound %q: %w", ib.Tag, err)
 	}
 	in["streamSettings"] = ss
 	return in, nil
+}
+
+// fallbackDest keeps a bare port numeric (xray wants an int there) and
+// passes host:port or a socket path through.
+func fallbackDest(d string) any {
+	if n, err := strconv.Atoi(strings.TrimSpace(d)); err == nil {
+		return n
+	}
+	return strings.TrimSpace(d)
 }
 
 func vlessClient(u spec.User, ib spec.Inbound) m {

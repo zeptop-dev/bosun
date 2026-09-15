@@ -18,6 +18,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/certs"
 	"github.com/zeptop-dev/bosun/internal/config"
 	"github.com/zeptop-dev/bosun/internal/core"
+	"github.com/zeptop-dev/bosun/internal/decoy"
 	"github.com/zeptop-dev/bosun/internal/forward"
 	"github.com/zeptop-dev/bosun/internal/metrics"
 	"github.com/zeptop-dev/bosun/internal/panel"
@@ -50,6 +51,8 @@ type Agent struct {
 
 	// Certs obtains certificates for inbounds with auto_cert; nil disables.
 	Certs *certs.Manager
+	// Decoy serves the node's own HTTPS site for REALITY to steal; nil disables.
+	Decoy *decoy.Server
 	// kick re-applies the current state (after a certificate renewal).
 	kick         chan struct{}
 	forceRestart bool
@@ -113,6 +116,8 @@ type Status struct {
 	// Skipped lists inbounds not running and why (usually a missing
 	// certificate); they are retried on the next pull.
 	Skipped map[string]string `json:"skipped,omitempty"`
+	// Decoy is the self-hosted site state (nil when not configured).
+	Decoy *decoy.Status `json:"decoy,omitempty"`
 }
 
 // Status returns a snapshot of the agent state.
@@ -494,6 +499,11 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	a.forceRestart = false
 	skipped := a.skipped
 	a.statusMu.Unlock()
+	if a.Decoy != nil {
+		a.Decoy.Configure(ctx, a.node.Decoy)
+		st := a.Decoy.Status()
+		a.setStatus(func(s *Status) { s.Decoy = st })
+	}
 	inbounds := make([]spec.Inbound, 0, len(a.node.Inbounds))
 	for _, ib := range a.node.Inbounds {
 		if _, skip := skipped[ib.Tag]; skip {

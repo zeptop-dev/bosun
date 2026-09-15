@@ -186,6 +186,20 @@ type Inbound struct {
 	// even if that is nobody.
 	ScopedUsers bool   `json:"scoped_users,omitempty"`
 	Users       []User `json:"users,omitempty"`
+	// Fallbacks hand connections that are not this protocol (or match a
+	// path / SNI / ALPN) to another local service, e.g. a real website on
+	// port 80 so the inbound looks like one. VLESS/Trojan over TCP+TLS on
+	// xray only.
+	Fallbacks []Fallback `json:"fallbacks,omitempty"`
+}
+
+// Fallback is one xray fallback rule; empty matchers catch everything.
+type Fallback struct {
+	Name string `json:"name,omitempty"` // SNI
+	ALPN string `json:"alpn,omitempty"`
+	Path string `json:"path,omitempty"`
+	Dest string `json:"dest"` // "80", "127.0.0.1:8080" or "/run/site.sock"
+	Xver int    `json:"xver,omitempty"`
 }
 
 // EffectiveUsers returns the users to provision on this inbound given the
@@ -271,6 +285,32 @@ type Node struct {
 	// DefaultOutbound is the tag traffic takes when no route rule matches
 	// ("" = direct): the whole node exits through a landing server.
 	DefaultOutbound string `json:"default_outbound,omitempty"`
+	// Decoy is a real HTTPS site the node serves for itself on loopback so
+	// REALITY inbounds can "steal" their own domain instead of a third
+	// party's (nothing is relayed off-box when the fallback fires).
+	Decoy *Decoy `json:"decoy,omitempty"`
+}
+
+// Decoy configures the self-hosted site: bosun listens on 127.0.0.1:Port
+// with an automatic certificate for Domain, serving its built-in page or
+// reverse-proxying Upstream. REALITY inbounds point at 127.0.0.1:Port with
+// Domain as the SNI.
+type Decoy struct {
+	Domain   string `json:"domain"`
+	Port     int    `json:"port,omitempty"`     // default 4443
+	Upstream string `json:"upstream,omitempty"` // e.g. http://127.0.0.1:8080
+	ACME     string `json:"acme,omitempty"`     // "http" or "dns"
+}
+
+// DefaultDecoyPort is the loopback port the decoy site listens on.
+const DefaultDecoyPort = 4443
+
+// EffectivePort returns Port or the default.
+func (d *Decoy) EffectivePort() int {
+	if d == nil || d.Port <= 0 {
+		return DefaultDecoyPort
+	}
+	return d.Port
 }
 
 // Traffic is a byte counter pair.

@@ -230,7 +230,13 @@
     "tlsHint": "REALITY needs no certificate; TLS needs one for the name",
     "generateKeypair": "Generate key pair",
     "generateKey": "Generate key",
-    "ingressBindHint": "Leave the listen address blank to bind the line IP {{ip}}."
+    "ingressBindHint": "Leave the listen address blank to bind the line IP {{ip}}.",
+    "fallbacks": "Fallbacks",
+    "fallbacksHint": "Connections that are not this protocol (browsers, probes) go to another local service such as a website on port 80; split by SNI, ALPN or path. Xray only.",
+    "fallbackAdd": "Add rule",
+    "fallbackDest": "Destination",
+    "useDecoy": "Use decoy site {{domain}}",
+    "useDecoyHint": "SNI becomes the decoy domain, handshake target 127.0.0.1:4443"
   },
   "ingress": {
     "title": "Line ingresses",
@@ -432,7 +438,16 @@
     "certList": "Automatic certificates",
     "domain": "Domain",
     "expires": "Expires",
-    "certOk": "ok"
+    "certOk": "ok",
+    "decoy": "Decoy site (steal yourself)",
+    "decoyHint": "bosun serves a real HTTPS site for your own domain on loopback and REALITY inbounds use it as the handshake target: probes see a genuine certificate for your name and fallback traffic never leaves the box. The domain must resolve here; HTTP validation needs port 80 free, otherwise pick DNS.",
+    "decoyEnabled": "Enable decoy site",
+    "decoyDomain": "Site domain",
+    "decoyDomainHint": "Resolves to this node; also becomes the REALITY SNI",
+    "decoyUpstream": "Upstream (optional)",
+    "decoyUpstreamHint": "Blank serves the built-in placeholder page; an http(s) URL is reverse-proxied",
+    "decoyReady": "Site ready on 127.0.0.1:{{port}}",
+    "decoyPending": "Requesting certificate…"
   },
   "logs": {
     "title": "Logs",

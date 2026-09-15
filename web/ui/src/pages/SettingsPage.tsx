@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api.get<Settings>('/api/settings') })
   const status = useQuery({ queryKey: ['status'], queryFn: () => api.get<Status>('/api/status'), refetchInterval: 5_000 })
   const cores = useQuery({ queryKey: ['cores'], queryFn: () => api.get<CoreRelease[]>('/api/cores') })
-  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http' } })
+  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http' } })
   useEffect(() => { if (settings.data) sform.setValues(settings.data) }, [settings.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const saveSettings = useMutation({ mutationFn: (v: Settings) => api.put('/api/settings', v), onSuccess: () => { toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['links'] }) }, onError: toast.err })
   const aform = useForm({ initialValues: { Username: me?.username ?? 'admin', Password: '', Confirm: '' }, validate: { Confirm: (v, all) => (v === all.Password ? null : t('settings.mismatch')) } })
@@ -49,6 +49,19 @@ export default function SettingsPage() {
               <TextInput label={t('settings.panelDomain')} description={t('settings.panelDomainHint')} placeholder="node.example.com" {...sform.getInputProps('panel_domain')} />
               <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...sform.getInputProps('panel_acme')} />
             </Group>
+            <Title order={6} mt="xs">{t('settings.decoy')}</Title>
+            <Text size="xs" c="dimmed">{t('settings.decoyHint')}</Text>
+            <Switch label={t('settings.decoyEnabled')} {...sform.getInputProps('decoy_enabled', { type: 'checkbox' })} />
+            {sform.values.decoy_enabled && (
+              <>
+                <Group grow align="flex-start">
+                  <TextInput label={t('settings.decoyDomain')} description={t('settings.decoyDomainHint')} placeholder="www.example.com" required {...sform.getInputProps('decoy_domain')} />
+                  <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...sform.getInputProps('decoy_acme')} />
+                </Group>
+                <TextInput label={t('settings.decoyUpstream')} description={t('settings.decoyUpstreamHint')} placeholder="http://127.0.0.1:8080" {...sform.getInputProps('decoy_upstream')} />
+                {s?.agent?.decoy && <Text size="xs" c={s.agent.decoy.error ? 'red' : s.agent.decoy.cert_ready ? 'teal' : 'orange'}>{s.agent.decoy.error ? s.agent.decoy.error : s.agent.decoy.cert_ready ? t('settings.decoyReady', { port: s.agent.decoy.port }) : t('settings.decoyPending')}</Text>}
+              </>
+            )}
             <Group justify="flex-end"><Button type="submit" size="xs" loading={saveSettings.isPending}>{t('common.save')}</Button></Group>
           </Stack></form>
         </Card>

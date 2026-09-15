@@ -33,12 +33,15 @@ export interface Me { username: string; version: string; mode: Mode; fixed: stri
 export interface TLS { mode: number; server_name?: string; alpn?: string[]; auto_cert?: boolean; acme?: string; reality?: { private_key: string; public_key?: string; short_ids?: string[]; handshake_server?: string; handshake_port?: number; fallback_limit?: FallbackLimit } }
 export interface FallbackLimit { off?: boolean; after_bytes?: number; bytes_per_sec?: number; burst_bytes_per_sec?: number }
 export interface Transport { type: string; path?: string; host?: string; service_name?: string; mode?: string }
+export interface Fallback { name?: string; alpn?: string; path?: string; dest: string; xver?: number }
+export interface DecoyStatus { domain: string; port: number; upstream?: string; running: boolean; cert_ready: boolean; error?: string }
 export interface Inbound {
   tag: string; protocol: string; listen?: string; port: number; core?: string
   tls?: TLS; transport?: Transport; multiplex?: { enabled: boolean; padding?: boolean }
   flow?: string; cipher?: string; server_key?: string; obfs?: string; obfs_password?: string; up_mbps?: number; down_mbps?: number
   congestion_control?: string; mieru_transport?: string; traffic_pattern?: string; mieru_mtu?: number; mieru_multiplexing?: string; mieru_handshake?: string
   snell_psk?: string; snell_version?: number; snell_obfs?: string; snell_obfs_host?: string
+  fallbacks?: Fallback[]
   remark?: string; enabled: boolean; display_host?: string; display_port?: number
   assigned_core?: string; ingress_id?: string
 }
@@ -54,14 +57,14 @@ export interface DoctorReport { at: string; checks: DoctorCheck[]; summary: { ok
 export interface RestoreResult { inbounds: number; users: number; forwards: number; ingresses: number; admin_changed: boolean }
 export interface ForwardStatus { tag: string; up: boolean; rtt_ms: number; last_error?: string; active_conn: number; total_conn: number; bytes_in: number; bytes_out: number }
 export interface Host { cpu_percent?: number; mem_total?: number; mem_used?: number; swap_total?: number; swap_used?: number; disk_total?: number; disk_used?: number }
-export interface AgentStatus { panel: string; ready: boolean; inbounds: number; users: number; last_pull: string; last_apply: string; last_error?: string; core_running: Record<string, boolean>; core_inbounds: Record<string, number>; assign: Record<string, string>; skipped?: Record<string, string> }
+export interface AgentStatus { decoy?: DecoyStatus; panel: string; ready: boolean; inbounds: number; users: number; last_pull: string; last_apply: string; last_error?: string; core_running: Record<string, boolean>; core_inbounds: Record<string, number>; assign: Record<string, string>; skipped?: Record<string, string> }
 export interface Status {
   version: string; uptime_seconds: number; mode: Mode; fixed: string; managed: { url: string; paired_at: string } | null; has_snapshot: boolean
   agent: AgentStatus | null; host: Host; forwards: ForwardStatus[]; online_users: number; users: number; inbounds: number
   total_up: number; total_down: number; history: { day: number; up: number; down: number }[]; last_report: string
   certs: CertStatus[]; pings?: Ping[]
 }
-export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string }
+export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string; decoy_enabled: boolean; decoy_domain: string; decoy_upstream: string; decoy_acme: string }
 export interface CertStatus { domain: string; method: string; not_after: string; error?: string; updated: string }
 export interface Link { tag: string; name: string; uri: string }
 export interface CoreRelease { Core: string; Version: string; Status: string; Note: string; Installed: boolean }

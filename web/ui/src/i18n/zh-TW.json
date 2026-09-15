@@ -230,7 +230,13 @@
     "tlsHint": "REALITY 不需要憑證；TLS 需要該網域的憑證",
     "generateKeypair": "產生公/私鑰",
     "generateKey": "產生金鑰",
-    "ingressBindHint": "監聽位址留空則綁定到入口本地 IP {{ip}}。"
+    "ingressBindHint": "監聽位址留空則綁定到入口本地 IP {{ip}}。",
+    "fallbacks": "回落",
+    "fallbacksHint": "不是本協定的連線（瀏覽器、探測）交給本機其它服務，例如 80 埠的網站；可按 SNI、ALPN、路徑分流。僅 Xray 核心。",
+    "fallbackAdd": "新增規則",
+    "fallbackDest": "目標",
+    "useDecoy": "使用本機偽裝站 {{domain}}",
+    "useDecoyHint": "SNI 設為偽裝站網域，握手目標指向 127.0.0.1:4443"
   },
   "ingress": {
     "title": "專線入口",
@@ -432,7 +438,16 @@
     "certList": "自動憑證",
     "domain": "網域",
     "expires": "到期",
-    "certOk": "正常"
+    "certOk": "正常",
+    "decoy": "偽裝站點（偷自己）",
+    "decoyHint": "bosun 在本機回環上用自動憑證跑一個真實的 HTTPS 站點，REALITY 入站把它當握手目標：探測者拿到的是你自己網域的真憑證，回落流量也不會轉到別人的伺服器。網域要解析到本機；用 HTTP 驗證需要 80 埠空閒，否則選 DNS 驗證。",
+    "decoyEnabled": "啟用偽裝站點",
+    "decoyDomain": "站點網域",
+    "decoyDomainHint": "解析到本機的網域，也會成為 REALITY 的 SNI",
+    "decoyUpstream": "上游站點（可選）",
+    "decoyUpstreamHint": "留空用內建的占位頁面；填 http(s) 位址則反向代理到你自己的網站",
+    "decoyReady": "站點已就緒，監聽 127.0.0.1:{{port}}",
+    "decoyPending": "正在申請憑證…"
   },
   "logs": {
     "title": "日誌",

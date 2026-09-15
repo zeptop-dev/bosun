@@ -3,7 +3,9 @@ import { useForm } from '@mantine/form'
 import { IconRefresh } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type FallbackLimit, type Inbound, type Ingress, type IngressInput } from '../lib/api'
+import { api, type Fallback, type FallbackLimit, type Inbound, type Ingress, type IngressInput, type Settings } from '../lib/api'
+import { useQuery } from '@tanstack/react-query'
+import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { RealityScan, type RealityResult } from './RealityScan'
 import { toast } from '../lib/notify'
 import { IngressFields, clientHost, emptyIngress, ingressPayload, type IngressValues } from './IngressFields'
@@ -22,6 +24,7 @@ export type Values = {
   flow: string; cipher: string; server_key: string; obfs: string; obfs_password: string; up_mbps: number; down_mbps: number
   congestion_control: string; mieru_transport: string; traffic_pattern: string; mieru_mtu: number | string; mieru_multiplexing: string; mieru_handshake: string
   snell_psk: string; snell_version: number; snell_obfs: string; snell_obfs_host: string
+  fallbacks: Fallback[]
   extra: string
 }
 
@@ -31,10 +34,10 @@ export const empty: Values = {
   transport: 'tcp', path: '', host: '', service_name: '', xhttp_mode: '',
   flow: '', cipher: '2022-blake3-aes-128-gcm', server_key: '', obfs: '', obfs_password: '', up_mbps: 0, down_mbps: 0,
   congestion_control: 'bbr', mieru_transport: 'TCP', traffic_pattern: '', mieru_mtu: '', mieru_multiplexing: '', mieru_handshake: '',
-  snell_psk: '', snell_version: 5, snell_obfs: '', snell_obfs_host: '', extra: '{}',
+  snell_psk: '', snell_version: 5, snell_obfs: '', snell_obfs_host: '', fallbacks: [], extra: '{}',
 }
 
-const known = new Set(['tag', 'remark', 'protocol', 'listen', 'port', 'core', 'enabled', 'display_host', 'display_port', 'ingress_id', 'tls', 'transport', 'flow', 'cipher', 'server_key', 'obfs', 'obfs_password', 'up_mbps', 'down_mbps', 'congestion_control', 'mieru_transport', 'traffic_pattern', 'assigned_core', 'scoped_users', 'users', 'mieru_mtu', 'mieru_multiplexing', 'mieru_handshake', 'snell_psk', 'snell_version', 'snell_obfs', 'snell_obfs_host'])
+const known = new Set(['tag', 'remark', 'protocol', 'listen', 'port', 'core', 'enabled', 'display_host', 'display_port', 'ingress_id', 'tls', 'transport', 'flow', 'cipher', 'server_key', 'obfs', 'obfs_password', 'up_mbps', 'down_mbps', 'congestion_control', 'mieru_transport', 'traffic_pattern', 'assigned_core', 'scoped_users', 'users', 'mieru_mtu', 'mieru_multiplexing', 'mieru_handshake', 'snell_psk', 'snell_version', 'snell_obfs', 'snell_obfs_host', 'fallbacks'])
 
 export function toValues(ib?: Inbound): Values {
   if (!ib) return empty
@@ -52,6 +55,7 @@ export function toValues(ib?: Inbound): Values {
     flow: ib.flow ?? '', cipher: ib.cipher ?? empty.cipher, server_key: ib.server_key ?? '', obfs: ib.obfs ?? '', obfs_password: ib.obfs_password ?? '',
     up_mbps: ib.up_mbps ?? 0, down_mbps: ib.down_mbps ?? 0, congestion_control: ib.congestion_control ?? 'bbr', mieru_transport: ib.mieru_transport ?? 'TCP', traffic_pattern: ib.traffic_pattern ?? '', mieru_mtu: ib.mieru_mtu || '', mieru_multiplexing: ib.mieru_multiplexing ?? '', mieru_handshake: ib.mieru_handshake ?? '',
     snell_psk: ib.snell_psk ?? '', snell_version: ib.snell_version || 5, snell_obfs: ib.snell_obfs ?? '', snell_obfs_host: ib.snell_obfs_host ?? '',
+    fallbacks: (ib.fallbacks ?? []).map((f) => ({ name: f.name ?? '', alpn: f.alpn ?? '', path: f.path ?? '', dest: f.dest, xver: f.xver ?? 0 })),
     extra: JSON.stringify(extra, null, 2),
   }
 }
@@ -67,6 +71,7 @@ export function toInbound(v: Values): Record<string, unknown> {
   const out: Record<string, unknown> = { ...JSON.parse(v.extra || '{}'), tag: v.tag, remark: v.remark, protocol: v.protocol, listen: v.listen, port: v.port, core: v.core, enabled: v.enabled, display_host: v.display_host, display_port: v.display_port, ingress_id: v.ingress_id }
   const stream = ['vless', 'vmess', 'trojan', 'shadowsocks', 'anytls', 'socks', 'http'].includes(v.protocol)
   const quic = ['hysteria2', 'tuic'].includes(v.protocol)
+  if (v.tls === 'tls' && ['vless', 'trojan'].includes(v.protocol) && v.transport === 'tcp' && v.fallbacks.length) out.fallbacks = v.fallbacks.filter((f) => f.dest.trim()).map((f) => ({ name: f.name || undefined, alpn: f.alpn || undefined, path: f.path || undefined, dest: f.dest.trim(), xver: f.xver || undefined }))
   if (v.tls === 'reality') out.tls = { mode: 2, server_name: v.server_name, reality: { private_key: v.reality_private, public_key: v.reality_public, short_ids: v.reality_short ? [v.reality_short] : [], handshake_server: v.handshake_server || v.server_name, handshake_port: v.handshake_port || 443, fallback_limit: fallbackLimit(v) } }
   else if (v.tls === 'tls' || quic) out.tls = { mode: 1, server_name: v.server_name, auto_cert: v.auto_cert, acme: v.auto_cert ? v.acme : '' }
   if (stream && v.transport !== 'tcp') out.transport = { type: v.transport, path: v.path, host: v.host, service_name: v.service_name, mode: v.xhttp_mode }
@@ -160,6 +165,9 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   const stream = ['vless', 'vmess', 'trojan', 'shadowsocks', 'anytls', 'socks', 'http'].includes(v.protocol)
   const quic = ['hysteria2', 'tuic'].includes(v.protocol)
   const tlsCapable = stream && v.protocol !== 'shadowsocks'
+  const settingsQ = useQuery({ queryKey: ['settings'], queryFn: () => api.get<Settings>('/api/settings'), staleTime: 60_000 })
+  const decoy = settingsQ.data?.decoy_enabled && settingsQ.data.decoy_domain ? settingsQ.data : null
+  const canFallback = v.tls === 'tls' && ['vless', 'trojan'].includes(v.protocol) && v.transport === 'tcp'
   const genReality = async () => {
     try { const k = await api.post<{ private_key: string; public_key: string; short_id: string }>('/api/keys/reality'); form.setValues({ reality_private: k.private_key, reality_public: k.public_key, reality_short: v.reality_short || k.short_id }) } catch (e) { toast.err(e) }
   }
@@ -245,6 +253,22 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
                 {v.auto_cert && <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...form.getInputProps('acme')} />}
               </Group>
             )}
+            {canFallback && (
+              <Stack gap={6} mt="sm">
+                <Group justify="space-between"><div><Text size="sm" fw={600}>{t('inbounds.fallbacks')}</Text><Text size="xs" c="dimmed">{t('inbounds.fallbacksHint')}</Text></div>
+                  <Button size="compact-xs" variant="light" leftSection={<IconPlus size={12} />} onClick={() => form.setFieldValue('fallbacks', [...v.fallbacks, { name: '', alpn: '', path: '', dest: v.fallbacks.length ? '' : '80', xver: 0 }])}>{t('inbounds.fallbackAdd')}</Button></Group>
+                {v.fallbacks.map((f, i) => (
+                  <Group key={i} gap="xs" align="flex-end" wrap="nowrap">
+                    <TextInput size="xs" label={t('inbounds.fallbackDest')} placeholder="80 / 127.0.0.1:8080 / /run/site.sock" required style={{ flex: 2 }} value={f.dest} onChange={(e) => form.setFieldValue(`fallbacks.${i}.dest`, e.currentTarget.value)} />
+                    <TextInput size="xs" label="SNI" placeholder="*" style={{ flex: 1 }} value={f.name} onChange={(e) => form.setFieldValue(`fallbacks.${i}.name`, e.currentTarget.value)} />
+                    <TextInput size="xs" label="ALPN" placeholder="*" style={{ flex: 1 }} value={f.alpn} onChange={(e) => form.setFieldValue(`fallbacks.${i}.alpn`, e.currentTarget.value)} />
+                    <TextInput size="xs" label={t('inbounds.path')} placeholder="*" style={{ flex: 1 }} value={f.path} onChange={(e) => form.setFieldValue(`fallbacks.${i}.path`, e.currentTarget.value)} />
+                    <Select size="xs" label="PROXY" data={[{ value: '0', label: t('common.none') }, { value: '1', label: 'v1' }, { value: '2', label: 'v2' }]} allowDeselect={false} w={90} value={String(f.xver ?? 0)} onChange={(x) => form.setFieldValue(`fallbacks.${i}.xver`, Number(x ?? 0))} />
+                    <ActionIcon variant="subtle" color="red" mb={2} onClick={() => form.setFieldValue('fallbacks', v.fallbacks.filter((_, j) => j !== i))}><IconTrash size={14} /></ActionIcon>
+                  </Group>
+                ))}
+              </Stack>
+            )}
             {v.tls === 'reality' && tlsCapable && (
               <Stack gap="xs" mt="sm">
                 <Group align="flex-end" wrap="nowrap">
@@ -259,6 +283,12 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
                 </Group>
                 <RealityScan current={v.handshake_server || v.server_name} scan={(hosts) => api.post<RealityResult[]>('/api/reality/scan', { hosts })}
                   onPick={(host) => form.setValues({ server_name: host, handshake_server: host, handshake_port: 443 })} />
+                {decoy && (
+                  <Group gap="xs">
+                    <Button size="xs" variant="light" color="teal" onClick={() => form.setValues({ server_name: decoy.decoy_domain, handshake_server: '127.0.0.1', handshake_port: 4443 })}>{t('inbounds.useDecoy', { domain: decoy.decoy_domain })}</Button>
+                    <Text size="xs" c="dimmed">{t('inbounds.useDecoyHint')}</Text>
+                  </Group>
+                )}
                 <div>
                   <Group grow align="flex-end">
                     <Switch label={t('inbounds.fallbackLimit')} mb={7} checked={!v.fallback_off} onChange={(e) => form.setFieldValue('fallback_off', !e.currentTarget.checked)} />

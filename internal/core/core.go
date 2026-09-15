@@ -25,6 +25,7 @@ type Capabilities struct {
 	Transports      []string // stream transports; nil means only "tcp"
 	Shadowsocks2022 bool     // multi-user Shadowsocks 2022 ciphers
 	HotUserReload   bool     // true if users can change without a process restart
+	Fallbacks       bool     // VLESS/Trojan fallbacks to another local service
 }
 
 // Supports reports whether the core can serve inbound ib.
@@ -40,6 +41,9 @@ func (c Capabilities) Supports(ib spec.Inbound) bool {
 		return false
 	}
 	if ib.Protocol == spec.Shadowsocks && strings.HasPrefix(ib.Cipher, "2022-") && !c.Shadowsocks2022 {
+		return false
+	}
+	if len(ib.Fallbacks) > 0 && !c.Fallbacks {
 		return false
 	}
 	tr := ib.TransportType()
