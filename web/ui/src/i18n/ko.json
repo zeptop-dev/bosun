@@ -17,7 +17,9 @@
     "password": "비밀번호",
     "submit": "로그인",
     "failed": "사용자 이름 또는 비밀번호가 올바르지 않습니다",
-    "hint": "초기 비밀번호는 bosun 첫 실행 로그에 있습니다. 잊었다면 bosun admin reset-password 를 실행하세요."
+    "hint": "초기 비밀번호는 bosun 첫 실행 로그에 있습니다. 잊었다면 bosun admin reset-password 를 실행하세요.",
+    "code": "인증 코드",
+    "badCode": "코드가 틀렸습니다"
   },
   "common": {
     "save": "저장",
@@ -509,5 +511,29 @@
     "subtitle": "이 노드의 트래픽이 가는 곳: 포트를 그대로 다른 서버로 전달(프런트)하거나 랜딩 서버로 나갑니다(중계).",
     "tabForwards": "포트 포워딩",
     "tabRouting": "랜딩 아웃바운드와 분기"
+  },
+  "twofa": {
+    "title": "2단계 인증",
+    "hint": "패널 로그인에 TOTP(Google Authenticator, 1Password 등)를 추가합니다. 이후 로그인 시 6자리 코드가 필요하며 API 토큰에는 영향이 없습니다.",
+    "start": "설정 시작",
+    "scan": "인증 앱으로 QR 코드 스캔",
+    "manual": "또는 키를 직접 입력:",
+    "code": "코드",
+    "confirm": "확인 후 활성화",
+    "enabled": "2단계 인증이 켜졌습니다",
+    "disable": "끄기",
+    "disabled": "2단계 인증이 꺼졌습니다",
+    "on": "켜짐"
+  },
+  "tokens": {
+    "title": "API 토큰",
+    "hint": "스크립트용 장기 토큰. 로그인과 동일한 권한이며 평문은 한 번만 표시됩니다. Authorization: Bearer 헤더로 모든 /api 를 호출할 수 있습니다. Captain 관리 시에는 Captain API 를 사용하세요.",
+    "name": "이름",
+    "create": "토큰 생성",
+    "showOnce": "지금 복사하세요. 다시 표시되지 않습니다:",
+    "created": "생성",
+    "lastUsed": "최근 사용",
+    "neverUsed": "미사용",
+    "example": "호출 예시(모든 /api 엔드포인트):"
   }
 }

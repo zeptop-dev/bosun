@@ -17,7 +17,9 @@
     "password": "Password",
     "submit": "Sign in",
     "failed": "Invalid username or password",
-    "hint": "The initial password is in bosun's first-start log; run bosun admin reset-password if it is lost."
+    "hint": "The initial password is in bosun's first-start log; run bosun admin reset-password if it is lost.",
+    "code": "Authenticator code",
+    "badCode": "Wrong code"
   },
   "common": {
     "save": "Save",
@@ -509,5 +511,29 @@
     "subtitle": "Where this node's traffic goes: forward ports as-is to another machine (a front relay), or exit through a landing server (a relay).",
     "tabForwards": "Port forwards",
     "tabRouting": "Landing exits & rules"
+  },
+  "twofa": {
+    "title": "Two-factor authentication",
+    "hint": "Add TOTP (Google Authenticator, 1Password, …) to the panel login. Sign-in then needs a 6-digit code; API tokens are unaffected.",
+    "start": "Set up",
+    "scan": "Scan with your authenticator",
+    "manual": "or enter the key by hand:",
+    "code": "Code",
+    "confirm": "Confirm and enable",
+    "enabled": "Two-factor enabled",
+    "disable": "Disable",
+    "disabled": "Two-factor disabled",
+    "on": "enabled"
+  },
+  "tokens": {
+    "title": "API tokens",
+    "hint": "Long-lived tokens for scripts with the same access as the login; shown once. Send Authorization: Bearer on any /api call. Once Captain manages this node, use Captain's API instead.",
+    "name": "Name",
+    "create": "Create token",
+    "showOnce": "Copy it now; it will not be shown again:",
+    "created": "created",
+    "lastUsed": "last used",
+    "neverUsed": "never used",
+    "example": "Example call (any /api endpoint):"
   }
 }

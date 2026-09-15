@@ -28,7 +28,9 @@ type State struct {
 	Revision int64 `json:"revision"`
 
 	Admin Admin `json:"admin"`
-	Mode  Mode  `json:"mode"`
+	// APITokens grant the same access as the admin login (standalone only).
+	APITokens []APIToken `json:"api_tokens,omitempty"`
+	Mode      Mode       `json:"mode"`
 	// Managed is set while a panel owns the node.
 	Managed *Managed `json:"managed,omitempty"`
 	// Snapshot is the local config saved when a panel took over.
@@ -120,6 +122,18 @@ type ProbeSettings struct {
 type Admin struct {
 	Username     string `json:"username"`
 	PasswordHash string `json:"password_hash"`
+	// TOTP second factor for the panel login (RFC 6238).
+	TOTPSecret  string `json:"totp_secret,omitempty"`
+	TOTPEnabled bool   `json:"totp_enabled,omitempty"`
+}
+
+// APIToken is a personal bearer token for scripts; only its hash is kept.
+type APIToken struct {
+	ID         int64      `json:"id"`
+	Name       string     `json:"name"`
+	Hash       string     `json:"hash"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 }
 
 // Managed records the adopting panel.

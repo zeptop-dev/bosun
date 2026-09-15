@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next'
 import { api, type CoreRelease, type Settings, type Status } from '../lib/api'
 import { UpdateCard } from '../components/UpdateCard'
 import { BackupCard } from '../components/BackupCard'
+import { TwoFactorCard } from '../components/TwoFactorCard'
+import { TokensCard } from '../components/TokensCard'
 import { useAuth } from '../lib/auth'
 import { when } from '../lib/format'
 import { toast } from '../lib/notify'
@@ -92,6 +94,10 @@ export default function SettingsPage() {
         )}
       </Card>
 
+      <SimpleGrid cols={{ base: 1, md: 2 }} mb="lg">
+        <TwoFactorCard />
+        <TokensCard />
+      </SimpleGrid>
       <BackupCard />
       <UpdateCard mb="lg" />
 

@@ -17,7 +17,9 @@
     "password": "パスワード",
     "submit": "サインイン",
     "failed": "ユーザー名またはパスワードが違います",
-    "hint": "初期パスワードは bosun の初回起動ログにあります。忘れた場合は bosun admin reset-password を実行してください。"
+    "hint": "初期パスワードは bosun の初回起動ログにあります。忘れた場合は bosun admin reset-password を実行してください。",
+    "code": "認証コード",
+    "badCode": "コードが違います"
   },
   "common": {
     "save": "保存",
@@ -509,5 +511,29 @@
     "subtitle": "このノードのトラフィックの行き先：ポートをそのまま別マシンへ転送する（前置）か、着地サーバーから出る（中継）か。",
     "tabForwards": "ポート転送",
     "tabRouting": "着地アウトバウンドと振り分け"
+  },
+  "twofa": {
+    "title": "二要素認証",
+    "hint": "パネルのログインに TOTP（Google Authenticator、1Password など）を追加します。以後ログインには 6 桁コードが必要。API トークンには影響しません。",
+    "start": "設定を開始",
+    "scan": "認証アプリで QR コードをスキャン",
+    "manual": "または鍵を手入力：",
+    "code": "コード",
+    "confirm": "確認して有効化",
+    "enabled": "二要素認証を有効にしました",
+    "disable": "無効化",
+    "disabled": "二要素認証を無効にしました",
+    "on": "有効"
+  },
+  "tokens": {
+    "title": "API トークン",
+    "hint": "スクリプト用の長期トークン。権限はログインと同じで、平文は一度だけ表示。Authorization: Bearer ヘッダーで任意の /api を呼べます。Captain 管理下では Captain の API を使ってください。",
+    "name": "名前",
+    "create": "トークンを作成",
+    "showOnce": "今すぐコピーしてください。再表示されません：",
+    "created": "作成",
+    "lastUsed": "最終使用",
+    "neverUsed": "未使用",
+    "example": "呼び出し例（任意の /api）："
   }
 }
