@@ -147,7 +147,6 @@
     "ingressHint": "クライアントは {{host}} に接続。ローカルポート範囲 {{ports}}。",
     "ingressNewHint": "保存時にまず専用線入口を作成し、次にインバウンドを作成します。",
     "ingressNewFields": "プロバイダーのネットワーク情報ページから転記してください：",
-    "listenIngressHint": "空欄 = 入口のローカル IP {{ip}} にバインド",
     "showAdvanced": "詳細：追加 JSON フィールド",
     "hideAdvanced": "詳細を閉じる",
     "extra": "追加フィールド",
@@ -228,7 +227,8 @@
     "realityNeedsNode": "ノード保存後に検査できます。",
     "tlsHint": "REALITY は証明書不要、TLS はそのドメインの証明書が必要",
     "generateKeypair": "鍵ペアを生成",
-    "generateKey": "鍵を生成"
+    "generateKey": "鍵を生成",
+    "ingressBindHint": "待受アドレスを空にすると回線側 IP {{ip}} にバインドします。"
   },
   "ingress": {
     "title": "専用線入口",

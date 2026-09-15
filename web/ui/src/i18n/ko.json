@@ -147,7 +147,6 @@
     "ingressHint": "클라이언트는 {{host}} 로 접속하며 로컬 포트 범위는 {{ports}} 입니다.",
     "ingressNewHint": "저장 시 전용선 입구를 먼저 만든 다음 인바운드를 만듭니다.",
     "ingressNewFields": "제공업체의 네트워크 정보 페이지에서 다음 항목을 옮겨 적으세요:",
-    "listenIngressHint": "비우면 입구의 로컬 IP {{ip}} 에 바인딩",
     "showAdvanced": "고급: 추가 JSON 필드",
     "hideAdvanced": "고급 숨기기",
     "extra": "추가 필드",
@@ -228,7 +227,8 @@
     "realityNeedsNode": "노드를 저장한 뒤 검사할 수 있습니다.",
     "tlsHint": "REALITY는 인증서가 필요 없고, TLS는 해당 도메인 인증서가 필요합니다",
     "generateKeypair": "키 쌍 생성",
-    "generateKey": "키 생성"
+    "generateKey": "키 생성",
+    "ingressBindHint": "수신 주소를 비우면 회선 IP {{ip}}에 바인딩합니다."
   },
   "ingress": {
     "title": "전용선 입구",

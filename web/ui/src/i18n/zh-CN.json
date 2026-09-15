@@ -147,7 +147,6 @@
     "ingressHint": "客户端连 {{host}}，本地端口范围 {{ports}}。",
     "ingressNewHint": "保存时会先创建这个专线入口，再创建入站。",
     "ingressNewFields": "从服务商的网络信息页抄这几项：",
-    "listenIngressHint": "留空 = 绑定到入口的本地 IP {{ip}}",
     "showAdvanced": "高级：额外 JSON 字段",
     "hideAdvanced": "收起高级",
     "extra": "额外字段",
@@ -228,7 +227,8 @@
     "realityNeedsNode": "保存节点后才能从节点发起探测。",
     "tlsHint": "REALITY 不需要证书；TLS 需要该域名的证书",
     "generateKeypair": "生成公/私钥",
-    "generateKey": "生成密钥"
+    "generateKey": "生成密钥",
+    "ingressBindHint": "监听地址留空则绑定到入口本地 IP {{ip}}。"
   },
   "ingress": {
     "title": "专线入口",

@@ -147,7 +147,6 @@
     "ingressHint": "用戶端連 {{host}}，本機連接埠範圍 {{ports}}。",
     "ingressNewHint": "儲存時會先建立這個專線入口，再建立入站。",
     "ingressNewFields": "從服務商的網路資訊頁抄這幾項：",
-    "listenIngressHint": "留空 = 綁定到入口的本機 IP {{ip}}",
     "showAdvanced": "進階：額外 JSON 欄位",
     "hideAdvanced": "收起進階",
     "extra": "額外欄位",
@@ -228,7 +227,8 @@
     "realityNeedsNode": "儲存節點後才能從節點發起探測。",
     "tlsHint": "REALITY 不需要憑證；TLS 需要該網域的憑證",
     "generateKeypair": "產生公/私鑰",
-    "generateKey": "產生金鑰"
+    "generateKey": "產生金鑰",
+    "ingressBindHint": "監聽位址留空則綁定到入口本地 IP {{ip}}。"
   },
   "ingress": {
     "title": "專線入口",
