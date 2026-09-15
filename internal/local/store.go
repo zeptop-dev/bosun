@@ -750,7 +750,7 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	}
 	node := &spec.Node{ID: "local", Forwards: append([]spec.Forward(nil), s.st.Forwards...),
 		Outbounds: append([]spec.Outbound(nil), s.st.Outbounds...), Routes: append([]spec.RouteRule(nil), s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound,
-		Certificates: append([]spec.Certificate(nil), s.st.Certificates...)}
+		Certificates: append([]spec.Certificate(nil), s.st.Certificates...), DNS: append([]string(nil), s.st.DNS...)}
 	if s.st.Settings.ACMEEmail != "" || s.st.Settings.CloudflareToken != "" {
 		node.ACME = &spec.ACME{Email: s.st.Settings.ACMEEmail, CloudflareToken: s.st.Settings.CloudflareToken}
 	}

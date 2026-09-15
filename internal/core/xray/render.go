@@ -73,6 +73,9 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	var custom []any
 	var def m
 	for _, o := range node.Outbounds {
+		if o.Balancer != nil {
+			continue // rendered under routing.balancers
+		}
 		var ro m
 		switch {
 		case o.WARP != nil:
@@ -112,7 +115,14 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		},
 		"inbounds":  ins,
 		"outbounds": outs,
-		"routing":   m{"domainStrategy": "AsIs", "rules": renderRoutes(node.Routes)},
+		"routing":   m{"domainStrategy": "AsIs", "rules": renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound)},
+	}
+	if bal := renderBalancers(node); len(bal) > 0 {
+		cfg["routing"].(m)["balancers"] = bal
+		cfg["observatory"] = m{"subjectSelector": balancerMembers(node), "probeUrl": "https://www.gstatic.com/generate_204", "probeInterval": "1m", "enableConcurrency": true}
+	}
+	if len(node.DNS) > 0 {
+		cfg["dns"] = m{"servers": dnsServers(node.DNS)}
 	}
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	return b, st, err
@@ -123,7 +133,7 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		"tag":      ib.Tag,
 		"listen":   listenAddr(ib.Listen),
 		"port":     ib.Port,
-		"sniffing": m{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+		"sniffing": m{"enabled": !ib.NoSniff, "destOverride": []string{"http", "tls", "quic"}},
 	}
 	switch ib.Protocol {
 	case spec.VLESS:
@@ -345,7 +355,7 @@ func renderOutbound(o spec.Outbound) m {
 	return out
 }
 
-func renderRoutes(rules []spec.RouteRule) []any {
+func renderRoutes(rules []spec.RouteRule, balancers map[string]bool, def string) []any {
 	out := []any{
 		m{"type": "field", "inboundTag": []string{"api"}, "outboundTag": "api"},
 	}
@@ -358,11 +368,78 @@ func renderRoutes(rules []spec.RouteRule) []any {
 		case "block":
 			rule["outboundTag"] = "block"
 		case "outbound":
-			rule["outboundTag"] = r.Value
+			if balancers[r.Value] {
+				rule["balancerTag"] = r.Value
+			} else {
+				rule["outboundTag"] = r.Value
+			}
 		default:
 			rule["outboundTag"] = "direct"
 		}
 		out = append(out, rule)
+	}
+	// xray has no "default balancer": a catch-all rule does the job.
+	if def != "" && balancers[def] {
+		out = append(out, m{"type": "field", "network": "tcp,udp", "balancerTag": def})
+	}
+	return out
+}
+
+func balancerTags(node *spec.Node) map[string]bool {
+	out := map[string]bool{}
+	for _, o := range node.Outbounds {
+		if o.Balancer != nil {
+			out[o.Tag] = true
+		}
+	}
+	return out
+}
+
+func balancerMembers(node *spec.Node) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, o := range node.Outbounds {
+		if o.Balancer == nil {
+			continue
+		}
+		for _, mbr := range o.Balancer.Members {
+			if !seen[mbr] {
+				seen[mbr] = true
+				out = append(out, mbr)
+			}
+		}
+	}
+	return out
+}
+
+func renderBalancers(node *spec.Node) []any {
+	var out []any
+	for _, o := range node.Outbounds {
+		if o.Balancer == nil {
+			continue
+		}
+		strategy := m{"type": "leastPing"}
+		if o.Balancer.Strategy == "random" {
+			strategy = m{"type": "random"}
+		}
+		out = append(out, m{"tag": o.Tag, "selector": o.Balancer.Members, "strategy": strategy})
+	}
+	return out
+}
+
+// dnsServers maps "1.1.1.1", "tls://host", "https://host/path" to xray's
+// server addresses (xray takes the URL forms as-is).
+func dnsServers(list []string) []any {
+	out := make([]any, 0, len(list))
+	for _, s := range list {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if strings.HasPrefix(s, "tls://") {
+			s = "tcp+" + s
+		}
+		out = append(out, s)
 	}
 	return out
 }
@@ -386,6 +463,10 @@ func addMatch(rule m, match string) {
 		rule["protocol"] = appendStr(rule["protocol"], val)
 	case "port":
 		rule["port"] = val
+	case "geosite":
+		rule["domain"] = appendStr(rule["domain"], "geosite:"+val)
+	case "geoip":
+		rule["ip"] = appendStr(rule["ip"], "geoip:"+val)
 	default:
 		rule["domain"] = appendStr(rule["domain"], "domain:"+match)
 	}

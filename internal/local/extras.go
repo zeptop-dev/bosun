@@ -125,13 +125,14 @@ type Routing struct {
 	Outbounds       []spec.Outbound  `json:"outbounds"`
 	Routes          []spec.RouteRule `json:"routes"`
 	DefaultOutbound string           `json:"default_outbound"`
+	DNS             []string         `json:"dns"`
 }
 
 // Routing returns a copy with non-nil slices.
 func (s *Store) Routing() Routing {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return Routing{Outbounds: append([]spec.Outbound{}, s.st.Outbounds...), Routes: append([]spec.RouteRule{}, s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound}
+	return Routing{Outbounds: append([]spec.Outbound{}, s.st.Outbounds...), Routes: append([]spec.RouteRule{}, s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound, DNS: append([]string{}, s.st.DNS...)}
 }
 
 // ValidateRouting checks tags: every rule and the default must point at a
@@ -144,8 +145,11 @@ func ValidateRouting(nr *Routing) error {
 		if o.Tag == "" || tags[o.Tag] {
 			return errors.New("every outbound needs a unique tag (not direct/block)")
 		}
-		if o.Remote == nil && o.Protocol == "" {
+		if o.Remote == nil && o.Protocol == "" && o.WARP == nil && o.Balancer == nil {
 			return errors.New("outbound " + o.Tag + ": a share link or a protocol with settings is required")
+		}
+		if o.Balancer != nil && len(o.Balancer.Members) == 0 {
+			return errors.New("balancer " + o.Tag + " needs at least one member")
 		}
 		if o.Remote != nil && (o.Remote.Host == "" || o.Remote.Port <= 0 || o.Remote.Settings.Protocol == "") {
 			return errors.New("outbound " + o.Tag + ": host, port and protocol are required")
@@ -158,6 +162,13 @@ func ValidateRouting(nr *Routing) error {
 	for _, o := range nr.Outbounds {
 		if o.ProxyTag != "" && !tags[o.ProxyTag] {
 			return errors.New("outbound " + o.Tag + " chains through unknown " + o.ProxyTag)
+		}
+		if o.Balancer != nil {
+			for _, mbr := range o.Balancer.Members {
+				if !tags[mbr] || mbr == o.Tag {
+					return errors.New("balancer " + o.Tag + " has unknown member " + mbr)
+				}
+			}
 		}
 	}
 	// A chain must end somewhere: walk proxy_tag links and refuse cycles.
@@ -203,7 +214,7 @@ func (s *Store) SetRouting(nr Routing) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound = nr.Outbounds, nr.Routes, nr.DefaultOutbound
+	s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.DNS = nr.Outbounds, nr.Routes, nr.DefaultOutbound, nr.DNS
 	return s.commit()
 }
 

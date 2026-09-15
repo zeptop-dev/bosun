@@ -195,6 +195,9 @@ type Inbound struct {
 	// even if that is nobody.
 	ScopedUsers bool   `json:"scoped_users,omitempty"`
 	Users       []User `json:"users,omitempty"`
+	// NoSniff turns off destination sniffing on this inbound (on by
+	// default: it lets domain rules see the real host behind an IP).
+	NoSniff bool `json:"no_sniff,omitempty"`
 	// Fallbacks hand connections that are not this protocol (or match a
 	// path / SNI / ALPN) to another local service, e.g. a real website on
 	// port 80 so the inbound looks like one. VLESS/Trojan over TCP+TLS on
@@ -241,6 +244,15 @@ type Outbound struct {
 	Remote *Remote `json:"remote,omitempty"`
 	// WARP is a Cloudflare WARP (WireGuard) exit; see WARP.
 	WARP *WARP `json:"warp,omitempty"`
+	// Balancer groups other outbounds: traffic routed to this tag takes
+	// the member with the best probe (sing-box urltest, xray leastPing).
+	Balancer *Balancer `json:"balancer,omitempty"`
+}
+
+// Balancer is a group of outbound tags picked by URL test.
+type Balancer struct {
+	Members  []string `json:"members"`
+	Strategy string   `json:"strategy,omitempty"` // "urltest" (default) or "random"
 }
 
 // WARP configures a WireGuard tunnel to Cloudflare WARP as an outbound.
@@ -322,6 +334,9 @@ type Node struct {
 	// DefaultOutbound is the tag traffic takes when no route rule matches
 	// ("" = direct): the whole node exits through a landing server.
 	DefaultOutbound string `json:"default_outbound,omitempty"`
+	// DNS lists resolvers the cores use for outbound names ("1.1.1.1",
+	// "tls://1.1.1.1", "https://dns.google/dns-query"); empty = system.
+	DNS []string `json:"dns,omitempty"`
 	// Decoy is a real HTTPS site the node serves for itself on loopback so
 	// REALITY inbounds can "steal" their own domain instead of a third
 	// party's (nothing is relayed off-box when the fallback fires).

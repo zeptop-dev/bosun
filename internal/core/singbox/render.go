@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -48,6 +49,10 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 			endpoints = append(endpoints, renderWARP(o))
 			continue
 		}
+		if o.Balancer != nil {
+			outs = append(outs, m{"type": "urltest", "tag": o.Tag, "outbounds": o.Balancer.Members, "url": "https://www.gstatic.com/generate_204", "interval": "1m"})
+			continue
+		}
 		if o.Remote != nil {
 			ro, err := renderRemote(o)
 			if err != nil {
@@ -73,10 +78,18 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		},
 		"inbounds":  ins,
 		"outbounds": outs,
-		"route":     m{"rules": renderRoutes(node.Routes), "final": final},
 	}
+	rules, sets := renderRoutes(node.Routes)
+	route := m{"rules": append(sniffRules(inbounds), rules...), "final": final}
+	if len(sets) > 0 {
+		route["rule_set"] = sets
+	}
+	cfg["route"] = route
 	if len(endpoints) > 0 {
 		cfg["endpoints"] = endpoints
+	}
+	if len(node.DNS) > 0 {
+		cfg["dns"] = renderDNS(node.DNS)
 	}
 	return json.MarshalIndent(cfg, "", "  ")
 }
@@ -292,12 +305,19 @@ func renderOutbound(o spec.Outbound) m {
 	return out
 }
 
-func renderRoutes(rules []spec.RouteRule) []any {
-	out := make([]any, 0, len(rules))
+func renderRoutes(rules []spec.RouteRule) (out []any, sets []any) {
+	out = make([]any, 0, len(rules))
+	seen := map[string]bool{}
 	for _, r := range rules {
 		rule := m{}
 		for _, match := range r.Match {
 			addMatch(rule, match)
+		}
+		for _, rs := range ruleSetsOf(rule) {
+			if !seen[rs] {
+				seen[rs] = true
+				sets = append(sets, ruleSet(rs))
+			}
 		}
 		switch r.Action {
 		case "block":
@@ -309,7 +329,68 @@ func renderRoutes(rules []spec.RouteRule) []any {
 		}
 		out = append(out, rule)
 	}
-	return out
+	return out, sets
+}
+
+// sniffRules asks sing-box to sniff destinations (a route action since
+// 1.11) on every inbound that has not opted out.
+func sniffRules(inbounds []spec.Inbound) []any {
+	var tags []string
+	for _, ib := range inbounds {
+		if !ib.NoSniff {
+			tags = append(tags, ib.Tag)
+		}
+	}
+	if len(tags) == 0 {
+		return nil
+	}
+	return []any{m{"inbound": tags, "action": "sniff"}}
+}
+
+func ruleSetsOf(rule m) []string {
+	list, _ := rule["rule_set"].([]string)
+	return list
+}
+
+// ruleSet is a remote binary rule set from MetaCubeX's geo data.
+func ruleSet(tag string) m {
+	kind, name, _ := cut(tag, "-")
+	return m{"tag": tag, "type": "remote", "format": "binary", "download_detour": "direct",
+		"url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/" + kind + "/" + name + ".srs"}
+}
+
+// renderDNS turns "1.1.1.1", "tls://1.1.1.1", "https://dns.google/dns-query"
+// into typed sing-box servers, the first one being the default.
+func renderDNS(list []string) m {
+	var servers []any
+	for i, s := range list {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		srv := m{"tag": "dns-" + strconv.Itoa(i)}
+		switch {
+		case strings.HasPrefix(s, "https://"):
+			u := strings.TrimPrefix(s, "https://")
+			host, path, _ := cut(u, "/")
+			srv["type"] = "https"
+			srv["server"] = host
+			if path != "" {
+				srv["path"] = "/" + path
+			}
+		case strings.HasPrefix(s, "tls://"):
+			srv["type"] = "tls"
+			srv["server"] = strings.TrimPrefix(s, "tls://")
+		default:
+			srv["type"] = "udp"
+			srv["server"] = s
+		}
+		servers = append(servers, srv)
+	}
+	if len(servers) == 0 {
+		return nil
+	}
+	return m{"servers": servers, "final": servers[0].(m)["tag"]}
 }
 
 func addMatch(rule m, match string) {
@@ -331,6 +412,10 @@ func addMatch(rule m, match string) {
 		rule["protocol"] = appendStr(rule["protocol"], val)
 	case "port":
 		rule["port_range"] = appendStr(rule["port_range"], val)
+	case "geosite":
+		rule["rule_set"] = appendStr(rule["rule_set"], "geosite-"+val)
+	case "geoip":
+		rule["rule_set"] = appendStr(rule["rule_set"], "geoip-"+val)
 	default:
 		rule["domain_suffix"] = appendStr(rule["domain_suffix"], match)
 	}

@@ -42,7 +42,7 @@ export interface Inbound {
   congestion_control?: string; mieru_transport?: string; traffic_pattern?: string; mieru_mtu?: number; mieru_multiplexing?: string; mieru_handshake?: string
   snell_psk?: string; snell_version?: number; snell_obfs?: string; snell_obfs_host?: string
   wg_private_key?: string; wg_public_key?: string; wg_address?: string; wg_mtu?: number
-  up?: number; down?: number
+  up?: number; down?: number; no_sniff?: boolean
   fallbacks?: Fallback[]
   remark?: string; enabled: boolean; display_host?: string; display_port?: number
   assigned_core?: string; ingress_id?: string
@@ -82,9 +82,9 @@ export interface Ingress { id: string; name: string; bind_ip: string; line_ip: s
 export interface IngressInput { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number; PortTo: number; PortOffset: number; ReservedPorts?: number[] }
 // Outbounds and routing (landing servers, relay chains).
 export interface Remote { host: string; port: number; uuid?: string; password?: string; username?: string; settings: { protocol: string } }
-export interface Outbound { tag: string; protocol?: string; settings?: Record<string, unknown>; proxy_tag?: string; remote?: Remote; warp?: { from_node?: boolean } }
+export interface Outbound { tag: string; protocol?: string; settings?: Record<string, unknown>; proxy_tag?: string; remote?: Remote; warp?: { from_node?: boolean }; balancer?: { members: string[]; strategy?: string } }
 export interface Rule { match: string[]; action: string; value?: string }
-export interface Routing { outbounds: Outbound[]; routes: Rule[]; default_outbound: string }
+export interface Routing { outbounds: Outbound[]; routes: Rule[]; default_outbound: string; dns?: string[] }
 // Operator-supplied certificates handed to the cores.
 export interface Certificate { domain: string; names: string[]; not_after: string; issuer: string }
 // Probe: carrier latency, tasks and line RTT.

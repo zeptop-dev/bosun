@@ -289,3 +289,28 @@ func TestWARPOutbound(t *testing.T) {
 		}
 	}
 }
+
+func TestBalancerGeoDNS(t *testing.T) {
+	node := &spec.Node{DNS: []string{"1.1.1.1", "https://dns.google/dns-query"},
+		Outbounds: []spec.Outbound{
+			{Tag: "a", Remote: &spec.Remote{Host: "203.0.113.30", Port: 443, UUID: "7f3a4b2c-1d5e-4f6a-9b8c-0d1e2f3a4b5c", Settings: spec.Inbound{Protocol: spec.VLESS}}},
+			{Tag: "b", Remote: &spec.Remote{Host: "198.51.100.20", Port: 443, UUID: "7f3a4b2c-1d5e-4f6a-9b8c-0d1e2f3a4b5c", Settings: spec.Inbound{Protocol: spec.VLESS}}},
+			{Tag: "lb", Balancer: &spec.Balancer{Members: []string{"a", "b"}}},
+		},
+		Routes: []spec.RouteRule{{Match: []string{"geosite:netflix", "geoip:us"}, Action: "outbound", Value: "lb"}}, DefaultOutbound: "lb"}
+	ib := spec.Inbound{Tag: "v", Protocol: spec.VLESS, Port: 8080, NoSniff: true}
+	b, _, err := render(node, []spec.Inbound{ib}, []spec.User{{ID: 1, Name: "u", UUID: "7f3a4b2c-1d5e-4f6a-9b8c-0d1e2f3a4b5c"}}, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, want := range []string{`"balancerTag": "lb"`, `"geosite:netflix"`, `"geoip:us"`, `"leastPing"`, `"observatory"`, `"https://dns.google/dns-query"`, `"enabled": false`} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %s in\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, `"tag": "lb",
+      "protocol"`) {
+		t.Fatal("balancer rendered as an outbound")
+	}
+}

@@ -2,6 +2,7 @@ package singbox
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -123,11 +124,15 @@ func TestRenderOutboundChainAndRoutes(t *testing.T) {
 		t.Fatalf("outbounds: %v", outs)
 	}
 	rules := cfg["route"].(map[string]any)["rules"].([]any)
-	if rules[0].(map[string]any)["action"] != "reject" {
-		t.Fatalf("rule0: %v", rules[0])
+	// rules[0] is the sniff action for every inbound.
+	if rules[0].(map[string]any)["action"] != "sniff" {
+		t.Fatalf("sniff rule: %v", rules[0])
 	}
-	if rules[1].(map[string]any)["outbound"] != "landing" {
+	if rules[1].(map[string]any)["action"] != "reject" {
 		t.Fatalf("rule1: %v", rules[1])
+	}
+	if rules[2].(map[string]any)["outbound"] != "landing" {
+		t.Fatalf("rule2: %v", rules[2])
 	}
 }
 
@@ -155,5 +160,28 @@ func TestRenderScopedUsers(t *testing.T) {
 	stats := cfg["experimental"].(map[string]any)["v2ray_api"].(map[string]any)["stats"].(map[string]any)
 	if len(stats["users"].([]any)) != 2 {
 		t.Fatalf("stats users must be the union: %v", stats["users"])
+	}
+}
+
+func TestRuleSetsSniffDNS(t *testing.T) {
+	node := &spec.Node{DNS: []string{"tls://1.1.1.1"}, Outbounds: []spec.Outbound{{Tag: "lb", Balancer: &spec.Balancer{Members: []string{"direct"}}}},
+		Routes: []spec.RouteRule{{Match: []string{"geosite:openai"}, Action: "outbound", Value: "lb"}}}
+	ibs := []spec.Inbound{{Tag: "a", Protocol: spec.VLESS, Port: 1000}, {Tag: "b", Protocol: spec.VLESS, Port: 1001, NoSniff: true}}
+	b, err := render(node, ibs, []spec.User{{ID: 1, Name: "u", UUID: "7f3a4b2c-1d5e-4f6a-9b8c-0d1e2f3a4b5c"}}, renderOptions{StatsListen: "127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, want := range []string{`"geosite-openai"`, `meta-rules-dat/meta/geo/geosite/openai.srs`, `"action": "sniff"`, `"type": "urltest"`, `"type": "tls"`} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %s in\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, `"inbound": [
+          "a",
+          "b"
+        ],
+        "action": "sniff"`) {
+		t.Fatal("no_sniff inbound included in sniff rule")
 	}
 }
