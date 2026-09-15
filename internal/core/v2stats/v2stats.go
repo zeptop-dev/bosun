@@ -34,9 +34,30 @@ func QueryUsers(ctx context.Context, conn *grpc.ClientConn, method, pattern stri
 	return DecodeUsers(resp)
 }
 
+// QueryInbounds is QueryUsers for per-inbound counters
+// ("inbound>>>TAG>>>traffic>>>uplink"), keyed by inbound tag.
+func QueryInbounds(ctx context.Context, conn *grpc.ClientConn, method, pattern string, reset bool) (map[string]spec.Traffic, error) {
+	var req []byte
+	if pattern != "" {
+		req = protowire.AppendTag(req, 1, protowire.BytesType)
+		req = protowire.AppendString(req, pattern)
+	}
+	if reset {
+		req = protowire.AppendTag(req, 2, protowire.VarintType)
+		req = protowire.AppendVarint(req, 1)
+	}
+	resp, err := grpcraw.Invoke(ctx, conn, method, req)
+	if err != nil {
+		return nil, err
+	}
+	return decodeKind(resp, "inbound")
+}
+
 // DecodeUsers parses QueryStatsResponse { repeated Stat stat = 1 } where
 // Stat { name = 1; value = 2 } and keeps only user traffic counters.
-func DecodeUsers(b []byte) (map[string]spec.Traffic, error) {
+func DecodeUsers(b []byte) (map[string]spec.Traffic, error) { return decodeKind(b, "user") }
+
+func decodeKind(b []byte, kind string) (map[string]spec.Traffic, error) {
 	out := map[string]spec.Traffic{}
 	for len(b) > 0 {
 		num, typ, n := protowire.ConsumeTag(b)
@@ -62,7 +83,7 @@ func DecodeUsers(b []byte) (map[string]spec.Traffic, error) {
 			return nil, err
 		}
 		parts := strings.Split(name, ">>>")
-		if len(parts) != 4 || parts[0] != "user" || parts[2] != "traffic" {
+		if len(parts) != 4 || parts[0] != kind || parts[2] != "traffic" {
 			continue
 		}
 		t := out[parts[1]]

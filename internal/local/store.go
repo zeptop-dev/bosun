@@ -863,6 +863,14 @@ func (s *Store) Report(ctx context.Context, rep agentproto.Report) (bool, error)
 	if dayUp+dayDown > 0 {
 		s.addHistory(now, dayUp, dayDown)
 	}
+	for tag, t := range rep.Inbounds {
+		for i := range s.st.Inbounds {
+			if s.st.Inbounds[i].Tag == tag {
+				s.st.Inbounds[i].Up += t.Up
+				s.st.Inbounds[i].Down += t.Down
+			}
+		}
+	}
 	s.online = rep.Online
 	if s.online == nil {
 		s.online = map[string][]string{}
@@ -880,7 +888,7 @@ func (s *Store) Report(ctx context.Context, rep agentproto.Report) (bool, error)
 	if changed {
 		return true, s.commit()
 	}
-	if len(rep.Traffic) > 0 {
+	if len(rep.Traffic) > 0 || len(rep.Inbounds) > 0 {
 		return false, s.saveLocked()
 	}
 	return false, nil

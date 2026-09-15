@@ -194,6 +194,9 @@ type Inbound struct {
 	DisplayPort int    `json:"display_port,omitempty"`
 	// IngressID picks a line ingress; "" = the node's direct entry.
 	IngressID string `json:"ingress_id,omitempty"`
+	// Up/Down are lifetime byte counters for this inbound (xray/sing-box).
+	Up   int64 `json:"up,omitempty"`
+	Down int64 `json:"down,omitempty"`
 }
 
 // User is a local subscriber with its own accounting.
