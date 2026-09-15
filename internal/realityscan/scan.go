@@ -12,6 +12,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,28 +20,50 @@ import (
 	"time"
 )
 
-// DefaultCandidates are large self-hosted sites that passed the REALITY
-// requirements and no CDN check when probed on 2026-09-14. Sites on
-// Akamai, Fastly, CloudFront or Cloudflare (intel, ibm, amd, nvidia,
-// amazon, mozilla, python.org, ...) are deliberately absent, as is
-// Microsoft, whose REALITY authenticated gate fails on current xray.
+// DefaultCandidates are big self-hosted sites that passed every check
+// (TLS 1.3, h2, X25519, trusted chain, no CDN, no cross-host redirect)
+// when probed on 2026-09-14, spread over the US, Japan and Europe so a
+// node anywhere finds a nearby one. Deliberately absent: anything Google
+// (a node that answers as Google draws attention), Microsoft (its REALITY
+// gate fails on current xray, and it is overused), the community classic
+// www.lovelive-anime.jp (now on CloudFront, and fingerprinted by overuse),
+// and every site fronted by Cloudflare / Akamai / Fastly / CloudFront
+// (nvidia, amd, intel, ibm, amazon, aws, tesla, mozilla, python.org ...).
 var DefaultCandidates = []string{
+	// Apple runs its own edge.
 	"www.apple.com",
 	"www.icloud.com",
 	"gateway.icloud.com",
-	"itunes.apple.com",
+	"swdist.apple.com",
+	// Other large self-hosted companies.
 	"www.samsung.com",
-	"www.oracle.com",
 	"www.sony.com",
-	"dl.google.com",
 	"www.yahoo.com",
 	"www.adobe.com",
 	"www.salesforce.com",
-	"www.wikipedia.org",
-	"www.debian.org",
-	"www.ubuntu.com",
+	"www.oracle.com",
+	"www.westerndigital.com",
+	"www.crucial.com",
 	"www.msi.com",
-	"www.mikrotik.com",
+	"www.shell.com",
+	"www.unilever.com",
+	// Japan.
+	"www.yahoo.co.jp",
+	"www.softbank.jp",
+	"www.rakuten.co.jp",
+	"www.muji.com",
+	"www.kyocera.co.jp",
+	// Europe.
+	"www.bmw.com",
+	"www.mercedes-benz.com",
+	"www.debian.org",
+	"www.opensuse.org",
+	"www.libreoffice.org",
+	"www.videolan.org",
+	// Universities and foundations with their own hosting.
+	"www.wikipedia.org",
+	"www.harvard.edu",
+	"www.stanford.edu",
 }
 
 // Result is one probed target.
@@ -64,13 +87,19 @@ type Result struct {
 	// advertise as SNI besides the host itself.
 	ServerNames []string `json:"server_names,omitempty"`
 	LatencyMs   int      `json:"latency_ms"`
+	// HTTPStatus is the answer to HEAD / (0 = not checked); Redirect is
+	// its Location when it redirects. A target that bounces to another
+	// host makes a poor dest: probes that follow the redirect end up on
+	// a different SNI than the inbound advertises.
+	HTTPStatus int    `json:"http_status,omitempty"`
+	Redirect   string `json:"redirect,omitempty"`
 }
 
 // Options tune a scan.
 type Options struct {
 	Port        int           // default 443
 	Timeout     time.Duration // per target, default 6s
-	Concurrency int           // default 8
+	Concurrency int           // default 12
 	// Dial overrides the TCP dial (tests, line-bound sources).
 	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
 	// SkipHTTP disables the HTTP header check used for CDN detection.
@@ -84,7 +113,7 @@ func Scan(ctx context.Context, hosts []string, o Options) []Result {
 		hosts = DefaultCandidates
 	}
 	if o.Concurrency <= 0 {
-		o.Concurrency = 8
+		o.Concurrency = 12
 	}
 	out := make([]Result, len(hosts))
 	sem := make(chan struct{}, o.Concurrency)
@@ -208,8 +237,15 @@ func Probe(ctx context.Context, host string, o Options) Result {
 			res.CDN = cdnByIssuer(leaf)
 		}
 	}
-	if res.CDN == "" && !o.SkipHTTP {
-		res.CDN = cdnByHTTP(ctx, host, addr, dial)
+	if !o.SkipHTTP {
+		cdn, status, loc := headRequest(ctx, host, addr, dial)
+		if res.CDN == "" {
+			res.CDN = cdn
+		}
+		res.HTTPStatus = status
+		if status >= 300 && status < 400 && loc != "" && !sameHost(loc, host) {
+			res.Redirect = loc
+		}
 	}
 
 	switch {
@@ -226,6 +262,8 @@ func Probe(ctx context.Context, host string, o Options) Result {
 		}
 	case res.CDN != "":
 		res.Reason = "hosted on " + res.CDN + " CDN: scanners would relay traffic through this node"
+	case res.Redirect != "":
+		res.Reason = "redirects to " + res.Redirect + ": use the final host instead"
 	default:
 		res.Feasible = true
 	}
@@ -261,8 +299,19 @@ func hostMatches(leaf *x509.Certificate, host string) bool {
 	return leaf.VerifyHostname(host) == nil
 }
 
-// cdnByHTTP asks the site for its headers over a fresh HTTP/1.1 connection.
-func cdnByHTTP(ctx context.Context, host, addr string, dial func(context.Context, string, string) (net.Conn, error)) string {
+// sameHost reports whether a redirect Location stays on host (scheme or
+// path changes only).
+func sameHost(loc, host string) bool {
+	u, err := url.Parse(loc)
+	if err != nil || u.Host == "" {
+		return true // relative redirect
+	}
+	return strings.EqualFold(u.Hostname(), host)
+}
+
+// headRequest asks the site for its headers over a fresh HTTP/1.1
+// connection: CDN fingerprints, status and redirect target.
+func headRequest(ctx context.Context, host, addr string, dial func(context.Context, string, string) (net.Conn, error)) (cdn string, status int, location string) {
 	tr := &http.Transport{
 		DialContext:       func(ctx context.Context, network, _ string) (net.Conn, error) { return dial(ctx, network, addr) },
 		TLSClientConfig:   &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12},
@@ -273,13 +322,13 @@ func cdnByHTTP(ctx context.Context, host, addr string, dial func(context.Context
 	client := &http.Client{Transport: tr, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, "https://"+host+"/", nil)
 	if err != nil {
-		return ""
+		return "", 0, ""
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return "", 0, ""
 	}
 	resp.Body.Close()
-	return cdnByHeaders(resp.Header)
+	return cdnByHeaders(resp.Header), resp.StatusCode, resp.Header.Get("Location")
 }
