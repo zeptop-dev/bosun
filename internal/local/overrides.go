@@ -3,6 +3,7 @@ package local
 import (
 	"encoding/json"
 	"errors"
+	"github.com/zeptop-dev/bosun/internal/core"
 	"strings"
 )
 
@@ -29,9 +30,8 @@ func (s *Store) SetOverrides(in map[string]string) error {
 		if raw == "" {
 			continue
 		}
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(raw), &obj); err != nil {
-			return errors.New(c + ": override must be a JSON object: " + err.Error())
+		if err := core.CheckOverride(c, json.RawMessage(raw)); err != nil {
+			return errors.New(c + ": " + err.Error())
 		}
 		clean[c] = raw
 	}

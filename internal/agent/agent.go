@@ -533,6 +533,12 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	}
 	inbounds := make([]spec.Inbound, 0, len(a.node.Inbounds))
 	for _, ib := range a.node.Inbounds {
+		// Tags become file names and nft comments; a panel may not push
+		// anything that is not a plain identifier.
+		if !spec.ValidTag(ib.Tag) || !spec.ValidListen(ib.Listen) {
+			a.log.Warn("inbound skipped", "inbound", ib.Tag, "reason", "invalid tag or listen address")
+			continue
+		}
 		if _, skip := skipped[ib.Tag]; skip {
 			a.log.Warn("inbound skipped", "inbound", ib.Tag, "reason", skipped[ib.Tag])
 			continue

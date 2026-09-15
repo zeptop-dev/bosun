@@ -10,6 +10,7 @@ import (
 	"net"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -218,6 +219,15 @@ func validate(forwards []spec.Forward) error {
 	for _, f := range forwards {
 		if f.Tag == "" {
 			return fmt.Errorf("forward: tag is required")
+		}
+		if !spec.ValidTag(f.Tag) {
+			return fmt.Errorf("forward %q: tag may only contain letters, digits, . _ : - (max 64)", f.Tag)
+		}
+		if !spec.ValidListen(f.Listen) {
+			return fmt.Errorf("forward %q: listen must be an IP address", f.Tag)
+		}
+		if !spec.Plain(f.Target) || strings.ContainsAny(f.Target, "\"' ") {
+			return fmt.Errorf("forward %q: target contains invalid characters", f.Tag)
 		}
 		if f.Port <= 0 || f.Port > 65535 {
 			return fmt.Errorf("forward %q: invalid port %d", f.Tag, f.Port)

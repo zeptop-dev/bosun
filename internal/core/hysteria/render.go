@@ -69,7 +69,7 @@ func render(inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]by
 		}
 		cfg["bandwidth"] = bw
 	}
-	if err := core.ApplyOverride(cfg, opt.Override); err != nil {
+	if err := core.ApplyOverride("hysteria", cfg, opt.Override); err != nil {
 		return nil, nil, fmt.Errorf("hysteria: %w", err)
 	}
 	out, err := yaml.Marshal(cfg)
