@@ -225,7 +225,10 @@
     "fallbackRate": "Лимит (КБ/с)",
     "realityTarget": "Цель REALITY",
     "realityTargetHint": "Текущая цель: {{host}}. Нужны TLS 1.3 + h2 и не Cloudflare или другой CDN.",
-    "realityNeedsNode": "Сначала сохраните узел, чтобы проверять с него."
+    "realityNeedsNode": "Сначала сохраните узел, чтобы проверять с него.",
+    "tlsHint": "REALITY не требует сертификата; TLS требует сертификат для имени",
+    "generateKeypair": "Сгенерировать пару ключей",
+    "generateKey": "Сгенерировать ключ"
   },
   "ingress": {
     "title": "Выделенные линии",

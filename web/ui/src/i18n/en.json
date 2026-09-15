@@ -225,7 +225,10 @@
     "fallbackRate": "Limit (KB/s)",
     "realityTarget": "REALITY target",
     "realityTargetHint": "Current target: {{host}}. It must speak TLS 1.3 + h2 and not sit on Cloudflare or another CDN.",
-    "realityNeedsNode": "Save the node first to probe from it."
+    "realityNeedsNode": "Save the node first to probe from it.",
+    "tlsHint": "REALITY needs no certificate; TLS needs one for the name",
+    "generateKeypair": "Generate key pair",
+    "generateKey": "Generate key"
   },
   "ingress": {
     "title": "Line ingresses",
