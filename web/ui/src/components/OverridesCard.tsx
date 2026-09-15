@@ -2,7 +2,6 @@ import { Button, Card, Group, JsonInput, SimpleGrid, Text, Title } from '@mantin
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../lib/api'
 import { toast } from '../lib/notify'
 
 const cores = ['xray', 'singbox', 'hysteria', 'mita'] as const
