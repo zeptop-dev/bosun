@@ -468,7 +468,18 @@
     "decoyUpstream": "上游站點（可選）",
     "decoyUpstreamHint": "留空用內建的占位頁面；填 http(s) 位址則反向代理到你自己的網站",
     "decoyReady": "站點已就緒，監聽 127.0.0.1:{{port}}",
-    "decoyPending": "正在申請憑證…"
+    "decoyPending": "正在申請憑證…",
+    "access": "存取控制",
+    "allowCidrs": "面板 IP 白名單",
+    "allowCidrsHint": "只允許這些 IP 或網段登入和呼叫 API；留空不限制。儲存時會拒絕把你自己排除在外的名單。",
+    "extraLinks": "訂閱附加節點",
+    "extraLinksHint": "每行一條分享連結（vless://、ss://、hysteria2:// 等），會附加到每個使用者的訂閱裡，適合把別處的節點合併進來。",
+    "telegram": "Telegram 通知",
+    "telegramHint": "體檢出現新的失敗項時發訊息到指定聊天；給機器人發 /status 查看節點狀態，發 /id 取得聊天 ID。",
+    "telegramToken": "機器人 Token",
+    "telegramChat": "聊天 ID",
+    "telegramChatHint": "給機器人發 /id 就能拿到",
+    "telegramNotify": "傳送告警"
   },
   "logs": {
     "title": "日誌",

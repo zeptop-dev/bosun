@@ -111,7 +111,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		"stats": m{},
 		"policy": m{
 			"levels": m{"0": m{"statsUserUplink": true, "statsUserDownlink": true, "statsUserOnline": true}},
-			"system": m{"statsInboundUplink": false, "statsInboundDownlink": false},
+			"system": m{"statsInboundUplink": true, "statsInboundDownlink": true, "statsOutboundUplink": true, "statsOutboundDownlink": true},
 		},
 		"inbounds":  ins,
 		"outbounds": outs,

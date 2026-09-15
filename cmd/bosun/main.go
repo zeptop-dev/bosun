@@ -35,6 +35,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/panel/captain"
 	"github.com/zeptop-dev/bosun/internal/panel/xboard"
+	"github.com/zeptop-dev/bosun/internal/telegram"
 	"github.com/zeptop-dev/bosun/internal/ui"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
@@ -334,7 +335,11 @@ func cmdRun(args []string) error {
 	}
 	settings := store.Settings()
 	panelTLS := cfg.Web.Cert != "" || settings.PanelDomain != ""
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc,
+	bot := &telegram.Bot{Log: log, Settings: func() telegram.Settings {
+		st := store.Settings()
+		return telegram.Settings{Token: st.TelegramToken, ChatID: st.TelegramChatID, Notify: st.TelegramNotify}
+	}}
+	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot,
 		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
@@ -395,6 +400,7 @@ type supervisor struct {
 	upgrade func(string)
 	certs   *certs.Manager
 	decoy   *decoy.Server
+	bot     *telegram.Bot
 	onAgent func(*agent.Agent)
 
 	mu      sync.Mutex
@@ -435,6 +441,10 @@ func (s *supervisor) driver() (panel.Driver, error) {
 }
 
 func (s *supervisor) run(ctx context.Context) error {
+	if s.bot != nil {
+		s.bot.Status = s.telegramStatus
+		go s.bot.Run(ctx)
+	}
 	for {
 		d, err := s.driver()
 		if err != nil {
@@ -449,6 +459,15 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Certs = s.certs
 		ag.Decoy = s.decoy
 		ag.WARPAccount, ag.SaveWARP = s.store.WARP, s.store.SetWARP
+		if s.bot != nil {
+			ag.Alert = func(text string) {
+				actx, done := context.WithTimeout(context.Background(), 20*time.Second)
+				defer done()
+				if err := s.bot.Notify(actx, text); err != nil {
+					s.log.Warn("telegram alert", "err", err)
+				}
+			}
+		}
 		if s.onAgent != nil {
 			s.onAgent(ag)
 		}
@@ -672,4 +691,31 @@ func cmdAdmin(args []string) error {
 	fmt.Printf("username: %s\npassword: %s\n", store.Username(), initial)
 	fmt.Println("restart bosun if it is running so the new password is loaded")
 	return nil
+}
+
+// telegramStatus is the /status reply: mode, cores, users, uptime.
+func (s *supervisor) telegramStatus(ctx context.Context) string {
+	rt := s.store.Runtime()
+	mode, _, _ := s.store.Mode()
+	var b strings.Builder
+	fmt.Fprintf(&b, "<b>bosun</b> %s · %s\n", version, mode)
+	users := s.store.ListUsers()
+	online := 0
+	for _, u := range users {
+		if len(rt.Online[u.UUID]) > 0 {
+			online++
+		}
+	}
+	fmt.Fprintf(&b, "users: %d (%d online) · inbounds: %d\n", len(users), online, len(s.store.Inbounds()))
+	for name, c := range rt.Cores {
+		state := "stopped"
+		if c.Running {
+			state = "running"
+		}
+		fmt.Fprintf(&b, "%s: %s\n", name, state)
+	}
+	if !rt.LastReport.IsZero() {
+		fmt.Fprintf(&b, "last report: %s ago", time.Since(rt.LastReport).Round(time.Second))
+	}
+	return b.String()
 }

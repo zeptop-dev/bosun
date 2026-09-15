@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Group, PasswordInput, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core'
+import { NumberInput, Textarea, TagsInput, Alert, Badge, Button, Card, Group, PasswordInput, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api.get<Settings>('/api/settings') })
   const status = useQuery({ queryKey: ['status'], queryFn: () => api.get<Status>('/api/status'), refetchInterval: 5_000 })
   const cores = useQuery({ queryKey: ['cores'], queryFn: () => api.get<CoreRelease[]>('/api/cores') })
-  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http' } })
+  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http', panel_allow_cidrs: [], extra_links: '', telegram_token: '', telegram_chat_id: 0, telegram_notify: true } })
   useEffect(() => { if (settings.data) sform.setValues(settings.data) }, [settings.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const saveSettings = useMutation({ mutationFn: (v: Settings) => api.put('/api/settings', v), onSuccess: () => { toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['links'] }) }, onError: toast.err })
   const aform = useForm({ initialValues: { Username: me?.username ?? 'admin', Password: '', Confirm: '' }, validate: { Confirm: (v, all) => (v === all.Password ? null : t('settings.mismatch')) } })
@@ -62,6 +62,16 @@ export default function SettingsPage() {
                 {s?.agent?.decoy && <Text size="xs" c={s.agent.decoy.error ? 'red' : s.agent.decoy.cert_ready ? 'teal' : 'orange'}>{s.agent.decoy.error ? s.agent.decoy.error : s.agent.decoy.cert_ready ? t('settings.decoyReady', { port: s.agent.decoy.port }) : t('settings.decoyPending')}</Text>}
               </>
             )}
+            <Title order={6} mt="xs">{t('settings.access')}</Title>
+            <TagsInput label={t('settings.allowCidrs')} description={t('settings.allowCidrsHint')} placeholder="203.0.113.0/24" value={sform.values.panel_allow_cidrs ?? []} onChange={(v) => sform.setFieldValue('panel_allow_cidrs', v)} />
+            <Textarea label={t('settings.extraLinks')} description={t('settings.extraLinksHint')} autosize minRows={2} placeholder="vless://… (one per line)" {...sform.getInputProps('extra_links')} />
+            <Title order={6} mt="xs">{t('settings.telegram')}</Title>
+            <Text size="xs" c="dimmed">{t('settings.telegramHint')}</Text>
+            <Group grow align="flex-start">
+              <PasswordInput label={t('settings.telegramToken')} placeholder="123456:ABC…" {...sform.getInputProps('telegram_token')} />
+              <NumberInput label={t('settings.telegramChat')} description={t('settings.telegramChatHint')} hideControls value={sform.values.telegram_chat_id || ''} onChange={(v) => sform.setFieldValue('telegram_chat_id', Number(v) || 0)} />
+            </Group>
+            <Switch label={t('settings.telegramNotify')} {...sform.getInputProps('telegram_notify', { type: 'checkbox' })} />
             <Group justify="flex-end"><Button type="submit" size="xs" loading={saveSettings.isPending}>{t('common.save')}</Button></Group>
           </Stack></form>
         </Card>

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { api, type Inbound, type Outbound, type Remote, type Routing } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { toast } from '../lib/notify'
+import { bytes } from '../lib/format'
 import { WarpCard, warpTemplate, type WarpAccount } from '../components/WarpCard'
 import { PageHeader } from '../components/PageHeader'
 
@@ -48,7 +49,7 @@ export default function RoutingPage({ embedded }: { embedded?: boolean }) {
           <Text size="sm" fw={600}>{t('routing.outbounds')}</Text>
           {nr.outbounds.map((o, i) => (
             <Group key={i} justify="space-between" wrap="nowrap">
-              <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}><Code>{o.tag}</Code><Text size="sm" truncate>{describe(o)}</Text>{o.proxy_tag && <Badge size="xs" variant="light">{t('routing.via', { tag: o.proxy_tag })}</Badge>}{nr.default_outbound === o.tag && <Badge size="xs" color="teal">{t('routing.isDefault')}</Badge>}</Group>
+              <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}><Code>{o.tag}</Code><Text size="sm" truncate>{describe(o)}</Text>{q.data?.traffic?.[o.tag] && <Text size="xs" c="dimmed">{bytes(q.data.traffic[o.tag].up + q.data.traffic[o.tag].down)}</Text>}{o.proxy_tag && <Badge size="xs" variant="light">{t('routing.via', { tag: o.proxy_tag })}</Badge>}{nr.default_outbound === o.tag && <Badge size="xs" color="teal">{t('routing.isDefault')}</Badge>}</Group>
               <Group gap={4} wrap="nowrap">
                 <Select size="xs" w={150} placeholder={t('routing.chain')} disabled={readOnly} data={[{ value: '', label: t('routing.noChain') }, ...tags.filter((x) => x !== o.tag).map((x) => ({ value: x, label: t('routing.via', { tag: x }) }))]} value={o.proxy_tag ?? ''} allowDeselect={false} onChange={(v) => setNr((cur) => ({ ...cur, outbounds: cur.outbounds.map((x, j) => (j === i ? { ...x, proxy_tag: v || undefined } : x)) }))} />
                 {!readOnly && <ActionIcon variant="subtle" color="red" onClick={() => setNr((cur) => ({ ...cur, outbounds: cur.outbounds.filter((_, j) => j !== i), routes: cur.routes.filter((r) => r.value !== o.tag), default_outbound: cur.default_outbound === o.tag ? '' : cur.default_outbound }))}><IconTrash size={14} /></ActionIcon>}

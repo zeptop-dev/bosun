@@ -66,7 +66,7 @@ export interface Status {
   total_up: number; total_down: number; history: { day: number; up: number; down: number }[]; last_report: string
   certs: CertStatus[]; pings?: Ping[]
 }
-export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string; decoy_enabled: boolean; decoy_domain: string; decoy_upstream: string; decoy_acme: string }
+export interface Settings { public_host: string; node_name: string; acme_email: string; cloudflare_token: string; panel_domain: string; panel_acme: string; decoy_enabled: boolean; decoy_domain: string; decoy_upstream: string; decoy_acme: string; panel_allow_cidrs: string[]; extra_links: string; telegram_token: string; telegram_chat_id: number; telegram_notify: boolean }
 export interface CertStatus { domain: string; method: string; not_after: string; error?: string; updated: string }
 export interface Link { tag: string; name: string; uri: string }
 export interface CoreRelease { Core: string; Version: string; Status: string; Note: string; Installed: boolean }
@@ -84,7 +84,7 @@ export interface IngressInput { Name: string; BindIP: string; LineIP: string; En
 export interface Remote { host: string; port: number; uuid?: string; password?: string; username?: string; settings: { protocol: string } }
 export interface Outbound { tag: string; protocol?: string; settings?: Record<string, unknown>; proxy_tag?: string; remote?: Remote; warp?: { from_node?: boolean }; balancer?: { members: string[]; strategy?: string } }
 export interface Rule { match: string[]; action: string; value?: string }
-export interface Routing { outbounds: Outbound[]; routes: Rule[]; default_outbound: string; dns?: string[] }
+export interface Routing { outbounds: Outbound[]; routes: Rule[]; default_outbound: string; dns?: string[]; traffic?: Record<string, { up: number; down: number }> }
 // Operator-supplied certificates handed to the cores.
 export interface Certificate { domain: string; names: string[]; not_after: string; issuer: string }
 // Probe: carrier latency, tasks and line RTT.

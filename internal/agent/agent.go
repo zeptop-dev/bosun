@@ -53,6 +53,8 @@ type Agent struct {
 	Certs *certs.Manager
 	// Decoy serves the node's own HTTPS site for REALITY to steal; nil disables.
 	Decoy *decoy.Server
+	// Alert delivers an operator notification (Telegram); nil = none.
+	Alert func(text string)
 	// WARPAccount / SaveWARP read and persist the node's Cloudflare WARP
 	// identity (local store); nil disables from_node WARP outbounds.
 	WARPAccount func() *spec.WARPAccount
@@ -628,6 +630,28 @@ func (a *Agent) report(ctx context.Context) bool {
 			perInbound[tag] = cur
 		}
 	}
+	perOutbound := map[string]spec.Traffic{}
+	for _, name := range a.reg.Names() {
+		c, _ := a.reg.Get(name)
+		os, ok := c.(core.OutboundStatser)
+		if !ok || !c.Running() {
+			continue
+		}
+		stats, err := os.OutboundStats(ctx, true)
+		if err != nil {
+			a.log.Debug("outbound stats failed", "core", name, "err", err)
+			continue
+		}
+		for tag, t := range stats {
+			if t.Up == 0 && t.Down == 0 || tag == "api" || tag == "block" {
+				continue
+			}
+			cur := perOutbound[tag]
+			cur.Up += t.Up
+			cur.Down += t.Down
+			perOutbound[tag] = cur
+		}
+	}
 	host := sysinfo.Snapshot(ctx)
 
 	if rep, ok := a.driver.(panel.Reporter); ok {
@@ -635,6 +659,9 @@ func (a *Agent) report(ctx context.Context) bool {
 		full.Jobs = a.takeJobResults()
 		if len(perInbound) > 0 {
 			full.Inbounds = perInbound
+		}
+		if len(perOutbound) > 0 {
+			full.Outbounds = perOutbound
 		}
 		changed, err := rep.Report(ctx, full)
 		if err != nil {

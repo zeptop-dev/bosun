@@ -468,7 +468,18 @@
     "decoyUpstream": "Upstream (optional)",
     "decoyUpstreamHint": "Blank serves the built-in placeholder page; an http(s) URL is reverse-proxied",
     "decoyReady": "Site ready on 127.0.0.1:{{port}}",
-    "decoyPending": "Requesting certificate…"
+    "decoyPending": "Requesting certificate…",
+    "access": "Access control",
+    "allowCidrs": "Panel IP allow-list",
+    "allowCidrsHint": "Only these addresses or networks may sign in or call the API; blank = anyone. A list that would lock you out is refused.",
+    "extraLinks": "Extra subscription nodes",
+    "extraLinksHint": "One share link per line (vless://, ss://, hysteria2://, …), appended to every user's subscription: merge nodes hosted elsewhere.",
+    "telegram": "Telegram alerts",
+    "telegramHint": "Messages the chat when the doctor finds new failures; send /status to the bot for a summary, /id to learn the chat id.",
+    "telegramToken": "Bot token",
+    "telegramChat": "Chat id",
+    "telegramChatHint": "Send /id to the bot to get it",
+    "telegramNotify": "Send alerts"
   },
   "logs": {
     "title": "Logs",

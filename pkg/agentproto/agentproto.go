@@ -89,6 +89,8 @@ type Report struct {
 	// Inbounds is traffic per inbound tag since the last report (cores
 	// that count it: xray, sing-box).
 	Inbounds map[string]spec.Traffic `json:"inbounds,omitempty"`
+	// Outbounds is traffic per outbound tag since the last report.
+	Outbounds map[string]spec.Traffic `json:"outbounds,omitempty"`
 }
 
 // DoctorCheck is one verdict of the node's self-check.

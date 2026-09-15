@@ -468,7 +468,18 @@
     "decoyUpstream": "アップストリーム（任意）",
     "decoyUpstreamHint": "空なら内蔵ページ、http(s) URL ならリバースプロキシ",
     "decoyReady": "サイト稼働中 127.0.0.1:{{port}}",
-    "decoyPending": "証明書を取得中…"
+    "decoyPending": "証明書を取得中…",
+    "access": "アクセス制御",
+    "allowCidrs": "パネル IP 許可リスト",
+    "allowCidrsHint": "これらのアドレスまたはネットワークだけがログインと API 呼び出しを行えます。空なら制限なし。自分を締め出すリストは拒否されます。",
+    "extraLinks": "サブスクリプション追加ノード",
+    "extraLinksHint": "1 行 1 共有リンク（vless://、ss://、hysteria2:// など）。全ユーザーのサブスクリプションに追加されます。",
+    "telegram": "Telegram 通知",
+    "telegramHint": "ドクターが新しい失敗を検出したらチャットに通知。ボットに /status で状態、/id でチャット ID。",
+    "telegramToken": "ボットトークン",
+    "telegramChat": "チャット ID",
+    "telegramChatHint": "ボットに /id を送ると分かります",
+    "telegramNotify": "アラートを送信"
   },
   "logs": {
     "title": "ログ",
