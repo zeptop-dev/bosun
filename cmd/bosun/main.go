@@ -35,6 +35,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/panel/captain"
 	"github.com/zeptop-dev/bosun/internal/panel/xboard"
+	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/internal/telegram"
 	"github.com/zeptop-dev/bosun/internal/ui"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
@@ -314,6 +315,7 @@ func cmdRun(args []string) error {
 	defer cm.Stop()
 	dc := decoy.New(cm, log)
 	defer dc.Stop()
+	shp := &shaper.Shaper{}
 
 	// Headless managed mode without a web panel: the original single agent.
 	if e.driver != nil && cfg.Web == nil {
@@ -322,6 +324,7 @@ func cmdRun(args []string) error {
 		ag.Upgrade = upgradeHook(log, upd)
 		ag.Certs = cm
 		ag.Decoy = dc
+		ag.Shaper = shp
 		current.ag = ag
 		return ag.Run(ctx)
 	}
@@ -339,7 +342,7 @@ func cmdRun(args []string) error {
 		st := store.Settings()
 		return telegram.Settings{Token: st.TelegramToken, ChatID: st.TelegramChatID, Notify: st.TelegramNotify}
 	}}
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot,
+	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
 		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
@@ -401,6 +404,7 @@ type supervisor struct {
 	certs   *certs.Manager
 	decoy   *decoy.Server
 	bot     *telegram.Bot
+	shaper  *shaper.Shaper
 	onAgent func(*agent.Agent)
 
 	mu      sync.Mutex
@@ -458,6 +462,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Upgrade = s.upgrade
 		ag.Certs = s.certs
 		ag.Decoy = s.decoy
+		ag.Shaper = s.shaper
 		ag.WARPAccount, ag.SaveWARP = s.store.WARP, s.store.SetWARP
 		if s.bot != nil {
 			ag.Alert = func(text string) {

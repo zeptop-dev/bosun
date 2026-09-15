@@ -3,7 +3,10 @@
 // specific core's configuration format.
 package spec
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 // Protocol is a proxy protocol an inbound speaks.
 type Protocol string
@@ -233,6 +236,25 @@ type User struct {
 	DeviceLimit    int    `json:"device_limit,omitempty"`     // 0 = unlimited
 }
 
+// EffectiveSpeedLimit is the user's own limit, else the node default.
+func (n *Node) EffectiveSpeedLimit(u User) int {
+	if u.SpeedLimitMbps > 0 {
+		return u.SpeedLimitMbps
+	}
+	if n != nil {
+		return n.UserSpeedLimitMbps
+	}
+	return 0
+}
+
+// SpeedMark is the firewall mark stamped on a limited user's outbound
+// sockets; SpeedClass the tc class minor id (16-bit) the shaper uses.
+func SpeedMark(userID int64) int64  { return 0x10000 + userID }
+func SpeedClass(userID int64) int64 { return userID%0xfffe + 1 }
+
+// SpeedTag names the per-user marking outbound.
+func SpeedTag(userID int64) string { return "limit-" + strconv.FormatInt(userID, 10) }
+
 // Outbound is an extra egress the panel defines (e.g. relay to a landing node).
 type Outbound struct {
 	Tag      string         `json:"tag,omitempty"`
@@ -334,6 +356,9 @@ type Node struct {
 	// DefaultOutbound is the tag traffic takes when no route rule matches
 	// ("" = direct): the whole node exits through a landing server.
 	DefaultOutbound string `json:"default_outbound,omitempty"`
+	// UserSpeedLimitMbps caps every user without a limit of their own
+	// (0 = none). Enforced by the node's shaper for xray/sing-box traffic.
+	UserSpeedLimitMbps int `json:"user_speed_limit_mbps,omitempty"`
 	// DNS lists resolvers the cores use for outbound names ("1.1.1.1",
 	// "tls://1.1.1.1", "https://dns.google/dns-query"); empty = system.
 	DNS []string `json:"dns,omitempty"`

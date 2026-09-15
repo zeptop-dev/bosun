@@ -400,7 +400,9 @@
     "resetEvery": "Interval (days)",
     "overDevices": "Over device limit",
     "overDevicesUntil": "Paused until {{at}}",
-    "resetsOn": "resets {{date}}"
+    "resetsOn": "resets {{date}}",
+    "speedLimit": "Speed limit (Mbps)",
+    "speedLimitHint": "0 = the node default"
   },
   "forwards": {
     "title": "Forwards",
@@ -479,7 +481,11 @@
     "telegramToken": "Bot token",
     "telegramChat": "Chat id",
     "telegramChatHint": "Send /id to the bot to get it",
-    "telegramNotify": "Send alerts"
+    "telegramNotify": "Send alerts",
+    "speedLimit": "Per-user speed limit (Mbps)",
+    "speedLimitHint": "0 = none. Applies to users without their own limit so one user cannot eat the whole link. Needs Linux with nft and tc; only xray / sing-box protocols are shaped; sing-box restarts once when the limited user set changes.",
+    "shaperOn": "{{n}} users shaped on {{iface}}",
+    "shaperUnsupported": "Limits configured, but this host has no nft/tc (or is not Linux); users run unlimited"
   },
   "logs": {
     "title": "Logs",

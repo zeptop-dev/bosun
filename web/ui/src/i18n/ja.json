@@ -400,7 +400,9 @@
     "resetEvery": "間隔（日）",
     "overDevices": "デバイス数超過",
     "overDevicesUntil": "{{at}} まで停止",
-    "resetsOn": "{{date}} にリセット"
+    "resetsOn": "{{date}} にリセット",
+    "speedLimit": "速度制限（Mbps）",
+    "speedLimitHint": "0 = ノードの既定値"
   },
   "forwards": {
     "title": "転送",
@@ -479,7 +481,11 @@
     "telegramToken": "ボットトークン",
     "telegramChat": "チャット ID",
     "telegramChatHint": "ボットに /id を送ると分かります",
-    "telegramNotify": "アラートを送信"
+    "telegramNotify": "アラートを送信",
+    "speedLimit": "ユーザーごとの速度制限（Mbps）",
+    "speedLimitHint": "0 = 無制限。個別制限のないユーザーに適用し、独占を防ぎます。Linux + nft + tc が必要、xray / sing-box のみ対象。制限ユーザー集合が変わると sing-box は再起動します。",
+    "shaperOn": "{{n}} ユーザーを {{iface}} で制限中",
+    "shaperUnsupported": "制限は設定済みですが nft/tc がない（または Linux ではない）ため未適用"
   },
   "logs": {
     "title": "ログ",

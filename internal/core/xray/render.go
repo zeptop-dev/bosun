@@ -63,6 +63,11 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		kb, _ := json.Marshal(noUsers)
 		keyParts = append(keyParts, string(kb))
 	}
+	// Outbounds, routing, DNS and the per-user limits also need a restart
+	// when they change; users alone can be hot-swapped.
+	if kb, err := json.Marshal(m{"o": node.Outbounds, "r": node.Routes, "d": node.DefaultOutbound, "dns": node.DNS, "lim": limitedUsers(node, users)}); err == nil {
+		keyParts = append(keyParts, string(kb))
+	}
 	sum := sha256.Sum256([]byte(strings.Join(keyParts, "\n")))
 	st.inboundsKey = hex.EncodeToString(sum[:8])
 
@@ -100,6 +105,24 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	outs = append(outs, direct, block)
 	outs = append(outs, custom...)
+	// Per-user speed limits: a marking clone of the default exit per user
+	// plus a rule that sends that user's traffic through it.
+	var limitRules []any
+	for _, lu := range limitedUsers(node, users) {
+		base := m{"protocol": "freedom"}
+		if def != nil {
+			base = cloneM(def)
+		}
+		base["tag"] = spec.SpeedTag(lu.ID)
+		ss, _ := base["streamSettings"].(m)
+		if ss == nil {
+			ss = m{}
+		}
+		ss["sockopt"] = m{"mark": spec.SpeedMark(lu.ID)}
+		base["streamSettings"] = ss
+		outs = append(outs, base)
+		limitRules = append(limitRules, m{"type": "field", "user": []string{lu.Name}, "outboundTag": spec.SpeedTag(lu.ID)})
+	}
 
 	cfg := m{
 		"log": m{"loglevel": opt.LogLevel},
@@ -115,7 +138,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		},
 		"inbounds":  ins,
 		"outbounds": outs,
-		"routing":   m{"domainStrategy": "AsIs", "rules": renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound)},
+		"routing":   m{"domainStrategy": "AsIs", "rules": renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound, limitRules)},
 	}
 	if bal := renderBalancers(node); len(bal) > 0 {
 		cfg["routing"].(m)["balancers"] = bal
@@ -355,7 +378,31 @@ func renderOutbound(o spec.Outbound) m {
 	return out
 }
 
-func renderRoutes(rules []spec.RouteRule, balancers map[string]bool, def string) []any {
+// limitedUsers lists users with an effective speed limit.
+func limitedUsers(node *spec.Node, users []spec.User) []spec.User {
+	var out []spec.User
+	for _, u := range users {
+		if l := node.EffectiveSpeedLimit(u); l > 0 {
+			u.SpeedLimitMbps = l
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+func cloneM(src m) m {
+	out := m{}
+	for k, v := range src {
+		if sub, ok := v.(m); ok {
+			out[k] = cloneM(sub)
+		} else {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func renderRoutes(rules []spec.RouteRule, balancers map[string]bool, def string, limitRules []any) []any {
 	out := []any{
 		m{"type": "field", "inboundTag": []string{"api"}, "outboundTag": "api"},
 	}
@@ -378,6 +425,9 @@ func renderRoutes(rules []spec.RouteRule, balancers map[string]bool, def string)
 		}
 		out = append(out, rule)
 	}
+	// Limited users come after the explicit split rules (those keep their
+	// exits) and before any catch-all.
+	out = append(out, limitRules...)
 	// xray has no "default balancer": a catch-all rule does the job.
 	if def != "" && balancers[def] {
 		out = append(out, m{"type": "field", "network": "tcp,udp", "balancerTag": def})
