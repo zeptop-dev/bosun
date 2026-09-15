@@ -606,11 +606,36 @@ func (a *Agent) report(ctx context.Context) bool {
 	for _, t := range totals {
 		list = append(list, *t)
 	}
+	perInbound := map[string]spec.Traffic{}
+	for _, name := range a.reg.Names() {
+		c, _ := a.reg.Get(name)
+		is, ok := c.(core.InboundStatser)
+		if !ok || !c.Running() {
+			continue
+		}
+		stats, err := is.InboundStats(ctx, true)
+		if err != nil {
+			a.log.Debug("inbound stats failed", "core", name, "err", err)
+			continue
+		}
+		for tag, t := range stats {
+			if t.Up == 0 && t.Down == 0 {
+				continue
+			}
+			cur := perInbound[tag]
+			cur.Up += t.Up
+			cur.Down += t.Down
+			perInbound[tag] = cur
+		}
+	}
 	host := sysinfo.Snapshot(ctx)
 
 	if rep, ok := a.driver.(panel.Reporter); ok {
 		full := a.buildReport(list, host)
 		full.Jobs = a.takeJobResults()
+		if len(perInbound) > 0 {
+			full.Inbounds = perInbound
+		}
 		changed, err := rep.Report(ctx, full)
 		if err != nil {
 			// Counters were already reset; this delta is lost. A persistent

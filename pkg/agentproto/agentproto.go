@@ -86,6 +86,9 @@ type Report struct {
 	Doctor *DoctorReport `json:"doctor,omitempty"`
 	// Jobs are results of State.Jobs finished since the last report.
 	Jobs []JobResult `json:"jobs,omitempty"`
+	// Inbounds is traffic per inbound tag since the last report (cores
+	// that count it: xray, sing-box).
+	Inbounds map[string]spec.Traffic `json:"inbounds,omitempty"`
 }
 
 // DoctorCheck is one verdict of the node's self-check.

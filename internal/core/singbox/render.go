@@ -68,7 +68,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		"experimental": m{
 			"v2ray_api": m{
 				"listen": opt.StatsListen,
-				"stats":  m{"enabled": true, "users": names},
+				"stats":  m{"enabled": true, "users": names, "inbounds": inboundTags(inbounds)},
 			},
 		},
 		"inbounds":  ins,
@@ -388,6 +388,14 @@ func renderWARP(o spec.Outbound) m {
 	out := m{"type": "wireguard", "tag": o.Tag, "mtu": 1280, "address": w.Addresses, "private_key": w.PrivateKey, "peers": []m{peer}}
 	if o.ProxyTag != "" {
 		out["detour"] = o.ProxyTag
+	}
+	return out
+}
+
+func inboundTags(list []spec.Inbound) []string {
+	out := make([]string, 0, len(list))
+	for _, ib := range list {
+		out = append(out, ib.Tag)
 	}
 	return out
 }

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { api, type Inbound, type Ingress } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { toast } from '../lib/notify'
+import { bytes } from '../lib/format'
 import { PageHeader } from '../components/PageHeader'
 import { InboundForm, toValues, type InboundSubmit } from '../components/InboundForm'
 import { clientHost } from '../components/IngressFields'
@@ -45,7 +46,7 @@ export default function InboundsPage() {
       <Card p={0}>
         <Table>
           <Table.Thead><Table.Tr>
-            <Table.Th>{t('inbounds.tag')}</Table.Th><Table.Th>{t('inbounds.protocol')}</Table.Th><Table.Th>{t('inbounds.port')}</Table.Th><Table.Th>{t('inbounds.security')}</Table.Th><Table.Th>{t('inbounds.core')}</Table.Th><Table.Th>{t('inbounds.enabled')}</Table.Th><Table.Th />
+            <Table.Th>{t('inbounds.tag')}</Table.Th><Table.Th>{t('inbounds.protocol')}</Table.Th><Table.Th>{t('inbounds.port')}</Table.Th><Table.Th>{t('inbounds.security')}</Table.Th><Table.Th>{t('inbounds.traffic')}</Table.Th><Table.Th>{t('inbounds.core')}</Table.Th><Table.Th>{t('inbounds.enabled')}</Table.Th><Table.Th />
           </Table.Tr></Table.Thead>
           <Table.Tbody>
             {(q.data ?? []).map((ib) => {
@@ -60,6 +61,7 @@ export default function InboundsPage() {
                       : ib.display_host && <Text size="xs" c="dimmed">→ {ib.display_host}:{ib.display_port || ib.port}</Text>}
                   </Table.Td>
                   <Table.Td>{tlsLabel(ib) && <Badge color={ib.tls?.mode === 2 ? 'grape' : 'blue'}>{tlsLabel(ib)}</Badge>}</Table.Td>
+                  <Table.Td><Text size="xs" c={(ib.up ?? 0) + (ib.down ?? 0) ? undefined : 'dimmed'}>{(ib.up ?? 0) + (ib.down ?? 0) ? bytes((ib.up ?? 0) + (ib.down ?? 0)) : '—'}</Text></Table.Td>
                   <Table.Td><Text size="sm">{ib.assigned_core || ib.core || <Text span c="dimmed">{t('inbounds.coreAuto')}</Text>}</Text></Table.Td>
                   <Table.Td><Badge color={ib.enabled ? 'teal' : 'gray'} style={{ cursor: readOnly ? 'default' : 'pointer' }} onClick={() => !readOnly && toggle.mutate(ib)}>{ib.enabled ? t('common.enabled') : t('common.disabled')}</Badge></Table.Td>
                   <Table.Td><Group gap={4} justify="flex-end" wrap="nowrap">

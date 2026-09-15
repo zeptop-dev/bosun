@@ -243,7 +243,8 @@
     "wgPrivate": "Server private key",
     "wgPublic": "Server public key",
     "wgAddress": "Tunnel network (server address)",
-    "wgAddressHint": "Client addresses are assigned from this network by user id"
+    "wgAddressHint": "Client addresses are assigned from this network by user id",
+    "traffic": "Traffic"
   },
   "ingress": {
     "title": "Line ingresses",

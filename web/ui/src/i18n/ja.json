@@ -243,7 +243,8 @@
     "wgPrivate": "サーバー秘密鍵",
     "wgPublic": "サーバー公開鍵",
     "wgAddress": "トンネルネットワーク（サーバーアドレス）",
-    "wgAddressHint": "クライアントアドレスはこのネットワークからユーザー ID で割り当て"
+    "wgAddressHint": "クライアントアドレスはこのネットワークからユーザー ID で割り当て",
+    "traffic": "トラフィック"
   },
   "ingress": {
     "title": "専用線入口",

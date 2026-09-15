@@ -243,7 +243,8 @@
     "wgPrivate": "서버 개인키",
     "wgPublic": "서버 공개키",
     "wgAddress": "터널 네트워크(서버 주소)",
-    "wgAddressHint": "클라이언트 주소는 이 네트워크에서 사용자 ID 로 배정"
+    "wgAddressHint": "클라이언트 주소는 이 네트워크에서 사용자 ID 로 배정",
+    "traffic": "트래픽"
   },
   "ingress": {
     "title": "전용선 입구",

@@ -147,6 +147,12 @@ func (r *Registry) pick(ib spec.Inbound) (string, error) {
 	return "", fmt.Errorf("inbound %q: no enabled core supports %s over %s (enabled: %v)", ib.Tag, ib.Protocol, ib.TransportType(), enabled)
 }
 
+// InboundStatser is implemented by cores that count traffic per inbound
+// (xray and sing-box through their stats APIs).
+type InboundStatser interface {
+	InboundStats(ctx context.Context, reset bool) (map[string]spec.Traffic, error)
+}
+
 // OnlineTracker is implemented by cores that can report which client IPs
 // each user currently connects from. Not every upstream core exposes this:
 // Xray and the official Hysteria server do, sing-box and mita do not.

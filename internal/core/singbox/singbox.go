@@ -21,6 +21,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/core/grpcraw"
 	"github.com/zeptop-dev/bosun/internal/core/subprocess"
+	"github.com/zeptop-dev/bosun/internal/core/v2stats"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
@@ -194,6 +195,22 @@ func (c *Core) Stats(ctx context.Context, reset bool) (map[string]spec.Traffic, 
 	conn := c.conn
 	c.mu.Unlock()
 	return queryUserStats(ctx, conn, reset)
+}
+
+// InboundStats implements core.InboundStatser.
+func (c *Core) InboundStats(ctx context.Context, reset bool) (map[string]spec.Traffic, error) {
+	c.mu.Lock()
+	if c.conn == nil {
+		conn, err := grpcraw.Dial(c.opt.StatsListen)
+		if err != nil {
+			c.mu.Unlock()
+			return nil, err
+		}
+		c.conn = conn
+	}
+	conn := c.conn
+	c.mu.Unlock()
+	return v2stats.QueryInbounds(ctx, conn, queryStatsMethod, "inbound>>>", reset)
 }
 
 // effectiveLogLevel returns the sing-box log level to run with: the
