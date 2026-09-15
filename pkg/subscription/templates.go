@@ -18,6 +18,11 @@ import (
 //	{{proxies}}      INI formats (surge, surfboard, loon, qx): the rendered server lines
 //	{{proxy_names}}  INI formats: all names comma-joined; YAML formats (clash,
 //	                 stash): a list entry inside any proxy-group's "proxies"
+//
+// {{proxy_names}} takes an optional filter so a group can hold a subset:
+// {{proxy_names:tag=hk}} keeps servers carrying that entry tag and
+// {{proxy_names:match=RE}} keeps names matching the (case-insensitive)
+// regular expression, e.g. {{proxy_names:match=HK|香港|🇭🇰}}.
 //	                 that expands to every server name
 //
 // Loon and Quantumult X default to a bare node list because their remote
@@ -53,13 +58,64 @@ const (
 	phNames   = "{{proxy_names}}"
 )
 
+// Named is a rendered server as the placeholders see it.
+type Named struct {
+	Name string
+	Tags []string
+}
+
+var namesPH = regexp.MustCompile(`\{\{proxy_names(?::(tag|match)=([^}]*))?\}\}`)
+
+// expandNames resolves one {{proxy_names...}} placeholder; ok is false when
+// s is not a placeholder. A filter nobody matches yields an empty list.
+func expandNames(s string, names []Named) ([]string, bool) {
+	m := namesPH.FindStringSubmatch(s)
+	if m == nil || m[0] != s {
+		return nil, false
+	}
+	out := []string{}
+	var re *regexp.Regexp
+	if m[1] == "match" {
+		var err error
+		if re, err = regexp.Compile("(?i)" + m[2]); err != nil {
+			return out, true
+		}
+	}
+	for _, n := range names {
+		switch m[1] {
+		case "tag":
+			if !hasTag(n.Tags, m[2]) {
+				continue
+			}
+		case "match":
+			if !re.MatchString(n.Name) {
+				continue
+			}
+		}
+		out = append(out, n.Name)
+	}
+	return out, true
+}
+
+func hasTag(tags []string, want string) bool {
+	for _, t := range tags {
+		if strings.EqualFold(strings.TrimSpace(t), strings.TrimSpace(want)) {
+			return true
+		}
+	}
+	return false
+}
+
 // applyINI fills an INI-like template with rendered lines and names.
-func applyINI(tpl, format, lines string, names []string) []byte {
+func applyINI(tpl, format, lines string, names []Named) []byte {
 	if tpl == "" {
 		tpl = DefaultTemplate(format)
 	}
 	out := strings.ReplaceAll(tpl, phProxies, lines)
-	out = strings.ReplaceAll(out, phNames, strings.Join(names, ", "))
+	out = namesPH.ReplaceAllStringFunc(out, func(ph string) string {
+		list, _ := expandNames(ph, names)
+		return strings.Join(list, ", ")
+	})
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
@@ -68,7 +124,7 @@ func applyINI(tpl, format, lines string, names []string) []byte {
 
 // applyYAML fills a YAML skeleton: proxies replaces the "proxies" key and
 // every "{{proxy_names}}" entry in a proxy-group's list expands in place.
-func applyYAML(tpl, format string, proxies []any, names []string) ([]byte, error) {
+func applyYAML(tpl, format string, proxies []any, names []Named) ([]byte, error) {
 	if tpl == "" {
 		tpl = DefaultTemplate(format)
 	}
@@ -95,11 +151,13 @@ func applyYAML(tpl, format string, proxies []any, names []string) ([]byte, error
 			}
 			expanded := make([]any, 0, len(list)+len(names))
 			for _, item := range list {
-				if s, ok := item.(string); ok && s == phNames {
-					for _, n := range names {
-						expanded = append(expanded, n)
+				if s, ok := item.(string); ok {
+					if list, ok := expandNames(s, names); ok {
+						for _, n := range list {
+							expanded = append(expanded, n)
+						}
+						continue
 					}
-					continue
 				}
 				expanded = append(expanded, item)
 			}

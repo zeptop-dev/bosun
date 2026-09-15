@@ -24,16 +24,16 @@ func (Clash) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 	return applyYAML(tpl, "clash", proxies, names)
 }
 
-func clashProxies(lines []Line) ([]any, []string) {
+func clashProxies(lines []Line) ([]any, []Named) {
 	proxies := []any{}
-	names := []string{}
+	names := []Named{}
 	for _, l := range lines {
 		p := clashProxy(l)
 		if p == nil {
 			continue
 		}
 		proxies = append(proxies, p)
-		names = append(names, l.Name)
+		names = append(names, Named{Name: l.Name, Tags: l.Tags})
 	}
 	return proxies, names
 }

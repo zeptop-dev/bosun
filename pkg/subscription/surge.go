@@ -24,13 +24,13 @@ func (Surge) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 }
 
 // iniLines renders each line with fn, skipping the ones it cannot express.
-func iniLines(lines []Line, fn func(Line) string) (string, []string) {
+func iniLines(lines []Line, fn func(Line) string) (string, []Named) {
 	var b strings.Builder
-	names := []string{}
+	names := []Named{}
 	for _, l := range lines {
 		if s := fn(l); s != "" {
 			b.WriteString(s + "\n")
-			names = append(names, l.Name)
+			names = append(names, Named{Name: l.Name, Tags: l.Tags})
 		}
 	}
 	return strings.TrimRight(b.String(), "\n"), names
