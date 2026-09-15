@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
+	"strconv"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -40,7 +42,12 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 
 	outs := []any{m{"type": "direct", "tag": "direct"}}
+	var endpoints []any
 	for _, o := range node.Outbounds {
+		if o.WARP != nil {
+			endpoints = append(endpoints, renderWARP(o))
+			continue
+		}
 		if o.Remote != nil {
 			ro, err := renderRemote(o)
 			if err != nil {
@@ -67,6 +74,9 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		"inbounds":  ins,
 		"outbounds": outs,
 		"route":     m{"rules": renderRoutes(node.Routes), "final": final},
+	}
+	if len(endpoints) > 0 {
+		cfg["endpoints"] = endpoints
 	}
 	return json.MarshalIndent(cfg, "", "  ")
 }
@@ -356,4 +366,28 @@ func ss2022UserKey(uuid string, n int) string {
 	buf := make([]byte, n)
 	copy(buf, uuid)
 	return base64.StdEncoding.EncodeToString(buf)
+}
+
+// renderWARP is a sing-box WireGuard endpoint to Cloudflare WARP; route
+// rules and the final outbound may name its tag like any outbound.
+func renderWARP(o spec.Outbound) m {
+	w := o.WARP
+	host, port := "engage.cloudflareclient.com", 2408
+	if w.Endpoint != "" {
+		if h, p, err := net.SplitHostPort(w.Endpoint); err == nil {
+			host = h
+			if n, err := strconv.Atoi(p); err == nil {
+				port = n
+			}
+		}
+	}
+	peer := m{"address": host, "port": port, "public_key": w.PeerPublicKey, "allowed_ips": []string{"0.0.0.0/0", "::/0"}, "persistent_keepalive_interval": 25}
+	if len(w.Reserved) == 3 {
+		peer["reserved"] = w.Reserved
+	}
+	out := m{"type": "wireguard", "tag": o.Tag, "mtu": 1280, "address": w.Addresses, "private_key": w.PrivateKey, "peers": []m{peer}}
+	if o.ProxyTag != "" {
+		out["detour"] = o.ProxyTag
+	}
+	return out
 }

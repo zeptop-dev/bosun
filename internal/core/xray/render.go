@@ -73,12 +73,15 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	var def m
 	for _, o := range node.Outbounds {
 		var ro m
-		if o.Remote != nil {
+		switch {
+		case o.WARP != nil:
+			ro = renderWARP(o)
+		case o.Remote != nil:
 			var err error
 			if ro, err = renderRemote(o); err != nil {
 				return nil, nil, err
 			}
-		} else {
+		default:
 			ro = renderOutbound(o)
 		}
 		if node.DefaultOutbound != "" && o.Tag == node.DefaultOutbound {
@@ -370,4 +373,24 @@ func addMatch(rule m, match string) {
 func appendStr(cur any, s string) []string {
 	list, _ := cur.([]string)
 	return append(list, s)
+}
+
+// renderWARP is a WireGuard outbound to Cloudflare WARP.
+func renderWARP(o spec.Outbound) m {
+	w := o.WARP
+	ep := w.Endpoint
+	if ep == "" {
+		ep = "engage.cloudflareclient.com:2408"
+	}
+	out := m{"tag": o.Tag, "protocol": "wireguard", "settings": m{
+		"secretKey": w.PrivateKey, "address": w.Addresses, "mtu": 1280, "domainStrategy": "ForceIPv6v4",
+		"peers": []m{{"publicKey": w.PeerPublicKey, "endpoint": ep, "allowedIPs": []string{"0.0.0.0/0", "::/0"}}},
+	}}
+	if len(w.Reserved) == 3 {
+		out["settings"].(m)["reserved"] = w.Reserved
+	}
+	if o.ProxyTag != "" {
+		out["streamSettings"] = m{"sockopt": m{"dialerProxy": o.ProxyTag}}
+	}
+	return out
 }

@@ -55,6 +55,9 @@ type State struct {
 	Probe ProbeSettings `json:"probe"`
 	// Komari reports this node to a Komari server as an agent.
 	Komari spec.Komari `json:"komari"`
+	// WARP is the Cloudflare account registered on this node (also used
+	// while a panel manages the node: the panel pushes from_node outbounds).
+	WARP *spec.WARPAccount `json:"warp,omitempty"`
 }
 
 // Ingress is a way into the node other than its public address: an IPLC

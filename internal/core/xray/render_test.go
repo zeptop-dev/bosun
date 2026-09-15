@@ -2,6 +2,7 @@ package xray
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protowire"
@@ -270,5 +271,21 @@ func TestFallbacks(t *testing.T) {
 	ib.TLS.Mode = spec.TLSReality
 	if _, err := renderInbound(ib, nil); err == nil {
 		t.Fatal("fallbacks accepted with REALITY")
+	}
+}
+
+func TestWARPOutbound(t *testing.T) {
+	node := &spec.Node{Outbounds: []spec.Outbound{{Tag: "warp", WARP: &spec.WARP{PrivateKey: "PRIV", PeerPublicKey: "PEER", Addresses: []string{"172.16.0.2/32"}, Reserved: []int{1, 2, 3}}}},
+		Routes: []spec.RouteRule{{Match: []string{"domain:openai.com"}, Action: "outbound", Value: "warp"}}}
+	ib := spec.Inbound{Tag: "v", Protocol: spec.VLESS, Port: 8080}
+	b, _, err := render(node, []spec.Inbound{ib}, []spec.User{{ID: 1, Name: "u", UUID: "7f3a4b2c-1d5e-4f6a-9b8c-0d1e2f3a4b5c"}}, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, want := range []string{`"protocol": "wireguard"`, `"secretKey": "PRIV"`, `"publicKey": "PEER"`, `"engage.cloudflareclient.com:2408"`, `"reserved"`} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %s in\n%s", want, s)
+		}
 	}
 }

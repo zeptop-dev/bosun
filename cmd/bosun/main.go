@@ -448,6 +448,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Upgrade = s.upgrade
 		ag.Certs = s.certs
 		ag.Decoy = s.decoy
+		ag.WARPAccount, ag.SaveWARP = s.store.WARP, s.store.SetWARP
 		if s.onAgent != nil {
 			s.onAgent(ag)
 		}

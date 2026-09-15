@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { api, type Inbound, type Outbound, type Remote, type Routing } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { toast } from '../lib/notify'
+import { WarpCard, warpTemplate, type WarpAccount } from '../components/WarpCard'
 import { PageHeader } from '../components/PageHeader'
 
 // Landing outbounds and route rules: paste a share link to add an exit, then
@@ -32,7 +33,9 @@ export default function RoutingPage({ embedded }: { embedded?: boolean }) {
   }, onError: toast.err })
   const tags = nr.outbounds.map((o) => o.tag)
   const outboundOptions = [{ value: 'direct', label: t('routing.direct') }, { value: 'block', label: t('routing.block') }, ...tags.map((x) => ({ value: x, label: x }))]
-  const describe = (o: Outbound) => o.remote ? `${o.remote.settings.protocol} ${o.remote.host}:${o.remote.port}` : `${o.protocol} (${t('routing.raw')})`
+  const describe = (o: Outbound) => o.warp ? 'Cloudflare WARP' : o.remote ? `${o.remote.settings.protocol} ${o.remote.host}:${o.remote.port}` : `${o.protocol} (${t('routing.raw')})`
+  const addWarpOutbound = () => setNr((cur) => cur.outbounds.some((o) => o.warp) ? cur : { ...cur, outbounds: [...cur.outbounds, { tag: 'warp', warp: { from_node: true } }] })
+  const addWarpTemplate = (keys: string[]) => setNr((cur) => { const tag = cur.outbounds.find((o) => o.warp)?.tag ?? 'warp'; const have = new Set(cur.routes.flatMap((r) => r.match)); const rules = warpTemplate.filter((g) => keys.includes(g.key)).map((g) => ({ match: g.domains.map((d) => `domain:${d}`).filter((m) => !have.has(m)), action: 'outbound', value: tag })).filter((r) => r.match.length); return { ...cur, routes: [...cur.routes, ...rules] } })
   return (
     <>
       {embedded ? <Text size="xs" c="dimmed" mb="sm" maw={720}>{t('routing.hint')}</Text> : <PageHeader title={t('routing.title')} subtitle={t('routing.hint')} />}
@@ -56,7 +59,8 @@ export default function RoutingPage({ embedded }: { embedded?: boolean }) {
               <Button size="xs" mb={2} variant="light" leftSection={<IconPlus size={14} />} disabled={!link.trim()} loading={parse.isPending} onClick={() => parse.mutate()}>{t('routing.add')}</Button>
             </Group>
           )}
-          <Textarea label={t('routing.rawJSON')} description={t('routing.rawHint')} autosize minRows={2} ff="monospace" disabled={readOnly} value={JSON.stringify(nr.outbounds.filter((o) => !o.remote), null, 0)} onBlur={(e) => { try { const raw = JSON.parse(e.currentTarget.value || '[]') as Outbound[]; setNr((cur) => ({ ...cur, outbounds: [...cur.outbounds.filter((o) => o.remote), ...raw] })) } catch { toast.err(new Error(t('form.json'))) } }} />
+          <Textarea label={t('routing.rawJSON')} description={t('routing.rawHint')} autosize minRows={2} ff="monospace" disabled={readOnly} value={JSON.stringify(nr.outbounds.filter((o) => !o.remote && !o.warp), null, 0)} onBlur={(e) => { try { const raw = JSON.parse(e.currentTarget.value || '[]') as Outbound[]; setNr((cur) => ({ ...cur, outbounds: [...cur.outbounds.filter((o) => o.remote), ...raw] })) } catch { toast.err(new Error(t('form.json'))) } }} />
+          <WarpCard queryKey={['warp']} load={async () => (await api.get<{ account: WarpAccount | null }>('/api/warp')).account} register={async (license) => (await api.post<{ account: WarpAccount; warning?: string }>('/api/warp/register', { license })).account} setLicense={async (license) => (await api.put<{ account: WarpAccount }>('/api/warp/license', { license })).account} remove={() => api.del('/api/warp')} hasOutbound={nr.outbounds.some((o) => o.warp)} onAddOutbound={addWarpOutbound} onAddTemplate={addWarpTemplate} readOnly={readOnly} />
           <Select label={t('routing.default')} description={t('routing.defaultHint')} disabled={readOnly} data={[{ value: '', label: t('routing.direct') }, ...tags.map((x) => ({ value: x, label: x }))]} value={nr.default_outbound} allowDeselect={false} onChange={(v) => setNr((cur) => ({ ...cur, default_outbound: v ?? '' }))} />
           <Text size="sm" fw={600} mt="xs">{t('routing.rules')}</Text>
           {nr.routes.map((r, i) => (
