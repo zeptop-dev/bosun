@@ -550,5 +550,24 @@
     "lastUsed": "최근 사용",
     "neverUsed": "미사용",
     "example": "호출 예시(모든 /api 엔드포인트):"
+  },
+  "warp": {
+    "title": "Cloudflare WARP 출구",
+    "hint": "노드에서 WARP 계정을 등록하고 WireGuard 터널로 Cloudflare 주소에서 나갑니다. VPS IP 가 ChatGPT, Netflix 등에 거부될 때 쓰고, 아래 규칙으로 해당 사이트만 보냅니다. 키는 노드에만 저장됩니다.",
+    "free": "무료",
+    "notRegistered": "미등록",
+    "addresses": "터널 주소",
+    "endpoint": "피어",
+    "license": "WARP+ 라이선스(선택)",
+    "licenseHint": "1.1.1.1 앱의 26자 키로 WARP+ 전환",
+    "register": "WARP 등록",
+    "reregister": "재등록",
+    "applyLicense": "라이선스 적용",
+    "registered": "WARP 등록됨",
+    "licenseApplied": "라이선스 적용됨",
+    "addOutbound": "WARP 아웃바운드 추가",
+    "outboundAdded": "WARP 아웃바운드 추가됨",
+    "addTemplate": "자주 쓰는 규칙 추가",
+    "templateHint": "AI 와 스트리밍 사이트를 WARP 로:"
   }
 }
