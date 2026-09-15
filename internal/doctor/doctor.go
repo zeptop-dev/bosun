@@ -79,8 +79,12 @@ type Deps struct {
 	// Komari exporter state.
 	KomariEnabled bool
 	KomariError   string
+	// Assign maps inbound tag to the core serving it (for core-specific advice).
+	Assign map[string]string
 	// Dial overrides TCP connects (tests).
 	Dial func(ctx context.Context, addr string) error
+	// Lookup overrides DNS resolution (tests).
+	Lookup func(ctx context.Context, host string) ([]net.IP, error)
 	// Exec overrides command execution (tests); nil uses exec.Command.
 	Exec func(ctx context.Context, name string, args ...string) ([]byte, error)
 	// Interfaces overrides local address discovery (tests).
@@ -99,7 +103,7 @@ func Run(ctx context.Context, d Deps) Report {
 	rep := Report{At: now(), Checks: []Check{}}
 	checks := []func(context.Context, *Deps) []Check{
 		checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
-		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime,
+		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality,
 	}
 	for _, fn := range checks {
 		cctx, cancel := context.WithTimeout(ctx, perCheck)

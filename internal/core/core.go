@@ -126,6 +126,13 @@ func (r *Registry) pick(ib spec.Inbound) (string, error) {
 		}
 		return ib.Core, nil
 	}
+	// REALITY prefers xray: it is the only core with a fallback rate
+	// limit, which keeps a discovered node from being used as a relay.
+	if ib.TLS != nil && ib.TLS.Mode == spec.TLSReality {
+		if c, ok := r.cores["xray"]; ok && c.Capabilities().Supports(ib) {
+			return "xray", nil
+		}
+	}
 	for _, name := range r.order {
 		if r.cores[name].Capabilities().Supports(ib) {
 			return name, nil

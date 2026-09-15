@@ -30,6 +30,12 @@ type Beater interface {
 	Beat(ctx context.Context, b agentproto.Beat) error
 }
 
+// JobSource is implemented by drivers whose panel hands the node one-off
+// jobs (State.Jobs); results go back inside Report.Jobs.
+type JobSource interface {
+	Jobs() []agentproto.Job
+}
+
 // KomariSource is implemented by drivers that carry a Komari exporter
 // configuration (the local store's settings or Captain's state).
 type KomariSource interface {

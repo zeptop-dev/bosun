@@ -114,3 +114,28 @@ func TestBindFirewallPanel(t *testing.T) {
 		t.Fatalf("bound inbound dial address: %+v", c)
 	}
 }
+
+func TestRealityTargets(t *testing.T) {
+	node := &spec.Node{Inbounds: []spec.Inbound{
+		{Tag: "cf", Protocol: spec.VLESS, Port: 443, TLS: &spec.TLS{Mode: spec.TLSReality, ServerName: "www.example.com", Reality: &spec.Reality{PrivateKey: "k", HandshakeServer: "www.example.com", HandshakePort: 443}}},
+		{Tag: "sb", Protocol: spec.VLESS, Port: 8443, TLS: &spec.TLS{Mode: spec.TLSReality, ServerName: "www.apple.com", Reality: &spec.Reality{PrivateKey: "k", HandshakeServer: "www.apple.com", HandshakePort: 443}}},
+		{Tag: "off", Protocol: spec.VLESS, Port: 9443, TLS: &spec.TLS{Mode: spec.TLSReality, ServerName: "www.apple.com", Reality: &spec.Reality{PrivateKey: "k", HandshakeServer: "www.apple.com", HandshakePort: 443, FallbackLimit: &spec.FallbackLimit{Off: true}}}},
+	}}
+	lookup := func(_ context.Context, host string) ([]net.IP, error) {
+		if host == "www.example.com" {
+			return []net.IP{net.ParseIP("104.16.124.96")}, nil
+		}
+		return []net.IP{net.ParseIP("198.51.100.20")}, nil
+	}
+	rep := Run(context.Background(), Deps{Node: node, Lookup: lookup, Assign: map[string]string{"cf": "xray", "sb": "singbox", "off": "xray"},
+		Dial: func(context.Context, string) error { return nil }, Exec: func(context.Context, string, ...string) ([]byte, error) { return nil, errors.New("missing") }})
+	if c := find(rep, "reality:cf"); c.Status != Fail || !strings.Contains(c.Detail, "cloudflare") {
+		t.Fatalf("cdn target: %+v", c)
+	}
+	if c := find(rep, "reality:sb"); c.Status != Warn || !strings.Contains(c.Detail, "singbox") {
+		t.Fatalf("sing-box warning: %+v", c)
+	}
+	if c := find(rep, "reality:off"); c.Status != Warn || !strings.Contains(c.Detail, "off") {
+		t.Fatalf("limit off warning: %+v", c)
+	}
+}
