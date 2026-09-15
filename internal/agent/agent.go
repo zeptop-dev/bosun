@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/zeptop-dev/bosun/internal/doctor"
 	"github.com/zeptop-dev/bosun/internal/komari"
@@ -19,7 +20,9 @@ import (
 	"github.com/zeptop-dev/bosun/internal/config"
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/decoy"
+	"github.com/zeptop-dev/bosun/internal/firewall"
 	"github.com/zeptop-dev/bosun/internal/forward"
+	"github.com/zeptop-dev/bosun/internal/ingressguard"
 	"github.com/zeptop-dev/bosun/internal/metrics"
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/shaper"
@@ -58,6 +61,15 @@ type Agent struct {
 	Alert func(text string)
 	// Shaper enforces per-user speed limits in the kernel; nil = none.
 	Shaper *shaper.Shaper
+	// Realm runs forward rules with the realm backend; nil rejects them.
+	Realm *forward.Realm
+	// Guard drops packets for mita ports that arrive on the wrong local
+	// address (mita cannot bind one itself); nil = not enforced.
+	Guard *ingressguard.Guard
+	// Firewall opens listening ports in ufw/firewalld; nil = off.
+	Firewall *firewall.Manager
+	// ExtraPorts are opened along with the inbounds (the web panel port).
+	ExtraPorts []firewall.Port
 	// WARPAccount / SaveWARP read and persist the node's Cloudflare WARP
 	// identity (local store); nil disables from_node WARP outbounds.
 	WARPAccount func() *spec.WARPAccount
@@ -129,6 +141,10 @@ type Status struct {
 	Decoy *decoy.Status `json:"decoy,omitempty"`
 	// Shaper is the per-user speed limit state (nil when unused).
 	Shaper *shaper.Status `json:"shaper,omitempty"`
+	// Guard is the strict-ingress state (nil = no rules).
+	Guard *ingressguard.Status `json:"guard,omitempty"`
+	// Firewall is the auto-open state (nil = off or no firewall).
+	Firewall *firewall.Status `json:"firewall,omitempty"`
 }
 
 // Status returns a snapshot of the agent state.
@@ -581,6 +597,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		}
 	}
 	a.setStatus(func(s *Status) { s.Assign, s.CoreInbound = byTag, perCore })
+	defer a.applyKernelHelpers(ctx, node, byTag)
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		inbounds := assign[name]
@@ -615,6 +632,87 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		a.log.Info("core applied", "core", name, "inbounds", len(inbounds), "users", len(a.users))
 	}
 	return nil
+}
+
+// applyKernelHelpers runs after the cores: the strict-ingress rules for
+// mita inbounds bound to a line address, and the firewall openings for
+// every listener. Failures are logged and shown by the doctor, never
+// fatal for the apply.
+func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag map[string]string) {
+	var rules []ingressguard.Rule
+	var ports []firewall.Port
+	for _, ib := range node.Inbounds {
+		if _, served := byTag[ib.Tag]; !served {
+			continue
+		}
+		for _, p := range listenPorts(ib) {
+			ports = append(ports, p)
+			if byTag[ib.Tag] == "mita" && ib.Listen != "" && ib.Listen != "0.0.0.0" && ib.Listen != "::" {
+				rules = append(rules, ingressguard.Rule{IP: ib.Listen, Proto: p.Proto, Port: p.Port})
+			}
+		}
+	}
+	if a.Guard != nil {
+		if err := a.Guard.Apply(ctx, rules); err != nil {
+			a.log.Error("strict ingress", "err", err)
+		}
+		st := a.Guard.Status()
+		a.setStatus(func(s *Status) {
+			if len(rules) == 0 && st.Error == "" {
+				s.Guard = nil
+			} else {
+				s.Guard = &st
+			}
+		})
+	}
+	if a.Firewall != nil {
+		for _, f := range a.fwd.Snapshot() {
+			for _, proto := range forwardProtocols(f.Protocol) {
+				ports = append(ports, firewall.Port{Proto: proto, Port: f.Port})
+			}
+		}
+		ports = append(ports, a.ExtraPorts...)
+		if err := a.Firewall.Apply(ctx, ports); err != nil {
+			a.log.Warn("firewall auto-open", "err", err)
+		}
+		st := a.Firewall.Status()
+		a.setStatus(func(s *Status) {
+			if st.Kind == "" && st.Error == "" {
+				s.Firewall = nil
+			} else {
+				s.Firewall = &st
+			}
+		})
+	}
+}
+
+func forwardProtocols(p string) []string {
+	switch p {
+	case "udp":
+		return []string{"udp"}
+	case "both":
+		return []string{"tcp", "udp"}
+	}
+	return []string{"tcp"}
+}
+
+// listenPorts lists the transport ports an inbound occupies.
+func listenPorts(ib spec.Inbound) []firewall.Port {
+	switch ib.Protocol {
+	case spec.Hysteria2, spec.TUIC, spec.WireGuard:
+		return []firewall.Port{{Proto: "udp", Port: ib.Port}}
+	case spec.Mieru:
+		switch strings.ToUpper(ib.MieruTransport) {
+		case "UDP":
+			return []firewall.Port{{Proto: "udp", Port: ib.Port}}
+		case "BOTH":
+			return []firewall.Port{{Proto: "tcp", Port: ib.Port}, {Proto: "udp", Port: ib.Port + 1}}
+		}
+		return []firewall.Port{{Proto: "tcp", Port: ib.Port}}
+	case spec.Shadowsocks, spec.Snell:
+		return []firewall.Port{{Proto: "tcp", Port: ib.Port}, {Proto: "udp", Port: ib.Port}}
+	}
+	return []firewall.Port{{Proto: "tcp", Port: ib.Port}}
 }
 
 // report collects per-user traffic from every running core and pushes it
@@ -795,6 +893,7 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 // applyForwards reconciles relay rules: the panel's if it manages them,
 // otherwise the local config's.
 func (a *Agent) applyForwards(ctx context.Context) error {
+	a.fwd.Realm = a.Realm
 	rules := a.cfg.ForwardSpecs()
 	if src, ok := a.driver.(panel.ForwardSource); ok {
 		fw, changed, err := src.Forwards(ctx)

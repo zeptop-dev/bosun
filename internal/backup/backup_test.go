@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/zeptop-dev/bosun/internal/local"
@@ -42,7 +43,7 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum, err := Restore(dst, bytes.NewReader(buf.Bytes()), fresh.Username()+":other")
+	sum, _, err := Restore(dst, bytes.NewReader(buf.Bytes()), fresh.Username()+":other")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +66,30 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatal("files outside the allow-list must not travel")
 	}
 	// Garbage is refused, and so is a managed-mode archive.
-	if _, err := Restore(dst, bytes.NewReader([]byte("nope")), ""); err == nil {
+	if _, _, err := Restore(dst, bytes.NewReader([]byte("nope")), ""); err == nil {
 		t.Fatal("garbage accepted")
+	}
+}
+
+func TestRestoreRollback(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "local.json"), []byte(`{"mode":"local","admin":{"username":"old","password_hash":"h"}}`), 0o600)
+	var buf bytes.Buffer
+	if err := Write(dir, &buf); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(dir, "local.json"), []byte(`{"mode":"local","admin":{"username":"current","password_hash":"h2"}}`), 0o600)
+	sum, rollback, err := Restore(dir, &buf, "current:h2")
+	if err != nil || rollback == nil || !sum.AdminChanged {
+		t.Fatalf("restore: %+v %v", sum, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "local.json")); !strings.Contains(string(b), "old") {
+		t.Fatalf("restore did not write: %s", b)
+	}
+	if err := rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "local.json")); !strings.Contains(string(b), "current") {
+		t.Fatalf("rollback did not restore: %s", b)
 	}
 }

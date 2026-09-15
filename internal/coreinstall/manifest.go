@@ -52,6 +52,7 @@ var Binary = map[string]string{
 	"mita":     "mita",
 	"hysteria": "hysteria",
 	"snell":    "snell-server",
+	"realm":    "realm",
 }
 
 var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2ray_api", "with_gvisor", "with_acme"}
@@ -118,6 +119,19 @@ var Manifest = []Release{
 		Assets: map[string]Asset{
 			"linux/amd64": {URL: "https://dl.nssurge.com/snell/snell-server-v4.1.1-linux-amd64.zip", SHA256: "cc2271b79c7506888b34e651e8741b3aa7fc7d5f60aa65ef8bb096f3313a193b", Archive: "zip", Member: "snell-server"},
 			"linux/arm64": {URL: "https://dl.nssurge.com/snell/snell-server-v4.1.1-linux-aarch64.zip", SHA256: "38d4cdc03dcdb3608af8594df83e1795265167fafc5d802f815148908902d758", Archive: "zip", Member: "snell-server"},
+		},
+	},
+	{
+		// zhboner/realm: the userspace relay the forward "realm" backend
+		// runs. Digests computed from the GitHub release on 2026-09-15; the
+		// musl builds serve Alpine.
+		Core: "realm", Version: "2.9.6", Status: StatusCaution,
+		Note: "zhboner/realm relay for the forward realm backend; not yet verified end to end",
+		Assets: map[string]Asset{
+			"linux/amd64":      {URL: "https://github.com/zhboner/realm/releases/download/v2.9.6/realm-x86_64-unknown-linux-gnu.tar.gz", SHA256: "b9efc8ccbab5c9f0602ab5ba0a2e00311e7b773944533a8373c00811fb6a1a6b", Archive: "tar.gz", Member: "realm"},
+			"linux/arm64":      {URL: "https://github.com/zhboner/realm/releases/download/v2.9.6/realm-aarch64-unknown-linux-gnu.tar.gz", SHA256: "4b6c059df67a3161369df3133e5ea9e4bd266185c634ccc8990cd5bb8d271786", Archive: "tar.gz", Member: "realm"},
+			"linux/amd64-musl": {URL: "https://github.com/zhboner/realm/releases/download/v2.9.6/realm-x86_64-unknown-linux-musl.tar.gz", SHA256: "b1cc335547bea8bb2a88178bef12ec7f2363e36200e7ea1d4e1e67627929bf65", Archive: "tar.gz", Member: "realm"},
+			"linux/arm64-musl": {URL: "https://github.com/zhboner/realm/releases/download/v2.9.6/realm-aarch64-unknown-linux-musl.tar.gz", SHA256: "f4c0318dd86854da483dcb7645b4f39cae2cc3f91c688fef969d53220b949488", Archive: "tar.gz", Member: "realm"},
 		},
 	},
 	{

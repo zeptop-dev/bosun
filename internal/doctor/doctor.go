@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/firewall"
+	"github.com/zeptop-dev/bosun/internal/ingressguard"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -49,6 +51,7 @@ type ForwardState struct {
 	Listen   string
 	Port     int
 	Target   string
+	Backend  string
 	Up       bool
 	Error    string
 }
@@ -84,6 +87,13 @@ type Deps struct {
 	Assign map[string]string
 	// Shaper is the speed-limit state (nil = no limits configured).
 	Shaper *shaper.Status
+	// RealmRunning is whether the realm relay process is up (rules with
+	// the realm backend depend on it).
+	RealmRunning bool
+	// Guard is the strict-ingress state (nil = no mita inbound binds a line address).
+	Guard *ingressguard.Status
+	// Firewall is the auto-open state (nil = off or no ufw/firewalld).
+	Firewall *firewall.Status
 	// Dial overrides TCP connects (tests).
 	Dial func(ctx context.Context, addr string) error
 	// Lookup overrides DNS resolution (tests).
@@ -106,7 +116,7 @@ func Run(ctx context.Context, d Deps) Report {
 	rep := Report{At: now(), Checks: []Check{}}
 	checks := []func(context.Context, *Deps) []Check{
 		checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
-		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality, checkShaper,
+		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen,
 	}
 	for _, fn := range checks {
 		cctx, cancel := context.WithTimeout(ctx, perCheck)
@@ -270,6 +280,11 @@ func checkForwards(ctx context.Context, d *Deps) []Check {
 	var out []Check
 	for _, f := range d.Forwards {
 		c := Check{ID: "forward:" + f.Tag, Name: "Forward " + f.Tag}
+		if f.Backend == "realm" && !d.RealmRunning {
+			c.Status, c.Detail = Fail, "realm process is not running (see the log: download or start failed)"
+			out = append(out, c)
+			continue
+		}
 		if strings.EqualFold(f.Protocol, "udp") {
 			c.Status, c.Detail = Skip, "udp"
 			out = append(out, c)
@@ -423,6 +438,34 @@ func checkFirewall(ctx context.Context, d *Deps) []Check {
 		return []Check{c}
 	}
 	c.Status, c.Detail = OK, tool+": restrictive policy with accept rules for every inbound"
+	return []Check{c}
+}
+
+func checkGuard(_ context.Context, d *Deps) []Check {
+	c := Check{ID: "ingress", Name: "Strict ingress (mita bind address)"}
+	switch {
+	case d.Guard == nil:
+		c.Status, c.Detail = Skip, "no mita inbound binds a line address"
+	case !d.Guard.Supported:
+		c.Status, c.Detail = Warn, "mita listens on every address; nft is needed to drop traffic on the others: "+d.Guard.Error
+	case d.Guard.Error != "":
+		c.Status, c.Detail = Fail, d.Guard.Error
+	default:
+		c.Status, c.Detail = OK, fmt.Sprintf("%d nft input rule(s) in table bosun_ingress", d.Guard.Rules)
+	}
+	return []Check{c}
+}
+
+func checkAutoOpen(_ context.Context, d *Deps) []Check {
+	c := Check{ID: "firewall-open", Name: "Firewall auto-open"}
+	switch {
+	case d.Firewall == nil:
+		c.Status, c.Detail = Skip, "no ufw/firewalld active (or auto-open disabled)"
+	case d.Firewall.Error != "":
+		c.Status, c.Detail = Warn, d.Firewall.Kind+": "+d.Firewall.Error
+	default:
+		c.Status, c.Detail = OK, fmt.Sprintf("%s: %d port(s) opened by bosun", d.Firewall.Kind, d.Firewall.Opened)
+	}
 	return []Check{c}
 }
 

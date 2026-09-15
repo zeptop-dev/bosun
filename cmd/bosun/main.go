@@ -8,10 +8,12 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,6 +31,9 @@ import (
 	"github.com/zeptop-dev/bosun/internal/core/xray"
 	"github.com/zeptop-dev/bosun/internal/coreinstall"
 	"github.com/zeptop-dev/bosun/internal/decoy"
+	"github.com/zeptop-dev/bosun/internal/firewall"
+	"github.com/zeptop-dev/bosun/internal/forward"
+	"github.com/zeptop-dev/bosun/internal/ingressguard"
 	"github.com/zeptop-dev/bosun/internal/local"
 	"github.com/zeptop-dev/bosun/internal/logring"
 	"github.com/zeptop-dev/bosun/internal/metrics"
@@ -316,6 +321,19 @@ func cmdRun(args []string) error {
 	dc := decoy.New(cm, log)
 	defer dc.Stop()
 	shp := &shaper.Shaper{}
+	guard := &ingressguard.Guard{}
+	var fw *firewall.Manager
+	var extraPorts []firewall.Port
+	if cfg.FirewallAutoOpenEnabled() {
+		fw = &firewall.Manager{StateFile: filepath.Join(cfg.DataDir, "firewall.json")}
+		if cfg.Web != nil {
+			if _, p, err := net.SplitHostPort(cfg.Web.Listen); err == nil {
+				if n, err := strconv.Atoi(p); err == nil && n > 0 {
+					extraPorts = append(extraPorts, firewall.Port{Proto: "tcp", Port: n})
+				}
+			}
+		}
+	}
 
 	// Headless managed mode without a web panel: the original single agent.
 	if e.driver != nil && cfg.Web == nil {
@@ -325,6 +343,9 @@ func cmdRun(args []string) error {
 		ag.Certs = cm
 		ag.Decoy = dc
 		ag.Shaper = shp
+		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return e.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(cfg.DataDir, "realm"), Log: log}
+		ag.Guard = guard
+		ag.Firewall, ag.ExtraPorts = fw, extraPorts
 		current.ag = ag
 		return ag.Run(ctx)
 	}
@@ -342,7 +363,7 @@ func cmdRun(args []string) error {
 		st := store.Settings()
 		return telegram.Settings{Token: st.TelegramToken, ChatID: st.TelegramChatID, Notify: st.TelegramNotify}
 	}}
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
+	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
 		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
@@ -395,17 +416,21 @@ type supervisor struct {
 	cfg   *config.Config
 	log   *slog.Logger
 	reg   *core.Registry
+	inst  *coreinstall.Installer
 	mreg  *metrics.Registry
 	store *local.Store
 	fixed panel.Driver // config-pinned headless driver, or nil
 	ui    *ui.Server
 	// upgrade handles a panel-requested release change.
-	upgrade func(string)
-	certs   *certs.Manager
-	decoy   *decoy.Server
-	bot     *telegram.Bot
-	shaper  *shaper.Shaper
-	onAgent func(*agent.Agent)
+	upgrade    func(string)
+	certs      *certs.Manager
+	decoy      *decoy.Server
+	bot        *telegram.Bot
+	shaper     *shaper.Shaper
+	guard      *ingressguard.Guard
+	firewall   *firewall.Manager
+	extraPorts []firewall.Port
+	onAgent    func(*agent.Agent)
 
 	mu      sync.Mutex
 	captain *captain.Client // current managed driver, when any
@@ -463,6 +488,9 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Certs = s.certs
 		ag.Decoy = s.decoy
 		ag.Shaper = s.shaper
+		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return s.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(s.cfg.DataDir, "realm"), Log: s.log}
+		ag.Guard = s.guard
+		ag.Firewall, ag.ExtraPorts = s.firewall, s.extraPorts
 		ag.WARPAccount, ag.SaveWARP = s.store.WARP, s.store.SetWARP
 		if s.bot != nil {
 			ag.Alert = func(text string) {

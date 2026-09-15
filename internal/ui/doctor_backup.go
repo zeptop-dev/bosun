@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -73,13 +74,23 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	sum, err := backup.Restore(s.dataDir(), f, s.d.Store.AdminKey())
+	sum, rollback, err := backup.Restore(s.dataDir(), f, s.d.Store.AdminKey())
 	if err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.d.Store.Reload(); err != nil {
-		fail(w, http.StatusInternalServerError, err)
+		// The archive parsed but the store rejects it: put the previous
+		// files back and reload those, so the node keeps running as before.
+		rbErr := rollback()
+		if rbErr == nil {
+			rbErr = s.d.Store.Reload()
+		}
+		if rbErr != nil {
+			fail(w, http.StatusInternalServerError, fmt.Errorf("restore failed (%v) and rollback failed too (%v)", err, rbErr))
+			return
+		}
+		fail(w, http.StatusBadRequest, fmt.Errorf("restore rejected, previous configuration kept: %w", err))
 		return
 	}
 	if sum.AdminChanged {

@@ -32,6 +32,9 @@ func clashProxies(lines []Line) ([]any, []Named) {
 		if p == nil {
 			continue
 		}
+		for k, v := range l.Extra {
+			p[k] = v
+		}
 		proxies = append(proxies, p)
 		names = append(names, Named{Name: l.Name, Tags: l.Tags})
 	}

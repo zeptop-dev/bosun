@@ -1,6 +1,6 @@
 import { ActionIcon, AppShell, Avatar, Badge, Box, Burger, Divider, Group, Indicator, Menu, NavLink, ScrollArea, Stack, Text, ThemeIcon, Tooltip, UnstyledButton, useMantineColorScheme } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconSettings, IconLogout, IconLanguage, IconFileText, IconRoute, IconCertificate, IconActivity, IconStethoscope, IconAnchor, IconSun, IconMoon, IconDotsVertical, IconChevronDown } from '@tabler/icons-react'
+import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconSettings, IconLogout, IconLanguage, IconFileText, IconRoute, IconCertificate, IconActivity, IconStethoscope, IconAnchor, IconSun, IconMoon, IconDotsVertical, IconChevronDown, IconFileCode } from '@tabler/icons-react'
 import { languages } from '../i18n'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -16,6 +16,7 @@ const groups = [
     { to: '/inbounds', key: 'inbounds', icon: IconPlugConnected },
     { to: '/forwards', key: 'outbound', icon: IconRoute },
     { to: '/users', key: 'users', icon: IconUsers },
+    { to: '/templates', key: 'templates', icon: IconFileCode },
     { to: '/certificates', key: 'certificates', icon: IconCertificate },
   ],
   [

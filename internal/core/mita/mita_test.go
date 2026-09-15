@@ -2,6 +2,7 @@ package mita
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protowire"
@@ -139,5 +140,20 @@ func TestSocketPath(t *testing.T) {
 	long := "/" + string(make([]byte, 120))
 	if p := socketPath(long); len(p) > maxSocketPath {
 		t.Fatalf("fallback too long: %s", p)
+	}
+}
+
+func TestRenderQuotas(t *testing.T) {
+	ib := spec.Inbound{Tag: "m", Protocol: spec.Mieru, Port: 17701}
+	out, err := render([]spec.Inbound{ib}, []spec.User{{Name: "a", Password: "p", QuotaBytes: 100 << 20, QuotaDays: 30}, {Name: "b", Password: "q"}}, "INFO")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, `"quotas"`) || !strings.Contains(s, `"megabytes": 100`) || !strings.Contains(s, `"days": 30`) {
+		t.Fatalf("quota missing:\n%s", s)
+	}
+	if strings.Count(s, `"quotas"`) != 1 {
+		t.Fatalf("user without quota got one:\n%s", s)
 	}
 }

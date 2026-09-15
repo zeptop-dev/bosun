@@ -58,6 +58,16 @@ type Config struct {
 	// Forwards are local relay rules, used when the panel does not manage
 	// forwarding (Xboard). A panel that does supplies them instead.
 	Forwards []ForwardRule `yaml:"forwards"`
+
+	// FirewallAutoOpen lets bosun allow its own listening ports in ufw or
+	// firewalld when one is active (default true). Ports it opened are
+	// closed again when the inbound or forward goes away.
+	FirewallAutoOpen *bool `yaml:"firewall_auto_open"`
+}
+
+// FirewallAutoOpenEnabled applies the default.
+func (c *Config) FirewallAutoOpenEnabled() bool {
+	return c.FirewallAutoOpen == nil || *c.FirewallAutoOpen
 }
 
 // ForwardRule is one relay rule in the config file.

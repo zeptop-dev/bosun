@@ -25,8 +25,15 @@ type portBinding struct {
 }
 
 type user struct {
-	Name     string `json:"name"`
-	Password string `json:"password"`
+	Name     string  `json:"name"`
+	Password string  `json:"password"`
+	Quotas   []quota `json:"quotas,omitempty"`
+}
+
+// quota is mita's rolling allowance: megabytes within the last days.
+type quota struct {
+	Days      int32 `json:"days"`
+	Megabytes int32 `json:"megabytes"`
 }
 
 type dnsConfig struct {
@@ -81,7 +88,22 @@ func render(inbounds []spec.Inbound, users []spec.User, logLevel string) ([]byte
 		return nil, fmt.Errorf("mita: nothing to render")
 	}
 	for _, u := range users {
-		cfg.Users = append(cfg.Users, user{Name: u.Name, Password: u.Password})
+		mu := user{Name: u.Name, Password: u.Password}
+		if u.QuotaBytes > 0 && u.QuotaDays > 0 {
+			mb := u.QuotaBytes / (1 << 20)
+			if mb < 1 {
+				mb = 1
+			}
+			if mb > 1<<31-1 {
+				mb = 1<<31 - 1
+			}
+			days := u.QuotaDays
+			if days > 36500 {
+				days = 36500
+			}
+			mu.Quotas = []quota{{Days: int32(days), Megabytes: int32(mb)}}
+		}
+		cfg.Users = append(cfg.Users, mu)
 	}
 	if cfg.Users == nil {
 		cfg.Users = []user{}

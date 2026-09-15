@@ -49,7 +49,7 @@ internal/config/      YAML config
 internal/sysinfo/     host status snapshot
 ```
 
-## Install on a node (Linux, systemd)
+## Install on a node (Linux: systemd, or OpenRC on Alpine)
 
 Standalone, with the built-in web panel on port 2053:
 
@@ -364,3 +364,50 @@ routes its replies back through this node. Targets must be IPv4 (host names
 are resolved once at apply); the `nft` binary must be installed, otherwise
 the rule shows "nftables not installed" and stays down. Byte and connection
 counters are not collected for nft rules; the target probe still is.
+
+### Realm backend
+
+`backend: realm` hands the rule to a [zhboner/realm](https://github.com/zhboner/realm)
+process: bosun installs the pinned release (`coreinstall` manifest, musl
+build on Alpine), writes `<data_dir>/realm/realm.toml` with every
+realm-backed rule (`[[endpoints]]` with `listen`/`remote`; `both` turns UDP
+on, `udp` turns TCP off) and supervises one `realm -c` process, restarting
+it when the set changes. Host-name targets and UDP work; there are no byte
+or connection counters. The doctor fails a realm rule when the process is
+not running.
+
+### Strict ingress for mita and firewall auto-open
+
+mita listens on every address, so an inbound it serves that sits behind a
+line ingress with a bind address gets an nftables input rule instead
+(table `inet bosun_ingress`, `ip daddr != <bind> tcp dport <port> drop`,
+one per port, UDP for BOTH's second port): traffic for that port arriving
+on any other local address is dropped, which is nobrand's "strict ingress"
+fallback. The doctor check "Strict ingress" shows the state.
+
+When ufw or firewalld is active, bosun allows the ports it listens on
+(inbounds, forwards, the web panel) and removes the openings it made once
+the inbound or forward is gone (`<data_dir>/firewall.json` remembers what
+it opened; ports the operator opened by hand are never touched). Raw
+nftables/iptables policies are only reported by the doctor. Set
+`firewall_auto_open: false` in config.yaml to turn it off.
+
+### mita native quotas
+
+With the setting "mita native quotas" on (Settings page, or Captain's node
+option), each user's allowance is also written into mita's own
+`quotas: [{days, megabytes}]`, so the core keeps enforcing it while the
+panel is unreachable. The window is the reset cycle: `days` mode as is, a
+calendar-month reset becomes a rolling 31 days, no reset means the
+subscription's lifetime. Right after a calendar reset mita may therefore
+still block a heavy user for a few days.
+
+### Subscription templates on the standalone panel
+
+The "Sub templates" page is the same editor Captain has: a text template
+per client format (`{{proxies}}`, `{{proxy_names}}` with `:tag=` and
+`:match=` filters) and the visual designer (`pkg/subdesign`: proxy groups
+whose members are all servers, name patterns per region or other groups,
+plus an ordered ACL4SSR rule list with presets) that generates every
+format at once. Under Captain the page is read-only and Captain's templates
+apply.

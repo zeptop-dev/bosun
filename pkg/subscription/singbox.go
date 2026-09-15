@@ -24,6 +24,9 @@ func (SingBox) Render(lines []Line, _ Account) ([]byte, error) {
 		if o == nil {
 			continue
 		}
+		for k, v := range l.Extra {
+			o[k] = v
+		}
 		outbounds = append(outbounds, o)
 		names = append(names, l.Name)
 	}

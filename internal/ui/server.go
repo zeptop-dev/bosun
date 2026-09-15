@@ -157,6 +157,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/restart", auth(s.restart))
 
 	s.extraRoutes()
+	s.subTemplateRoutes()
 	s.doctorBackupRoutes()
 	m.Handle("/", web.UI())
 }
@@ -659,7 +660,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		acct.Expire = u.ExpiresAt.Unix()
 	}
 	rd := subscription.Pick(r.URL.Query().Get("client"), r.UserAgent())
-	body, err := rd.Render(lines, acct)
+	body, err := rd.RenderWith(lines, acct, s.d.Store.SubTemplate(rd.Name()))
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

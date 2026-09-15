@@ -235,6 +235,12 @@ type User struct {
 	Password       string `json:"password,omitempty"`
 	SpeedLimitMbps int    `json:"speed_limit_mbps,omitempty"` // 0 = unlimited
 	DeviceLimit    int    `json:"device_limit,omitempty"`     // 0 = unlimited
+	// QuotaBytes and QuotaDays describe the user's traffic allowance as a
+	// rolling window, for cores that enforce quotas themselves (mita). The
+	// panel still does its own accounting; this is a second lock that holds
+	// when the panel is unreachable. 0 = not enforced by the core.
+	QuotaBytes int64 `json:"quota_bytes,omitempty"`
+	QuotaDays  int   `json:"quota_days,omitempty"`
 }
 
 // EffectiveSpeedLimit is the user's own limit, else the node default.
@@ -336,7 +342,8 @@ type Forward struct {
 	Port     int    `json:"port"`
 	Protocol string `json:"protocol,omitempty"` // "tcp", "udp" or "both"
 	Target   string `json:"target,omitempty"`   // host:port of the next hop
-	// Backend is "" for bosun's userspace relay or "nft" for kernel DNAT
+	// Backend is "" for bosun's userspace relay, "nft" for kernel DNAT or
+	// "realm" for a zhboner/realm process bosun installs and runs; it is
 	// through nftables (IPv4 targets, needs the nft binary).
 	Backend string `json:"backend,omitempty"`
 	// PreserveSource skips masquerading on the nft backend so the target
