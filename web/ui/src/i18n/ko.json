@@ -360,7 +360,18 @@
     "noLinks": "사용 가능한 인바운드가 없습니다.",
     "resetTraffic": "트래픽 초기화",
     "rotate": "구독 URL 교체",
-    "rotateHint": "이전 링크는 즉시 무효가 됩니다."
+    "rotateHint": "이전 링크는 즉시 무효가 됩니다.",
+    "deviceLimit": "기기 수 제한",
+    "deviceLimitHint": "0 = 무제한. 동시 접속 IP가 제한을 넘으면 5분간 일시 정지",
+    "resetMode": "트래픽 초기화",
+    "resetModeHint": "주기적으로 사용량을 0으로",
+    "resetNever": "안 함",
+    "resetDays": "N일마다",
+    "resetMonthly": "매월 1일",
+    "resetEvery": "간격(일)",
+    "overDevices": "기기 수 초과",
+    "overDevicesUntil": "{{at}}까지 정지",
+    "resetsOn": "{{date}} 초기화"
   },
   "forwards": {
     "title": "포워딩",

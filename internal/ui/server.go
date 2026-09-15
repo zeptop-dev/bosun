@@ -385,6 +385,10 @@ type userRow struct {
 	local.User
 	Online []string `json:"online"`
 	Usable bool     `json:"usable"`
+	// OverDevices is set while the user is held back for exceeding the
+	// device limit; OverDevicesUntil says when the hold ends.
+	OverDevices      bool       `json:"over_devices"`
+	OverDevicesUntil *time.Time `json:"over_devices_until,omitempty"`
 }
 
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
@@ -396,7 +400,11 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		if ips == nil {
 			ips = []string{}
 		}
-		out = append(out, userRow{User: u, Online: ips, Usable: u.Usable(now)})
+		row := userRow{User: u, Online: ips, Usable: u.Usable(now)}
+		if until, held := rt.OverDevices[u.ID]; held {
+			row.OverDevices, row.OverDevicesUntil = true, &until
+		}
+		out = append(out, row)
 	}
 	ok(w, out)
 }

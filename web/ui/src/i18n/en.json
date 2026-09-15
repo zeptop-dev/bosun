@@ -360,7 +360,18 @@
     "noLinks": "No usable inbound.",
     "resetTraffic": "Reset traffic",
     "rotate": "Rotate subscription URL",
-    "rotateHint": "The old link stops working immediately."
+    "rotateHint": "The old link stops working immediately.",
+    "deviceLimit": "Device limit",
+    "deviceLimitHint": "0 = unlimited; more simultaneous client IPs than this pauses the user for 5 minutes",
+    "resetMode": "Traffic reset",
+    "resetModeHint": "Zero the counters on a cycle",
+    "resetNever": "Never",
+    "resetDays": "Every N days",
+    "resetMonthly": "1st of each month",
+    "resetEvery": "Interval (days)",
+    "overDevices": "Over device limit",
+    "overDevicesUntil": "Paused until {{at}}",
+    "resetsOn": "resets {{date}}"
   },
   "forwards": {
     "title": "Forwards",
