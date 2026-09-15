@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/wg"
 )
 
 type m = map[string]any
@@ -155,6 +156,26 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 	case spec.HTTP:
 		in["protocol"] = "http"
 		in["settings"] = m{"accounts": mapUsers(users, func(u spec.User) m { return m{"user": u.Name, "pass": u.Password} })}
+	case spec.WireGuard:
+		if ib.WGPrivateKey == "" {
+			return nil, fmt.Errorf("xray: inbound %q: wireguard needs a private key", ib.Tag)
+		}
+		mtu := ib.WGMTU
+		if mtu <= 0 {
+			mtu = wg.DefaultMTU
+		}
+		peers := []m{}
+		for _, u := range users {
+			_, pub, err := wg.DerivePeer(ib.WGPrivateKey, u.UUID)
+			if err != nil {
+				return nil, fmt.Errorf("xray: inbound %q: %w", ib.Tag, err)
+			}
+			peers = append(peers, m{"publicKey": pub, "allowedIPs": []string{wg.ClientAddress(u.ID)}, "email": u.Name})
+		}
+		in["protocol"] = "wireguard"
+		in["settings"] = m{"secretKey": ib.WGPrivateKey, "mtu": mtu, "peers": peers, "noKernelTun": true}
+		delete(in, "sniffing")
+		return in, nil
 	default:
 		return nil, fmt.Errorf("xray: inbound %q: unsupported protocol %s", ib.Tag, ib.Protocol)
 	}

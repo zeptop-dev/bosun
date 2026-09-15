@@ -169,7 +169,9 @@
       "anytls": "AnyTLS",
       "anytlsDesc": "新协议，抗流量分析，需要证书。",
       "snell5": "Snell v5",
-      "snell5Desc": "Surge 官方 snell-server，共享 PSK。"
+      "snell5Desc": "Surge 官方 snell-server，共享 PSK。",
+      "wireguard": "WireGuard",
+      "wireguardDesc": "整机 VPN，走 UDP；适合专线和内网。"
     },
     "serverNameAuto": "证书对应的域名，DNS 要指向这台机器",
     "autoCert": "自动证书",
@@ -236,7 +238,12 @@
     "fallbackAdd": "添加规则",
     "fallbackDest": "目标",
     "useDecoy": "使用本机伪装站 {{domain}}",
-    "useDecoyHint": "SNI 设为伪装站域名，握手目标指向 127.0.0.1:4443"
+    "useDecoyHint": "SNI 设为伪装站域名，握手目标指向 127.0.0.1:4443",
+    "wgHint": "标准 WireGuard，整机 VPN 用途（路由器、系统级）。UDP 明文特征明显，适合专线或内网，不适合直连国内。每个用户的密钥由服务端私钥派生，订阅里给出 .conf 和二维码。",
+    "wgPrivate": "服务端私钥",
+    "wgPublic": "服务端公钥",
+    "wgAddress": "隧道网段（服务端地址）",
+    "wgAddressHint": "用户地址从这个网段按编号分配"
   },
   "ingress": {
     "title": "专线入口",

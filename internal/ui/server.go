@@ -31,6 +31,7 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 	"github.com/zeptop-dev/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/wg"
 	"github.com/zeptop-dev/bosun/web"
 )
 
@@ -712,6 +713,13 @@ func (s *Server) keys(w http.ResponseWriter, r *http.Request) {
 		ok(w, map[string]string{"uuid": authutil.UUID()})
 	case "password":
 		ok(w, map[string]string{"password": authutil.Password(20)})
+	case "wireguard":
+		priv, pub, err := wg.Keypair()
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		ok(w, map[string]string{"private_key": priv, "public_key": pub})
 	case "ss2022":
 		n := ss2022KeyLen(r.URL.Query().Get("cipher"))
 		if n == 0 {

@@ -12,6 +12,7 @@ var renderers = map[string]Renderer{
 	"loon":      Loon{},
 	"qx":        QuantumultX{},
 	"uri":       URIList{},
+	"wireguard": WireGuardConf{},
 }
 
 // Aliases users may pass in ?client=.
@@ -20,6 +21,7 @@ var aliases = map[string]string{
 	"sing-box": "singbox", "sfa": "singbox", "sfi": "singbox",
 	"quantumultx": "qx", "quantumult-x": "qx", "quantumult": "qx",
 	"shadowrocket": "uri", "v2rayn": "uri", "v2rayng": "uri", "base64": "uri",
+	"wg": "wireguard", "wireguard-conf": "wireguard",
 }
 
 // Pick chooses a renderer from an explicit client name or the User-Agent.

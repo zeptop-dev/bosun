@@ -96,6 +96,8 @@ func shareURI(l Line) string {
 			q.Set("sni", sn)
 		}
 		return "anytls://" + url.PathEscape(l.Password) + "@" + hostPort + "?" + q.Encode() + frag
+	case spec.WireGuard:
+		return WGConf(l)
 	case spec.Mieru:
 		// mierus:// takes repeated port/protocol pairs (BOTH = TCP at port,
 		// UDP at port+1) plus the client knobs when set.

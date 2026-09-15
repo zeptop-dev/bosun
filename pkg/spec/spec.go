@@ -21,6 +21,9 @@ const (
 	SOCKS       Protocol = "socks"
 	HTTP        Protocol = "http"
 	Naive       Protocol = "naive"
+	// WireGuard is a whole-device VPN inbound (xray): clients get derived
+	// per-user keys, see pkg/wg. Plain UDP, no obfuscation.
+	WireGuard Protocol = "wireguard"
 )
 
 // TLSMode selects how an inbound terminates TLS.
@@ -176,10 +179,16 @@ type Inbound struct {
 	MieruMTU          int      `json:"mieru_mtu,omitempty"`          // mieru: server mtu and client link mtu; 0 = mita default
 	MieruMultiplexing string   `json:"mieru_multiplexing,omitempty"` // mieru client: MULTIPLEXING_OFF|LOW|MIDDLE|HIGH ("" = client default)
 	MieruHandshake    string   `json:"mieru_handshake,omitempty"`    // mieru client: HANDSHAKE_NO_WAIT|HANDSHAKE_STANDARD ("" = client default)
-	SnellPSK          string   `json:"snell_psk,omitempty"`          // snell: shared pre-shared key
-	SnellVersion      int      `json:"snell_version,omitempty"`      // snell: 4 or 5 (0 = 5)
-	SnellObfs         string   `json:"snell_obfs,omitempty"`         // snell: "", "http" or "tls"
-	SnellObfsHost     string   `json:"snell_obfs_host,omitempty"`    // snell: obfs host header
+	// WireGuard: the server key pair, the tunnel network's server address
+	// (default 10.66.0.1/16) and MTU. Peers are the users, keys derived.
+	WGPrivateKey  string `json:"wg_private_key,omitempty"`
+	WGPublicKey   string `json:"wg_public_key,omitempty"`
+	WGAddress     string `json:"wg_address,omitempty"`
+	WGMTU         int    `json:"wg_mtu,omitempty"`
+	SnellPSK      string `json:"snell_psk,omitempty"`       // snell: shared pre-shared key
+	SnellVersion  int    `json:"snell_version,omitempty"`   // snell: 4 or 5 (0 = 5)
+	SnellObfs     string `json:"snell_obfs,omitempty"`      // snell: "", "http" or "tls"
+	SnellObfsHost string `json:"snell_obfs_host,omitempty"` // snell: obfs host header
 
 	// Users restricts who may use this inbound. When ScopedUsers is false the
 	// node-level user list applies; when true only Users are provisioned,

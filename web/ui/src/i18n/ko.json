@@ -169,7 +169,9 @@
       "anytls": "AnyTLS",
       "anytlsDesc": "트래픽 분석에 강한 새 프로토콜. 인증서 필요.",
       "snell5": "Snell v5",
-      "snell5Desc": "Surge 공식 snell-server, 공유 PSK 자동 생성."
+      "snell5Desc": "Surge 공식 snell-server, 공유 PSK 자동 생성.",
+      "wireguard": "WireGuard",
+      "wireguardDesc": "UDP 기반 기기 전체 VPN. 전용선·내부망용."
     },
     "serverNameAuto": "인증서의 도메인. DNS 가 이 머신을 가리켜야 합니다",
     "autoCert": "자동 인증서",
@@ -236,7 +238,12 @@
     "fallbackAdd": "규칙 추가",
     "fallbackDest": "대상",
     "useDecoy": "위장 사이트 {{domain}} 사용",
-    "useDecoyHint": "SNI 를 위장 도메인으로, 핸드셰이크 대상을 127.0.0.1:4443 으로 설정"
+    "useDecoyHint": "SNI 를 위장 도메인으로, 핸드셰이크 대상을 127.0.0.1:4443 으로 설정",
+    "wgHint": "표준 WireGuard. 기기 전체 VPN 용도(라우터, OS 수준). UDP 특징이 뚜렷하므로 전용선이나 내부망에 적합합니다. 클라이언트 키는 서버 키에서 파생되며 구독에 .conf 와 QR 이 포함됩니다.",
+    "wgPrivate": "서버 개인키",
+    "wgPublic": "서버 공개키",
+    "wgAddress": "터널 네트워크(서버 주소)",
+    "wgAddressHint": "클라이언트 주소는 이 네트워크에서 사용자 ID 로 배정"
   },
   "ingress": {
     "title": "전용선 입구",

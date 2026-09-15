@@ -169,7 +169,9 @@
       "anytls": "AnyTLS",
       "anytlsDesc": "新協定，抗流量分析，需要憑證。",
       "snell5": "Snell v5",
-      "snell5Desc": "Surge 官方 snell-server，共享 PSK。"
+      "snell5Desc": "Surge 官方 snell-server，共享 PSK。",
+      "wireguard": "WireGuard",
+      "wireguardDesc": "整機 VPN，走 UDP；適合專線和內網。"
     },
     "serverNameAuto": "憑證對應的網域，DNS 要指向這台機器",
     "autoCert": "自動憑證",
@@ -236,7 +238,12 @@
     "fallbackAdd": "新增規則",
     "fallbackDest": "目標",
     "useDecoy": "使用本機偽裝站 {{domain}}",
-    "useDecoyHint": "SNI 設為偽裝站網域，握手目標指向 127.0.0.1:4443"
+    "useDecoyHint": "SNI 設為偽裝站網域，握手目標指向 127.0.0.1:4443",
+    "wgHint": "標準 WireGuard，整機 VPN 用途（路由器、系統級）。UDP 明文特徵明顯，適合專線或內網，不適合直連中國大陸。每個使用者的金鑰由伺服端私鑰派生，訂閱裡給出 .conf 和 QR code。",
+    "wgPrivate": "伺服端私鑰",
+    "wgPublic": "伺服端公鑰",
+    "wgAddress": "隧道網段（伺服端位址）",
+    "wgAddressHint": "使用者位址從這個網段按編號分配"
   },
   "ingress": {
     "title": "專線入口",
