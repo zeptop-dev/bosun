@@ -10,6 +10,7 @@ package mita
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -89,7 +90,7 @@ func (c *Core) Capabilities() core.Capabilities {
 }
 
 // Render produces one config per inbound under Files["<tag>/server_config.json"].
-func (c *Core) Render(_ *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
+func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
 	if len(inbounds) == 0 {
 		return nil, fmt.Errorf("mita: nothing to render")
 	}
@@ -101,6 +102,15 @@ func (c *Core) Render(_ *spec.Node, inbounds []spec.Inbound, users []spec.User) 
 		cfg, err := render([]spec.Inbound{ib}, ib.EffectiveUsers(users), c.opt.LogLevel)
 		if err != nil {
 			return nil, err
+		}
+		if node != nil && len(node.Overrides["mita"]) > 0 {
+			var obj map[string]any
+			if err := json.Unmarshal(cfg, &obj); err == nil {
+				if err := core.ApplyOverride(obj, node.Overrides["mita"]); err != nil {
+					return nil, fmt.Errorf("mita: %w", err)
+				}
+				cfg, _ = json.MarshalIndent(obj, "", "  ")
+			}
 		}
 		b.Files[filepath.Join(ib.Tag, configFile)] = cfg
 		b.Meta[ib.Tag] = bindingsKey([]spec.Inbound{ib})

@@ -3,7 +3,9 @@ package hysteria
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"github.com/zeptop-dev/bosun/internal/core"
 	"strconv"
 
 	"gopkg.in/yaml.v3"
@@ -17,6 +19,8 @@ type renderOptions struct {
 	AuthURL     string // bosun's auth endpoint, e.g. http://127.0.0.1:9103/auth
 	StatsListen string // hysteria's traffic stats API listen address
 	StatsSecret string
+	// Override is the operator's JSON object merged into the config.
+	Override json.RawMessage
 }
 
 // state carries Render results to Start/Apply.
@@ -64,6 +68,9 @@ func render(inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]by
 			bw["down"] = strconv.Itoa(ib.DownMbps) + " mbps"
 		}
 		cfg["bandwidth"] = bw
+	}
+	if err := core.ApplyOverride(cfg, opt.Override); err != nil {
+		return nil, nil, fmt.Errorf("hysteria: %w", err)
 	}
 	out, err := yaml.Marshal(cfg)
 	if err != nil {

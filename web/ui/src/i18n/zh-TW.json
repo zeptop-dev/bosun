@@ -609,5 +609,10 @@
     "outboundAdded": "WARP 出站已新增",
     "addTemplate": "新增常用分流範本",
     "templateHint": "把 AI 和串流站點分流到 WARP："
+  },
+  "overrides": {
+    "title": "設定覆寫",
+    "hint": "按核心填一段 JSON，會深合併進最終產生的設定：物件逐欄位合併，陣列和純量整體取代，值為 null 表示刪除該欄位。用來設定面板沒有暴露的核心選項。改錯了核心會起不來，體檢裡能看到。",
+    "invalid": "不是合法的 JSON"
   }
 }

@@ -9,6 +9,7 @@ import { UpdateCard } from '../components/UpdateCard'
 import { BackupCard } from '../components/BackupCard'
 import { TwoFactorCard } from '../components/TwoFactorCard'
 import { TokensCard } from '../components/TokensCard'
+import { OverridesCard } from '../components/OverridesCard'
 import { useAuth } from '../lib/auth'
 import { when } from '../lib/format'
 import { dnsToast, toast, type DNSResult } from '../lib/notify'
@@ -123,6 +124,7 @@ export default function SettingsPage() {
         <TwoFactorCard />
         <TokensCard />
       </SimpleGrid>
+      <Card mb="lg" p={0} withBorder={false} bg="transparent"><OverridesCard queryKey={['overrides']} load={() => api.get<Record<string, string>>('/api/overrides')} save={(v) => api.put('/api/overrides', v)} readOnly={fixed || s?.mode === 'managed'} /></Card>
       <BackupCard />
       <UpdateCard mb="lg" />
 

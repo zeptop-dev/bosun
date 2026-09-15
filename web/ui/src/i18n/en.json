@@ -609,5 +609,10 @@
     "outboundAdded": "WARP outbound added",
     "addTemplate": "Add common rules",
     "templateHint": "Route AI and streaming sites through WARP:"
+  },
+  "overrides": {
+    "title": "Config overrides",
+    "hint": "A JSON object per core, deep-merged into the rendered config: objects merge field by field, arrays and scalars replace, null deletes a field. For core options the panel does not expose. A bad override stops the core; the doctor shows it.",
+    "invalid": "Not valid JSON"
   }
 }

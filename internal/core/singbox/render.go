@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
@@ -113,6 +114,9 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	if len(node.DNS) > 0 {
 		cfg["dns"] = renderDNS(node.DNS)
+	}
+	if err := core.ApplyOverride(cfg, node.Overrides["singbox"]); err != nil {
+		return nil, fmt.Errorf("sing-box: %w", err)
 	}
 	return json.MarshalIndent(cfg, "", "  ")
 }
