@@ -230,6 +230,34 @@ type Outbound struct {
 	// Remote is the core-agnostic form: bosun renders it in each core's
 	// dialect. When set, Protocol/Settings are ignored.
 	Remote *Remote `json:"remote,omitempty"`
+	// WARP is a Cloudflare WARP (WireGuard) exit; see WARP.
+	WARP *WARP `json:"warp,omitempty"`
+}
+
+// WARP configures a WireGuard tunnel to Cloudflare WARP as an outbound.
+// FromNode uses the account registered on the node itself (the panel never
+// sees the private key); otherwise the credentials are given here.
+type WARP struct {
+	FromNode      bool     `json:"from_node,omitempty"`
+	PrivateKey    string   `json:"private_key,omitempty"`
+	PeerPublicKey string   `json:"peer_public_key,omitempty"`
+	Endpoint      string   `json:"endpoint,omitempty"`  // host:port, default engage.cloudflareclient.com:2408
+	Addresses     []string `json:"addresses,omitempty"` // interface addresses with prefix
+	Reserved      []int    `json:"reserved,omitempty"`  // 3 bytes from the client id
+	License       string   `json:"license,omitempty"`   // WARP+ (informational)
+}
+
+// WARPAccount is a registered WARP identity kept on the node.
+type WARPAccount struct {
+	ID            string    `json:"id"`
+	Token         string    `json:"token,omitempty"` // API token, never leaves the node
+	License       string    `json:"license,omitempty"`
+	PrivateKey    string    `json:"private_key,omitempty"` // never leaves the node
+	PeerPublicKey string    `json:"peer_public_key"`
+	Endpoint      string    `json:"endpoint"`
+	Addresses     []string  `json:"addresses"`
+	Reserved      []int     `json:"reserved,omitempty"`
+	RegisteredAt  time.Time `json:"registered_at"`
 }
 
 // Remote is a proxy server to dial out through (a "landing" node), in the

@@ -24,6 +24,10 @@ func (s *Server) extraRoutes() {
 	m.HandleFunc("GET /api/routing", auth(s.getRouting))
 	m.HandleFunc("PUT /api/routing", auth(s.local(s.putRouting)))
 	m.HandleFunc("POST /api/routing/parse", auth(s.parseLinks))
+	m.HandleFunc("GET /api/warp", auth(s.getWARP))
+	m.HandleFunc("POST /api/warp/register", auth(s.registerWARP))
+	m.HandleFunc("PUT /api/warp/license", auth(s.licenseWARP))
+	m.HandleFunc("DELETE /api/warp", auth(s.deleteWARP))
 
 	m.HandleFunc("GET /api/certificates", auth(s.listCertificates))
 	m.HandleFunc("POST /api/certificates", auth(s.local(s.putCertificate)))

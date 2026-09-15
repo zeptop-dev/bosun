@@ -70,6 +70,9 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 		defer cancel()
 		res := realityscan.Scan(jctx, p.Hosts, realityscan.Options{Port: p.Port})
 		out.Result, _ = json.Marshal(res)
+	case "warp_register":
+		r := a.warpRegisterJob(ctx, j.Params)
+		out.Result, out.Error = r.Result, r.Error
 	default:
 		out.Error = "unknown job kind " + j.Kind
 	}

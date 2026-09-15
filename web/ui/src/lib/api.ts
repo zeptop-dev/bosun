@@ -80,7 +80,7 @@ export interface Ingress { id: string; name: string; bind_ip: string; line_ip: s
 export interface IngressInput { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number; PortTo: number; PortOffset: number; ReservedPorts?: number[] }
 // Outbounds and routing (landing servers, relay chains).
 export interface Remote { host: string; port: number; uuid?: string; password?: string; username?: string; settings: { protocol: string } }
-export interface Outbound { tag: string; protocol?: string; settings?: Record<string, unknown>; proxy_tag?: string; remote?: Remote }
+export interface Outbound { tag: string; protocol?: string; settings?: Record<string, unknown>; proxy_tag?: string; remote?: Remote; warp?: { from_node?: boolean } }
 export interface Rule { match: string[]; action: string; value?: string }
 export interface Routing { outbounds: Outbound[]; routes: Rule[]; default_outbound: string }
 // Operator-supplied certificates handed to the cores.

@@ -53,6 +53,10 @@ type Agent struct {
 	Certs *certs.Manager
 	// Decoy serves the node's own HTTPS site for REALITY to steal; nil disables.
 	Decoy *decoy.Server
+	// WARPAccount / SaveWARP read and persist the node's Cloudflare WARP
+	// identity (local store); nil disables from_node WARP outbounds.
+	WARPAccount func() *spec.WARPAccount
+	SaveWARP    func(*spec.WARPAccount) error
 	// kick re-applies the current state (after a certificate renewal).
 	kick         chan struct{}
 	forceRestart bool
@@ -516,6 +520,12 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	node := a.node
+	if resolved, err := a.resolveWARP(*node); err != nil {
+		return err
+	} else {
+		node = &resolved
+	}
 	byTag := map[string]string{}
 	perCore := map[string]int{}
 	for name, list := range assign {
@@ -537,7 +547,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 			}
 			continue
 		}
-		bundle, err := c.Render(a.node, inbounds, a.users)
+		bundle, err := c.Render(node, inbounds, a.users)
 		if err != nil {
 			return fmt.Errorf("%s: render: %w", name, err)
 		}
