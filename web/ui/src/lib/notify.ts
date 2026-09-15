@@ -5,6 +5,16 @@ let muted = false
 // every poll fails for a few seconds.
 export const setToastMuted = (v: boolean) => { muted = v }
 
+export interface DNSResult { name: string; ip: string; action: string; error?: string }
+// dnsToast summarises automatic Cloudflare record changes returned by saves.
+export function dnsToast(res?: DNSResult[] | null) {
+  if (!res || !res.length) return
+  const errs = res.filter((r) => r.error)
+  const changed = res.filter((r) => !r.error && (r.action === 'created' || r.action === 'updated'))
+  if (errs.length) toast.err(new Error('DNS: ' + errs.map((r) => `${r.name}: ${r.error}`).join('; ')))
+  else if (changed.length) toast.ok('DNS: ' + changed.map((r) => `${r.name} → ${r.ip}`).join(', '))
+}
+
 export const toast = {
   ok: (message: string) => notifications.show({ message, color: 'teal' }),
   err: (e: unknown) => { if (muted) return; notifications.show({ message: e instanceof Error ? e.message : String(e), color: 'red' }) },

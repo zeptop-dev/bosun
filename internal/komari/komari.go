@@ -464,6 +464,11 @@ var (
 // PublicIPSources overrides the responders (tests).
 var PublicIPSources = func() ([]string, []string) { return ipv4Sources, ipv6Sources }
 
+// DetectPublicIPs returns the node's public IPv4 and IPv6 ("" when absent).
+func DetectPublicIPs(ctx context.Context) (string, string) {
+	return publicIPs(ctx, &http.Client{Timeout: 8 * time.Second})
+}
+
 func publicIPs(ctx context.Context, client *http.Client) (string, string) {
 	v4s, v6s := PublicIPSources()
 	fetch := func(urls []string, re *regexp.Regexp, want func(net.IP) bool) string {

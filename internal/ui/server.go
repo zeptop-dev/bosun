@@ -487,7 +487,11 @@ func (s *Server) createInbound(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	storeErr(w, s.d.Store.PutInbound(ib, ""))
+	if err := s.d.Store.PutInbound(ib, ""); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	ok(w, map[string]any{"ok": true, "dns": s.dnsSync(r.Context(), tlsNames(ib.Inbound)...)})
 }
 
 func (s *Server) updateInbound(w http.ResponseWriter, r *http.Request) {
@@ -496,7 +500,11 @@ func (s *Server) updateInbound(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	storeErr(w, s.d.Store.PutInbound(ib, r.PathValue("tag")))
+	if err := s.d.Store.PutInbound(ib, r.PathValue("tag")); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	ok(w, map[string]any{"ok": true, "dns": s.dnsSync(r.Context(), tlsNames(ib.Inbound)...)})
 }
 
 func (s *Server) deleteInbound(w http.ResponseWriter, r *http.Request) {
@@ -743,7 +751,15 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	storeErr(w, s.d.Store.SetSettings(v))
+	if err := s.d.Store.SetSettings(v); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	names := []string{v.PanelDomain}
+	if v.DecoyEnabled {
+		names = append(names, v.DecoyDomain)
+	}
+	ok(w, map[string]any{"ok": true, "dns": s.dnsSync(r.Context(), names...)})
 }
 
 func (s *Server) putAdmin(w http.ResponseWriter, r *http.Request) {

@@ -136,6 +136,7 @@ const recipes: { key: string; values: Partial<Values> }[] = [
   { key: 'anytls', values: { protocol: 'anytls', port: 8444, tls: 'tls', auto_cert: true } },
   { key: 'snell5', values: { protocol: 'snell', port: 6160, tls: 'none', snell_version: 5, snell_obfs: '' } },
   { key: 'wireguard', values: { protocol: 'wireguard', port: 51820, tls: 'none', wg_address: '10.66.0.1/16', wg_mtu: 1420 } },
+  { key: 'socks5', values: { protocol: 'socks', port: 1080, tls: 'none' } },
 ]
 
 export type InboundSubmit = { body: Record<string, unknown>; ingress?: IngressInput }

@@ -171,7 +171,9 @@
       "snell5": "Snell v5",
       "snell5Desc": "Surge 공식 snell-server, 공유 PSK 자동 생성.",
       "wireguard": "WireGuard",
-      "wireguardDesc": "UDP 기반 기기 전체 VPN. 전용선·내부망용."
+      "wireguardDesc": "UDP 기반 기기 전체 VPN. 전용선·내부망용.",
+      "socks5": "SOCKS5",
+      "socks5Desc": "평문, 사용자명/비밀번호 인증. 전용선·내부망·로컬 프로그램용."
     },
     "serverNameAuto": "인증서의 도메인. DNS 가 이 머신을 가리켜야 합니다",
     "autoCert": "자동 인증서",
@@ -457,7 +459,7 @@
     "cfToken": "Cloudflare API 토큰",
     "cfTokenHint": "DNS 검증에만 필요. 권한 Zone.DNS 편집",
     "panelDomain": "패널 도메인",
-    "panelDomainHint": "자동 인증서로 패널을 HTTPS 로 제공합니다. 저장 후 재시작하세요",
+    "panelDomainHint": "자동 인증서로 패널을 HTTPS 로 제공(저장 후 재시작). Cloudflare 토큰이 있으면 저장 시 DNS 레코드도 생성",
     "certList": "자동 인증서",
     "domain": "도메인",
     "expires": "만료",

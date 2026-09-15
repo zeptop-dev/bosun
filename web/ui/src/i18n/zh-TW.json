@@ -171,7 +171,9 @@
       "snell5": "Snell v5",
       "snell5Desc": "Surge 官方 snell-server，共享 PSK。",
       "wireguard": "WireGuard",
-      "wireguardDesc": "整機 VPN，走 UDP；適合專線和內網。"
+      "wireguardDesc": "整機 VPN，走 UDP；適合專線和內網。",
+      "socks5": "SOCKS5",
+      "socks5Desc": "明文，使用者名稱密碼認證；專線、內網或本機程式用。"
     },
     "serverNameAuto": "憑證對應的網域，DNS 要指向這台機器",
     "autoCert": "自動憑證",
@@ -457,7 +459,7 @@
     "cfToken": "Cloudflare API Token",
     "cfTokenHint": "僅 DNS 驗證需要，權限 Zone.DNS 編輯",
     "panelDomain": "面板網域",
-    "panelDomainHint": "填了就用自動憑證給面板開 HTTPS，儲存後重新啟動生效",
+    "panelDomainHint": "填了就用自動憑證給面板開 HTTPS，儲存後重啟生效；填了 Cloudflare Token 時儲存會自動建立解析記錄",
     "certList": "自動憑證",
     "domain": "網域",
     "expires": "到期",
