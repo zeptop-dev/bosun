@@ -63,7 +63,7 @@ func TestBuiltinPageAndProxy(t *testing.T) {
 	// Switch to a reverse proxy: same listener port, new handler.
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("upstream " + r.Host)) }))
 	defer up.Close()
-	s.Configure(context.Background(), &spec.Decoy{Domain: "www.example.com", Port: port, Upstream: up.URL})
+	s.Configure(context.Background(), &spec.Decoy{Domain: "www.example.com", Port: port, Upstream: up.URL, AllowPrivate: true, Insecure: true})
 	resp, err = client.Get("https://127.0.0.1:" + strconv.Itoa(port) + "/x")
 	if err != nil {
 		t.Fatal(err)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -77,6 +78,7 @@ func cmdBackup(args []string) error {
 	cfgPath := fs.String("c", "/etc/bosun/config.yaml", "config file")
 	out := fs.String("o", "", "output file (create)")
 	force := fs.Bool("force", false, "restore even if the service seems to be running")
+	passphrase := fs.String("passphrase", "", "encrypt the archive (create) or decrypt it (restore) with this passphrase")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -98,7 +100,17 @@ func cmdBackup(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := backup.Write(dataDir, f); err != nil {
+		if *passphrase != "" {
+			var buf bytes.Buffer
+			if err := backup.Write(dataDir, &buf); err != nil {
+				f.Close()
+				return err
+			}
+			if err := backup.Seal(f, buf.Bytes(), *passphrase); err != nil {
+				f.Close()
+				return err
+			}
+		} else if err := backup.Write(dataDir, f); err != nil {
 			f.Close()
 			return err
 		}
@@ -119,7 +131,7 @@ func cmdBackup(args []string) error {
 			return err
 		}
 		defer f.Close()
-		sum, _, err := backup.Restore(dataDir, f, "")
+		sum, _, err := backup.Restore(dataDir, f, "", *passphrase)
 		if err != nil {
 			return err
 		}

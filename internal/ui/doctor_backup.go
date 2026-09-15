@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ func (s *Server) doctorBackupRoutes() {
 	m.HandleFunc("GET /api/doctor", auth(s.getDoctor))
 	m.HandleFunc("POST /api/reality/scan", auth(s.realityScan))
 	m.HandleFunc("GET /api/backup", auth(s.getBackup))
+	m.HandleFunc("POST /api/backup", auth(s.getBackup))
 	m.HandleFunc("POST /api/backup/restore", auth(s.local(s.restoreBackup)))
 }
 
@@ -52,8 +54,30 @@ func (s *Server) getDoctor(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) dataDir() string { return filepath.Dir(s.d.Store.Path()) }
 
+// getBackup streams the archive. A POST with {"passphrase": "..."} seals
+// it (AES-256-GCM, argon2id); the plain GET stays for scripts that store
+// the file somewhere already protected.
 func (s *Server) getBackup(w http.ResponseWriter, r *http.Request) {
 	name := backup.Name(time.Now())
+	var in struct {
+		Passphrase string `json:"passphrase"`
+	}
+	if r.Method == http.MethodPost {
+		_ = decode(r, &in)
+	}
+	if in.Passphrase != "" {
+		var buf bytes.Buffer
+		if err := backup.Write(s.dataDir(), &buf); err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", "attachment; filename="+name+".enc")
+		if err := backup.Seal(w, buf.Bytes(), in.Passphrase); err != nil {
+			s.d.Log.Error("backup", "err", err)
+		}
+		return
+	}
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", "attachment; filename="+name)
 	if err := backup.Write(s.dataDir(), w); err != nil {
@@ -74,7 +98,7 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	sum, rollback, err := backup.Restore(s.dataDir(), f, s.d.Store.AdminKey())
+	sum, rollback, err := backup.Restore(s.dataDir(), f, s.d.Store.AdminKey(), r.FormValue("passphrase"))
 	if err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return

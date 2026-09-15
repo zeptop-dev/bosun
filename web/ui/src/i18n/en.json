@@ -494,7 +494,12 @@
     "shaperOn": "{{n}} users shaped on {{iface}}",
     "shaperUnsupported": "Limits configured, but this host has no nft/tc (or is not Linux); users run unlimited",
     "mitaQuotas": "mita native quotas",
-    "mitaQuotasHint": "Also write each user's allowance into mita's own quotas so the core blocks overuse even when the panel is down. The window is the reset cycle (a monthly reset becomes a rolling 31 days), so right after a calendar reset mita may still block for a few days."
+    "mitaQuotasHint": "Also write each user's allowance into mita's own quotas so the core blocks overuse even when the panel is down. The window is the reset cycle (a monthly reset becomes a rolling 31 days), so right after a calendar reset mita may still block for a few days.",
+    "tokenKeptHint": "Stored. Leave empty to keep it, enter - to clear it.",
+    "decoyAllowPrivate": "Allow private upstream",
+    "decoyAllowPrivateHint": "Only needed when the upstream is a loopback or private address; refused by default so the panel or local services cannot be exposed behind the decoy.",
+    "decoyInsecure": "Skip upstream certificate check",
+    "decoyInsecureHint": "For an https upstream with a self-signed certificate."
   },
   "logs": {
     "title": "Logs",
@@ -566,7 +571,9 @@
     "restored": "Restored",
     "summary": "Restored: {{inbounds}} inbounds, {{users}} users, {{forwards}} forwards, {{ingresses}} ingresses",
     "adminChanged": "admin login changed, sign in again",
-    "managedHint": "Managed by Captain: the panel holds the configuration. Download only; restore is disabled."
+    "managedHint": "Managed by Captain: the panel holds the configuration. Download only; restore is disabled.",
+    "passphrase": "Backup passphrase",
+    "passphraseHint": "When set the archive is sealed with it (AES-256-GCM) and the same passphrase is needed to restore; empty downloads it in the clear. The archive holds the admin login, users, TOTP, API tokens, the WARP key and every token: seal it."
   },
   "outbound": {
     "title": "Outbound",

@@ -262,6 +262,12 @@ func (c *Client) Apply(ctx context.Context, version string) (applied string, err
 	if rel.TagName == c.Version {
 		return "", ErrUpToDate
 	}
+	if rel.Draft || rel.Prerelease {
+		return "", fmt.Errorf("%s is a draft or pre-release", rel.TagName)
+	}
+	if _, ok := parseVersion(rel.TagName); ok && !Newer(rel.TagName, c.Version) {
+		return "", fmt.Errorf("%s is older than the running %s; use rollback for that", rel.TagName, c.Version)
+	}
 	assetName := fmt.Sprintf("%s-%s-%s", c.Binary, runtime.GOOS, runtime.GOARCH)
 	var assetURL, sumsURL string
 	for _, a := range rel.Assets {

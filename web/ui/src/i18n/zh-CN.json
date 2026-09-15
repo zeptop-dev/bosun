@@ -494,7 +494,12 @@
     "shaperOn": "已对 {{n}} 个用户限速，接口 {{iface}}",
     "shaperUnsupported": "已配置限速，但这台机器没有 nft/tc（或不是 Linux），用户暂不受限",
     "mitaQuotas": "mita 原生配额",
-    "mitaQuotasHint": "把每个用户的流量额度也写进 mita 自己的 quotas，面板挂了内核照样拦。窗口取重置周期（按月重置按 31 天滚动），所以月初刚重置时 mita 可能还按滚动窗口拦几天。"
+    "mitaQuotasHint": "把每个用户的流量额度也写进 mita 自己的 quotas，面板挂了内核照样拦。窗口取重置周期（按月重置按 31 天滚动），所以月初刚重置时 mita 可能还按滚动窗口拦几天。",
+    "tokenKeptHint": "已保存。留空表示不改，填一个 - 表示清除。",
+    "decoyAllowPrivate": "允许内网上游",
+    "decoyAllowPrivateHint": "上游是回环或内网地址时才需要打开；默认拒绝，防止把面板自己或本机服务暴露到伪装站后面。",
+    "decoyInsecure": "不校验上游证书",
+    "decoyInsecureHint": "上游 https 用自签名证书时打开。"
   },
   "logs": {
     "title": "日志",
@@ -566,7 +571,9 @@
     "restored": "已恢复",
     "summary": "已恢复：{{inbounds}} 个入站，{{users}} 个用户，{{forwards}} 条转发，{{ingresses}} 个入口",
     "adminChanged": "管理员登录已变更，请重新登录",
-    "managedHint": "Captain 托管中，配置由面板保存；只能下载，不能恢复。"
+    "managedHint": "Captain 托管中，配置由面板保存；只能下载，不能恢复。",
+    "passphrase": "备份口令",
+    "passphraseHint": "填了就用它加密压缩包（AES-256-GCM），恢复时也要填；留空则明文下载。压缩包里有管理员、用户、TOTP、API 令牌、WARP 私钥和各种 token，建议一定加密。"
   },
   "outbound": {
     "title": "出站",

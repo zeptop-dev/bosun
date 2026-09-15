@@ -98,7 +98,11 @@ type stateShape struct {
 // The returned rollback puts every touched file back the way it was
 // (files that did not exist are removed); it is nil when nothing was
 // written. A write failure part-way rolls back before returning.
-func Restore(dataDir string, r io.Reader, currentAdmin string) (Summary, func() error, error) {
+func Restore(dataDir string, r io.Reader, currentAdmin, passphrase string) (Summary, func() error, error) {
+	r, err := Open(r, passphrase)
+	if err != nil {
+		return Summary{}, nil, err
+	}
 	sum, files, err := load(r, currentAdmin)
 	if err != nil {
 		return Summary{}, nil, err

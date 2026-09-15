@@ -191,6 +191,10 @@ type Settings struct {
 	DecoyDomain   string `json:"decoy_domain"`
 	DecoyUpstream string `json:"decoy_upstream"`
 	DecoyACME     string `json:"decoy_acme"`
+	// DecoyAllowPrivate lets the upstream be a local address; DecoyInsecure
+	// skips TLS verification toward it.
+	DecoyAllowPrivate bool `json:"decoy_allow_private,omitempty"`
+	DecoyInsecure     bool `json:"decoy_insecure,omitempty"`
 	// PanelAllowCIDRs restricts panel login/API to these networks (empty = any).
 	PanelAllowCIDRs []string `json:"panel_allow_cidrs"`
 	// ExtraLinks are share links (one per line) appended to every user's

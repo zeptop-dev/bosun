@@ -184,13 +184,21 @@ func handler(d *spec.Decoy) (http.Handler, error) {
 		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 			return nil, fmt.Errorf("upstream must be an http(s) URL, got %q", d.Upstream)
 		}
+		if !d.AllowPrivate {
+			if ip := net.ParseIP(u.Hostname()); ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified()) {
+				return nil, fmt.Errorf("upstream %s is a local address; enable allow_private to proxy local services", u.Host)
+			}
+			if h := strings.ToLower(u.Hostname()); h == "localhost" {
+				return nil, fmt.Errorf("upstream %s is a local address; enable allow_private to proxy local services", u.Host)
+			}
+		}
 		rp := &httputil.ReverseProxy{Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(u)
 			pr.Out.Host = u.Host
 			pr.SetXForwarded()
 		}}
-		if u.Scheme == "https" {
-			rp.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // operator's own upstream
+		if u.Scheme == "https" && d.Insecure {
+			rp.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // operator opted in
 		}
 		return rp, nil
 	}

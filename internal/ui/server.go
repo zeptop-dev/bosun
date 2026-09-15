@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,7 +106,48 @@ func (s *Server) currentAgent() *agent.Agent {
 }
 
 // Handler returns the root handler.
-func (s *Server) Handler() http.Handler { return s.mux }
+// Handler wraps the routes with panic recovery and a request log (debug
+// for everything, info for errors and slow requests).
+func (s *Server) Handler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &statusRecorder{ResponseWriter: w, status: 200}
+		defer func() {
+			if rec := recover(); rec != nil {
+				if rec == http.ErrAbortHandler {
+					panic(rec)
+				}
+				s.d.Log.Error("panic", "path", r.URL.Path, "err", rec, "stack", string(debug.Stack()))
+				fail(w, http.StatusInternalServerError, errors.New("internal error"))
+				return
+			}
+			ms := time.Since(start).Milliseconds()
+			if rw.status >= 400 || ms > 1000 {
+				s.d.Log.Info("http", "method", r.Method, "path", r.URL.Path, "status", rw.status, "ms", ms, "ip", r.RemoteAddr)
+			} else {
+				s.d.Log.Debug("http", "method", r.Method, "path", r.URL.Path, "status", rw.status, "ms", ms)
+			}
+		}()
+		if s.d.Secure {
+			w.Header().Set("Strict-Transport-Security", "max-age=15552000")
+		}
+		s.mux.ServeHTTP(rw, r)
+	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusRecorder) WriteHeader(code int) { w.status = code; w.ResponseWriter.WriteHeader(code) }
+
+// Flush keeps SSE/streaming handlers working through the recorder.
+func (w *statusRecorder) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
 
 func (s *Server) routes() {
 	m := s.mux
@@ -194,9 +236,39 @@ func storeErr(w http.ResponseWriter, err error) {
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	// Behind a configured reverse proxy the real address is the last
+	// X-Forwarded-For hop the proxy appended.
+	if trustedProxy(host) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			if ip := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(ip) != nil {
+				return ip
+			}
+		}
+		if ip := strings.TrimSpace(r.Header.Get("X-Real-IP")); net.ParseIP(ip) != nil {
+			return ip
+		}
 	}
 	return host
+}
+
+// TrustedProxies are the reverse proxies whose X-Forwarded-For is
+// believed (config web.trusted_proxies); empty = none.
+var TrustedProxies []*net.IPNet
+
+func trustedProxy(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, n := range TrustedProxies {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // ipAllowed applies the panel allow-list (empty = everyone).
@@ -280,6 +352,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	ip := clientIP(r)
 	s.mu.Lock()
+	for k, v := range s.failed { // forget old attempts so the map stays small
+		if time.Since(v.last) > time.Hour {
+			delete(s.failed, k)
+		}
+	}
 	f := s.failed[ip]
 	s.mu.Unlock()
 	if f.count >= 5 && time.Since(f.last) < time.Minute {
@@ -642,7 +719,7 @@ func (s *Server) userLinks(w http.ResponseWriter, r *http.Request) {
 // Shadowrocket and friends import. No login: the token is the secret.
 func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 	u, found := s.d.Store.UserBySubToken(r.PathValue("token"))
-	if !found {
+	if !found || !u.Enabled {
 		http.NotFound(w, r)
 		return
 	}
@@ -727,8 +804,17 @@ func (s *Server) deleteForward(w http.ResponseWriter, r *http.Request) {
 
 // ---- settings --------------------------------------------------------------
 
+// getSettings never echoes the Cloudflare or Telegram tokens; the UI sees
+// has_* flags, sends "" to keep a token and "-" to clear it.
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
-	ok(w, s.d.Store.Settings())
+	v := s.d.Store.Settings()
+	hasCF, hasTG := v.CloudflareToken != "", v.TelegramToken != ""
+	v.CloudflareToken, v.TelegramToken = "", ""
+	b, _ := json.Marshal(v)
+	var out map[string]any
+	_ = json.Unmarshal(b, &out)
+	out["has_cloudflare_token"], out["has_telegram_token"] = hasCF, hasTG
+	ok(w, out)
 }
 
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
@@ -736,6 +822,19 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if err := decode(r, &v); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
+	}
+	cur := s.d.Store.Settings()
+	switch v.CloudflareToken {
+	case "":
+		v.CloudflareToken = cur.CloudflareToken
+	case "-":
+		v.CloudflareToken = ""
+	}
+	switch v.TelegramToken {
+	case "":
+		v.TelegramToken = cur.TelegramToken
+	case "-":
+		v.TelegramToken = ""
 	}
 	if len(v.PanelAllowCIDRs) > 0 {
 		ip := net.ParseIP(clientIP(r))
@@ -769,7 +868,16 @@ func (s *Server) putAdmin(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	storeErr(w, s.d.Store.SetAdmin(in.Username, in.Password))
+	if err := s.d.Store.SetAdmin(in.Username, in.Password); err != nil {
+		storeErr(w, err)
+		return
+	}
+	// Every other session belonged to the old credentials.
+	s.sessions.Clear()
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		s.sessions.Add(c.Value)
+	}
+	ok(w, map[string]bool{"ok": true})
 }
 
 func (s *Server) keys(w http.ResponseWriter, r *http.Request) {
