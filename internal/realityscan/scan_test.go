@@ -65,3 +65,12 @@ func TestScanOrdersFeasibleFirst(t *testing.T) {
 		t.Fatalf("unexpected %+v", out)
 	}
 }
+
+func TestSameHost(t *testing.T) {
+	if !sameHost("/en/", "www.example.com") || !sameHost("https://www.example.com/x", "www.example.com") {
+		t.Fatal("same-host redirects must not count")
+	}
+	if sameHost("https://example.com/", "www.example.com") {
+		t.Fatal("apex redirect is another host")
+	}
+}
