@@ -8,6 +8,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/realityscan"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 )
 
 // runJobs starts every job in the panel's state that has not run yet. Each
@@ -73,6 +74,21 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 	case "warp_register":
 		r := a.warpRegisterJob(ctx, j.Params)
 		out.Result, out.Error = r.Result, r.Error
+	case "rollback":
+		if a.Rollback == nil {
+			out.Error = "self-update is disabled on this node"
+			break
+		}
+		ver, err := a.Rollback()
+		if err != nil {
+			out.Error = err.Error()
+			break
+		}
+		out.Result, _ = json.Marshal(map[string]string{"version": ver})
+		a.log.Warn("rolled back on panel request; restarting", "to", ver)
+		// The result rides on the out-of-band report runJobs asks for;
+		// give it a moment before the process exits for the supervisor.
+		selfupdate.Restart(5 * time.Second)
 	default:
 		out.Error = "unknown job kind " + j.Kind
 	}

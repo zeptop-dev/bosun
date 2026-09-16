@@ -56,6 +56,10 @@ type Agent struct {
 	// when the panel asks the node to move to another release.
 	Upgrade      func(version string)
 	upgradeAsked string
+	// Rollback puts the previous binary back (the "rollback" node job);
+	// it returns the version now installed and the agent restarts after
+	// the result has been reported.
+	Rollback func() (string, error)
 
 	// Certs obtains certificates for inbounds with auto_cert; nil disables.
 	Certs *certs.Manager

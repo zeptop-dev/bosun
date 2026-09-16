@@ -340,6 +340,9 @@ func cmdRun(args []string) error {
 		ag := agent.New(cfg, e.driver, e.reg, mreg, log)
 		ag.Version = version
 		ag.Upgrade = upgradeHook(log, upd)
+		if upd.ReleaseBuild() {
+			ag.Rollback = upd.Rollback
+		}
 		ag.Certs = cm
 		ag.Decoy = dc
 		ag.Shaper = shp
