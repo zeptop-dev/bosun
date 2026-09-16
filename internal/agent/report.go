@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 
 	"time"
 
@@ -28,103 +29,21 @@ func (a *Agent) report(ctx context.Context) bool {
 		a.pendingInbound = map[string]spec.Traffic{}
 		a.pendingOutbound = map[string]spec.Traffic{}
 	}
-	// Deltas the panel never acknowledged are carried forward: the cores
-	// zero their counters on read, so this map is the only copy.
-	totals := a.pendingTraffic
-	for _, name := range a.reg.Names() {
-		c, _ := a.reg.Get(name)
-		if !c.Running() {
-			continue
-		}
-		stats, err := c.Stats(ctx, true)
-		if err != nil {
-			a.log.Warn("stats failed", "core", name, "err", err)
-			continue
-		}
-		for key, t := range stats {
-			if t.Up == 0 && t.Down == 0 {
-				continue
-			}
-			// Cores count per inbound ("name|tag") where they can; the
-			// panel charges by the inbound's group, drivers that only
-			// know users get the sum.
-			userName, tag := spec.SplitInboundUser(key)
-			id, ok := a.userIDs[userName]
-			if !ok {
-				continue
-			}
-			k := trafficKey{id, tag}
-			ut := totals[k]
-			if ut == nil {
-				ut = &spec.UserTraffic{UserID: id, Inbound: tag}
-				totals[k] = ut
-			}
-			ut.Up += t.Up
-			ut.Down += t.Down
-		}
-	}
-	// Per user for the drivers (Xboard, local); per user and inbound for
-	// the Captain report below.
-	perUser := map[int64]*spec.UserTraffic{}
-	perInboundList := make([]spec.UserTraffic, 0, len(totals))
-	for _, t := range totals {
-		perInboundList = append(perInboundList, *t)
-		ut := perUser[t.UserID]
-		if ut == nil {
-			ut = &spec.UserTraffic{UserID: t.UserID}
-			perUser[t.UserID] = ut
-		}
-		ut.Up += t.Up
-		ut.Down += t.Down
-	}
-	list := make([]spec.UserTraffic, 0, len(perUser))
-	for _, t := range perUser {
-		list = append(list, *t)
-	}
-	perInbound := a.pendingInbound
-	for _, name := range a.reg.Names() {
-		c, _ := a.reg.Get(name)
+	list, perInboundList := a.collectUserTraffic(ctx)
+	perInbound := a.collectTagged(ctx, a.pendingInbound, "inbound", func(c core.Core) (map[string]spec.Traffic, error) {
 		is, ok := c.(core.InboundStatser)
-		if !ok || !c.Running() {
-			continue
+		if !ok {
+			return nil, errSkip
 		}
-		stats, err := is.InboundStats(ctx, true)
-		if err != nil {
-			a.log.Debug("inbound stats failed", "core", name, "err", err)
-			continue
-		}
-		for tag, t := range stats {
-			if t.Up == 0 && t.Down == 0 {
-				continue
-			}
-			cur := perInbound[tag]
-			cur.Up += t.Up
-			cur.Down += t.Down
-			perInbound[tag] = cur
-		}
-	}
-	perOutbound := a.pendingOutbound
-	for _, name := range a.reg.Names() {
-		c, _ := a.reg.Get(name)
+		return is.InboundStats(ctx, true)
+	})
+	perOutbound := a.collectTagged(ctx, a.pendingOutbound, "outbound", func(c core.Core) (map[string]spec.Traffic, error) {
 		os, ok := c.(core.OutboundStatser)
-		if !ok || !c.Running() {
-			continue
+		if !ok {
+			return nil, errSkip
 		}
-		stats, err := os.OutboundStats(ctx, true)
-		if err != nil {
-			a.log.Debug("outbound stats failed", "core", name, "err", err)
-			continue
-		}
-		for tag, t := range stats {
-			if t.Up == 0 && t.Down == 0 || tag == "api" || tag == "block" {
-				continue
-			}
-			cur := perOutbound[tag]
-			cur.Up += t.Up
-			cur.Down += t.Down
-			perOutbound[tag] = cur
-		}
-	}
+		return os.OutboundStats(ctx, true)
+	})
 	host := sysinfo.Snapshot(ctx)
 
 	if rep, ok := a.driver.(panel.Reporter); ok {
@@ -177,6 +96,94 @@ func (a *Agent) report(ctx context.Context) bool {
 		a.log.Warn("push status failed", "err", err)
 	}
 	return false
+}
+
+// errSkip marks a core without the requested counters.
+var errSkip = errors.New("no such counters")
+
+// collectUserTraffic reads every running core's per-user counters into the
+// pending map (deltas the panel never acknowledged stay there) and returns
+// them summed per user (for drivers that only know users) and per user and
+// inbound (for the Captain report).
+func (a *Agent) collectUserTraffic(ctx context.Context) (perUser, perInbound []spec.UserTraffic) {
+	totals := a.pendingTraffic
+	for _, name := range a.reg.Names() {
+		c, _ := a.reg.Get(name)
+		if !c.Running() {
+			continue
+		}
+		stats, err := c.Stats(ctx, true)
+		if err != nil {
+			a.log.Warn("stats failed", "core", name, "err", err)
+			continue
+		}
+		for key, t := range stats {
+			if t.Up == 0 && t.Down == 0 {
+				continue
+			}
+			// Cores count per inbound ("name|tag") where they can.
+			userName, tag := spec.SplitInboundUser(key)
+			id, ok := a.userIDs[userName]
+			if !ok {
+				continue
+			}
+			k := trafficKey{id, tag}
+			ut := totals[k]
+			if ut == nil {
+				ut = &spec.UserTraffic{UserID: id, Inbound: tag}
+				totals[k] = ut
+			}
+			ut.Up += t.Up
+			ut.Down += t.Down
+		}
+	}
+	sums := map[int64]*spec.UserTraffic{}
+	perInbound = make([]spec.UserTraffic, 0, len(totals))
+	for _, t := range totals {
+		perInbound = append(perInbound, *t)
+		ut := sums[t.UserID]
+		if ut == nil {
+			ut = &spec.UserTraffic{UserID: t.UserID}
+			sums[t.UserID] = ut
+		}
+		ut.Up += t.Up
+		ut.Down += t.Down
+	}
+	perUser = make([]spec.UserTraffic, 0, len(sums))
+	for _, t := range sums {
+		perUser = append(perUser, *t)
+	}
+	return perUser, perInbound
+}
+
+// collectTagged adds every running core's per-tag counters (inbound or
+// outbound totals) into pending, skipping cores without them and the
+// internal api/block tags.
+func (a *Agent) collectTagged(ctx context.Context, pending map[string]spec.Traffic, kind string, read func(core.Core) (map[string]spec.Traffic, error)) map[string]spec.Traffic {
+	for _, name := range a.reg.Names() {
+		c, _ := a.reg.Get(name)
+		if !c.Running() {
+			continue
+		}
+		stats, err := read(c)
+		if errors.Is(err, errSkip) {
+			continue
+		}
+		if err != nil {
+			a.log.Debug(kind+" stats failed", "core", name, "err", err)
+			continue
+		}
+		for tag, t := range stats {
+			if t.Up == 0 && t.Down == 0 || tag == "api" || tag == "block" {
+				continue
+			}
+			cur := pending[tag]
+			cur.Up += t.Up
+			cur.Down += t.Down
+			pending[tag] = cur
+		}
+	}
+	return pending
 }
 
 // buildReport assembles the combined report for Reporter drivers.
