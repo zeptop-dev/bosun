@@ -206,6 +206,11 @@ type Inbound struct {
 	// NoSniff turns off destination sniffing on this inbound (on by
 	// default: it lets domain rules see the real host behind an IP).
 	NoSniff bool `json:"no_sniff,omitempty"`
+	// AcceptProxyProtocol makes the listener expect a PROXY protocol
+	// header on every connection (xray only): for inbounds reached only
+	// through relays that send one, so device counting sees the client's
+	// address. Direct clients cannot connect to such an inbound.
+	AcceptProxyProtocol bool `json:"accept_proxy_protocol,omitempty"`
 	// Fallbacks hand connections that are not this protocol (or match a
 	// path / SNI / ALPN) to another local service, e.g. a real website on
 	// port 80 so the inbound looks like one. VLESS/Trojan over TCP+TLS on
@@ -402,6 +407,12 @@ type Forward struct {
 	// PreserveSource skips masquerading on the nft backend so the target
 	// sees the client's address; the target must route replies back here.
 	PreserveSource bool `json:"preserve_source,omitempty"`
+	// ProxyProtocol prefixes every relayed TCP connection with a PROXY
+	// protocol v2 header (built-in relay and realm) so the target inbound,
+	// which must have AcceptProxyProtocol, sees the client's address for
+	// online-device counting. Not for the nft backend (kernel DNAT keeps
+	// the source anyway when PreserveSource is on).
+	ProxyProtocol bool `json:"proxy_protocol,omitempty"`
 }
 
 // Node is the complete desired state for this server.

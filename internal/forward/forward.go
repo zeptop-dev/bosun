@@ -81,7 +81,7 @@ func NewManager(log *slog.Logger) *Manager {
 }
 
 func key(f spec.Forward) string {
-	return fmt.Sprintf("%s|%s|%d|%s|%s|%s|%t", f.Tag, f.Listen, f.Port, f.Protocol, f.Target, f.Backend, f.PreserveSource)
+	return fmt.Sprintf("%s|%s|%d|%s|%s|%s|%t|%t", f.Tag, f.Listen, f.Port, f.Protocol, f.Target, f.Backend, f.PreserveSource, f.ProxyProtocol)
 }
 
 // Apply makes the running set match forwards: unchanged rules keep their
@@ -244,6 +244,9 @@ func validate(forwards []spec.Forward) error {
 		}
 		if f.PreserveSource && f.Backend != "nft" {
 			return fmt.Errorf("forward %q: preserve_source needs the nft backend", f.Tag)
+		}
+		if f.ProxyProtocol && f.Backend == "nft" {
+			return fmt.Errorf("forward %q: proxy_protocol needs the built-in relay or realm (nft keeps the source with preserve_source)", f.Tag)
 		}
 		if _, _, err := net.SplitHostPort(f.Target); err != nil {
 			return fmt.Errorf("forward %q: target must be host:port: %w", f.Tag, err)

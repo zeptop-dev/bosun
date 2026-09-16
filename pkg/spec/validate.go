@@ -49,6 +49,9 @@ func (i Inbound) Validate() error {
 	if err := i.validateTLS(); err != nil {
 		return err
 	}
+	if i.AcceptProxyProtocol && i.Core != "" && i.Core != "xray" {
+		return fmt.Errorf("accept_proxy_protocol is served by xray only")
+	}
 	switch i.Protocol {
 	case VLESS, VMess, Trojan, HTTP, SOCKS:
 	case Shadowsocks:

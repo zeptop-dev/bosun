@@ -45,11 +45,18 @@ func realmConfig(rules []spec.Forward) string {
 			listen = "0.0.0.0"
 		}
 		fmt.Fprintf(&b, "\n[[endpoints]]\n# %s\nlisten = %q\nremote = %q\n", f.Tag, net.JoinHostPort(listen, strconv.Itoa(f.Port)), f.Target)
+		var opts []string
 		switch f.Protocol {
 		case "udp":
-			b.WriteString("network = { no_tcp = true, use_udp = true }\n")
+			opts = append(opts, "no_tcp = true", "use_udp = true")
 		case "both":
-			b.WriteString("network = { use_udp = true }\n")
+			opts = append(opts, "use_udp = true")
+		}
+		if f.ProxyProtocol {
+			opts = append(opts, "send_proxy = true", "send_proxy_version = 2")
+		}
+		if len(opts) > 0 {
+			b.WriteString("network = { " + strings.Join(opts, ", ") + " }\n")
 		}
 	}
 	return b.String()

@@ -403,6 +403,17 @@ front of it relay raw bytes and report bytes, connections and probe results.
 Clients get the landing node's protocol settings with the entry host and port,
 which Xboard's separate `host`/`port` vs `server_port` fields already express.
 
+### PROXY protocol (real client addresses behind a relay)
+
+A relay hides the client: the landing node sees the relay's address, so
+device counting and access logs lump everyone behind it together. A rule
+with `proxy_protocol: true` (built-in relay or realm, not nft) prefixes each
+TCP connection with a PROXY protocol v2 header, and an inbound with
+`accept_proxy_protocol: true` (xray only, `sockopt.acceptProxyProtocol`)
+reads the client's address from it. Such an inbound must be reached only
+through relays that send the header: direct connections fail. Captain sets
+both ends when a forward targets one of its own inbounds that expects it.
+
 ### nftables backend
 
 A forward rule with `backend: nft` is relayed by the kernel instead of

@@ -377,6 +377,16 @@ func renderStream(ib spec.Inbound) (m, error) {
 		ss["security"] = "tls"
 		ss["tlsSettings"] = tls
 	}
+	if ib.AcceptProxyProtocol {
+		// Relays in front send a PROXY protocol header; xray reads the
+		// client address from it (device counting, access logs).
+		so, _ := ss["sockopt"].(m)
+		if so == nil {
+			so = m{}
+		}
+		so["acceptProxyProtocol"] = true
+		ss["sockopt"] = so
+	}
 	return ss, nil
 }
 

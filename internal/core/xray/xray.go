@@ -80,6 +80,7 @@ func (c *Core) Capabilities() core.Capabilities {
 		Transports:    []string{"ws", "grpc", "httpupgrade", "xhttp"},
 		HotUserReload: true,
 		Fallbacks:     true,
+		ProxyProtocol: true,
 	}
 }
 

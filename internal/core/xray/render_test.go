@@ -344,3 +344,14 @@ func TestSpeedLimitOutbounds(t *testing.T) {
 		t.Fatal("plain user change must keep the key")
 	}
 }
+
+func TestRenderAcceptProxyProtocol(t *testing.T) {
+	ib := spec.Inbound{Tag: "pp", Protocol: spec.Trojan, Port: 8443, AcceptProxyProtocol: true, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "x", CertPath: "/c", KeyPath: "/k"}}
+	b, _, err := render(&spec.Node{}, []spec.Inbound{ib}, []spec.User{{ID: 1, Name: "a", UUID: "u", Password: "p"}}, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"acceptProxyProtocol": true`) {
+		t.Fatalf("sockopt.acceptProxyProtocol missing:\n%s", b)
+	}
+}

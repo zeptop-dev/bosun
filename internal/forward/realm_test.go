@@ -29,3 +29,10 @@ func TestRealmConfig(t *testing.T) {
 		t.Fatal("preserve_source with realm should be rejected")
 	}
 }
+
+func TestRealmConfigSendProxy(t *testing.T) {
+	cfg := realmConfig([]spec.Forward{{Tag: "pp", Port: 27016, Protocol: "tcp", Target: "198.51.100.20:443", Backend: "realm", ProxyProtocol: true}})
+	if !strings.Contains(cfg, "network = { send_proxy = true, send_proxy_version = 2 }") {
+		t.Fatalf("send_proxy missing:\n%s", cfg)
+	}
+}

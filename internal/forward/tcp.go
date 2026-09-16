@@ -50,6 +50,13 @@ func (r *rule) handleTCP(ctx context.Context, c net.Conn) {
 	if tt, ok := t.(*net.TCPConn); ok {
 		_ = tt.SetKeepAlive(true)
 	}
+	if r.spec.ProxyProtocol {
+		// Tell the target who really connected (PROXY protocol v2).
+		if _, err := t.Write(proxyHeaderV2(c.RemoteAddr(), c.LocalAddr())); err != nil {
+			r.log.Debug("proxy protocol header failed", "target", r.spec.Target, "err", err)
+			return
+		}
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(2)

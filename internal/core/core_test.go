@@ -71,3 +71,12 @@ func TestSplit(t *testing.T) {
 		t.Fatalf("expected b and c unsupported with reasons: %v", unsupported)
 	}
 }
+
+func TestSupportsProxyProtocol(t *testing.T) {
+	plain := Capabilities{Protocols: []spec.Protocol{spec.VLESS}}
+	pp := Capabilities{Protocols: []spec.Protocol{spec.VLESS}, ProxyProtocol: true}
+	ib := spec.Inbound{Tag: "a", Protocol: spec.VLESS, AcceptProxyProtocol: true}
+	if plain.Supports(ib) || !pp.Supports(ib) {
+		t.Fatal("accept_proxy_protocol must route to a core that reads the header")
+	}
+}

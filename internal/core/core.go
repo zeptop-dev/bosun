@@ -27,6 +27,7 @@ type Capabilities struct {
 	Shadowsocks2022 bool     // multi-user Shadowsocks 2022 ciphers
 	HotUserReload   bool     // true if users can change without a process restart
 	Fallbacks       bool     // VLESS/Trojan fallbacks to another local service
+	ProxyProtocol   bool     // inbounds may require a PROXY protocol header (relays behind)
 }
 
 // Supports reports whether the core can serve inbound ib.
@@ -45,6 +46,9 @@ func (c Capabilities) Supports(ib spec.Inbound) bool {
 		return false
 	}
 	if len(ib.Fallbacks) > 0 && !c.Fallbacks {
+		return false
+	}
+	if ib.AcceptProxyProtocol && !c.ProxyProtocol {
 		return false
 	}
 	tr := ib.TransportType()
