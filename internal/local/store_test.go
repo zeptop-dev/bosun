@@ -33,7 +33,7 @@ func TestStoreLifecycle(t *testing.T) {
 	if err := s.PutInbound(Inbound{Inbound: spec.Inbound{Tag: "b", Protocol: spec.Trojan, Port: 443}, Enabled: true}, ""); err == nil {
 		t.Fatal("port clash should be rejected")
 	}
-	if err := s.PutInbound(Inbound{Inbound: spec.Inbound{Tag: "h", Protocol: spec.Hysteria2, Port: 443}, Enabled: true}, ""); err != nil {
+	if err := s.PutInbound(Inbound{Inbound: spec.Inbound{Tag: "h", Protocol: spec.Hysteria2, Port: 443, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "x.example", AutoCert: true}}, Enabled: true}, ""); err != nil {
 		t.Fatalf("udp protocol may share the port number: %v", err)
 	}
 	u1, err := s.CreateUser(User{Name: "alice", Enabled: true})

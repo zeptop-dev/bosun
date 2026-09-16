@@ -6,6 +6,7 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Version and updates, or from Captain's node list).
 
+- **v0.35.0** (2026-09-16) — pkg/spec `Inbound.Validate()`: the one shape check every core agrees on (tag, listen, port, transport, TLS/REALITY keys and short ids, Shadowsocks 2022 key length, hysteria2/tuic/anytls/naive need TLS, mieru/snell/WireGuard fields, fallbacks, control characters); the agent skips an invalid inbound with the reason in the doctor instead of handing it to a core, the standalone panel refuses it on save; doctor no longer dials nft forwards locally (kernel DNAT is invisible from the host, it reported "connection refused" for a working rule)
 - **v0.34.2** (2026-09-16) — agent runs the doctor three seconds after every config-changing apply (the panel showed "no inbounds" for up to ten minutes after a fresh node got its inbounds)
 - **v0.34.1** (2026-09-16) — xray WARP outbound uses gVisor (noKernelTun) with IPv4 first: with the kernel TUN the tunnel handshook but carried nothing on the live node, gVisor answers warp=on
 - **v0.34.0** (2026-09-16) — sing-box 1.14.0-r2: the bosun CI build now includes with_wireguard, so WARP outbounds and WireGuard endpoints pass sing-box's check (the first build failed with "WireGuard is not included in this build"); the manifest defaults to r2 and marks the old build caution; singbox workflow takes a rebuild suffix; komari exporter Stop waits for its goroutine (CI race)

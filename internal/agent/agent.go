@@ -602,10 +602,15 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	}
 	inbounds := make([]spec.Inbound, 0, len(a.node.Inbounds))
 	for _, ib := range a.node.Inbounds {
-		// Tags become file names and nft comments; a panel may not push
-		// anything that is not a plain identifier.
-		if !spec.ValidTag(ib.Tag) || !spec.ValidListen(ib.Listen) {
-			a.log.Warn("inbound skipped", "inbound", ib.Tag, "reason", "invalid tag or listen address")
+		// The shared shape check: a panel may not push anything a core
+		// would choke on (bad tag, missing key, REALITY without dest...).
+		// Such an inbound is left out with the reason instead of breaking
+		// the core's whole config.
+		if err := ib.Validate(); err != nil {
+			a.log.Warn("inbound skipped", "inbound", ib.Tag, "reason", err.Error())
+			if spec.ValidTag(ib.Tag) {
+				skipped = withSkip(skipped, ib.Tag, "invalid: "+err.Error())
+			}
 			continue
 		}
 		if _, skip := skipped[ib.Tag]; skip {

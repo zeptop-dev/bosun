@@ -293,29 +293,15 @@ func validateInbound(ib *Inbound) error {
 			return errors.New("fields may not contain control characters")
 		}
 	}
-	if ib.Protocol == "" {
-		return errors.New("protocol is required")
-	}
-	if ib.Port <= 0 || ib.Port > 65535 {
-		return errors.New("port must be 1-65535")
-	}
-	if ib.Protocol == spec.Shadowsocks && ib.Cipher == "" {
-		return errors.New("shadowsocks needs a cipher")
-	}
+	// The shape every core agrees on lives in pkg/spec; what follows is
+	// the standalone panel's own extras (client hints, remark).
 	if ib.Protocol == spec.Mieru {
 		ib.MieruTransport = strings.ToUpper(strings.TrimSpace(ib.MieruTransport))
-		switch ib.MieruTransport {
-		case "", "TCP", "UDP":
-		case "BOTH":
-			if ib.Port >= 65535 {
-				return errors.New("mieru BOTH needs port+1 to be valid")
-			}
-		default:
-			return errors.New("mieru transport must be TCP, UDP or BOTH")
-		}
-		if ib.MieruMTU != 0 && (ib.MieruMTU < 1280 || ib.MieruMTU > 1500) {
-			return errors.New("mieru mtu must be 1280-1500")
-		}
+	}
+	if err := ib.Inbound.Validate(); err != nil {
+		return err
+	}
+	if ib.Protocol == spec.Mieru {
 		switch ib.MieruMultiplexing {
 		case "", "MULTIPLEXING_OFF", "MULTIPLEXING_LOW", "MULTIPLEXING_MIDDLE", "MULTIPLEXING_HIGH":
 		default:

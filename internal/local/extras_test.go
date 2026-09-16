@@ -53,7 +53,7 @@ func TestIngresses(t *testing.T) {
 	if err := s.PutInbound(Inbound{Inbound: spec.Inbound{Tag: "m", Protocol: spec.Mieru, Port: 17710}, Enabled: true, IngressID: g.ID}, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.PutInbound(Inbound{Inbound: spec.Inbound{Tag: "hy2", Protocol: spec.Hysteria2, Port: 8443}, Enabled: true}, ""); err != nil {
+	if err := s.PutInbound(Inbound{Inbound: spec.Inbound{Tag: "hy2", Protocol: spec.Hysteria2, Port: 8443, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "x.example", AutoCert: true}}, Enabled: true}, ""); err != nil {
 		t.Fatal(err)
 	}
 	// The node binds the line inbound to the NIC, the direct one not.

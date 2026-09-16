@@ -62,7 +62,7 @@ func TestApplySkipsUnsupportedAndUserlessMita(t *testing.T) {
 	a := New(&config.Config{DataDir: t.TempDir()}, nopDriver{}, reg, nil, slog.Default())
 	a.node = &spec.Node{Inbounds: []spec.Inbound{
 		{Tag: "vless", Protocol: spec.VLESS, Port: 1},
-		{Tag: "snell", Protocol: spec.Snell, Port: 2},
+		{Tag: "snell", Protocol: spec.Snell, Port: 2, SnellPSK: "psk"},
 		{Tag: "mieru", Protocol: spec.Mieru, Port: 3},
 	}}
 	if err := a.applyInner(context.Background()); err != nil {
@@ -100,7 +100,7 @@ func TestApplyContinuesPastFailingCore(t *testing.T) {
 	reg.Register(sb)
 	a := New(&config.Config{DataDir: t.TempDir()}, nopDriver{}, reg, nil, slog.Default())
 	a.node = &spec.Node{Inbounds: []spec.Inbound{
-		{Tag: "hy2", Protocol: spec.Hysteria2, Port: 1},
+		{Tag: "hy2", Protocol: spec.Hysteria2, Port: 1, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "x", CertPath: "/c", KeyPath: "/k"}},
 		{Tag: "vless", Protocol: spec.VLESS, Port: 2},
 	}}
 	err := a.applyInner(context.Background())

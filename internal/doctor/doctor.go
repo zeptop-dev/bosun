@@ -295,6 +295,18 @@ func checkForwards(ctx context.Context, d *Deps) []Check {
 			out = append(out, c)
 			continue
 		}
+		if f.Backend == "nft" {
+			// Kernel DNAT happens in prerouting: a dial from this host
+			// never sees it, so there is no listener to probe. The target
+			// probe is what tells whether the rule works.
+			if !f.Up {
+				c.Status, c.Detail = Warn, "target "+f.Target+" down: "+f.Error
+			} else {
+				c.Status, c.Detail = OK, "kernel dnat -> "+f.Target
+			}
+			out = append(out, c)
+			continue
+		}
 		host := f.Listen
 		if host == "" || host == "::" || host == "0.0.0.0" {
 			host = "127.0.0.1"
