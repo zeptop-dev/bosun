@@ -6,6 +6,7 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Version and updates, or from Captain's node list).
 
+- **v0.34.2** (2026-09-16) — agent runs the doctor three seconds after every config-changing apply (the panel showed "no inbounds" for up to ten minutes after a fresh node got its inbounds)
 - **v0.34.1** (2026-09-16) — xray WARP outbound uses gVisor (noKernelTun) with IPv4 first: with the kernel TUN the tunnel handshook but carried nothing on the live node, gVisor answers warp=on
 - **v0.34.0** (2026-09-16) — sing-box 1.14.0-r2: the bosun CI build now includes with_wireguard, so WARP outbounds and WireGuard endpoints pass sing-box's check (the first build failed with "WireGuard is not included in this build"); the manifest defaults to r2 and marks the old build caution; singbox workflow takes a rebuild suffix; komari exporter Stop waits for its goroutine (CI race)
 - **v0.33.0** (2026-09-15) — WARP registration works on Captain-managed nodes (the account is kept in data_dir/warp.json; only the public part goes to the panel); installer installs nftables and iproute2 when nft or tc is missing (speed limits, nft forwards and strict ingress were silently off on Debian cloud images)

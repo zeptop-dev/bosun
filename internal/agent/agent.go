@@ -100,6 +100,10 @@ type Agent struct {
 	lastApplyOK, lastReportOK   atomic.Int64 // unix seconds
 	// reportNow asks the run loop for an out-of-band report (job results).
 	reportNow chan struct{}
+	// doctorNow asks the run loop for a self-check a few seconds after an
+	// apply, so the panel does not show the previous state for up to ten
+	// minutes after inbounds change.
+	doctorNow chan struct{}
 	// Jobs handed down by the panel: which ran, which are running, and
 	// results waiting for the next report.
 	jobsMu      sync.Mutex
@@ -194,7 +198,7 @@ func (a *Agent) ForwardStats() []forward.Stats { return a.fwd.Snapshot() }
 
 // New builds an agent. metrics may be nil.
 func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metrics.Registry, log *slog.Logger) *Agent {
-	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), kick: make(chan struct{}, 1), reportNow: make(chan struct{}, 1), jobsDone: map[string]bool{}, jobsRunning: map[string]bool{}}
+	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), kick: make(chan struct{}, 1), reportNow: make(chan struct{}, 1), doctorNow: make(chan struct{}, 1), jobsDone: map[string]bool{}, jobsRunning: map[string]bool{}}
 	if mreg != nil {
 		a.registerMetrics()
 	}
@@ -306,6 +310,8 @@ func (a *Agent) Run(ctx context.Context) error {
 			reconfigureBeat()
 		case <-a.reportNow:
 			a.report(ctx)
+		case <-a.doctorNow:
+			a.runDoctor(ctx)
 		case <-a.kick:
 			if a.node != nil {
 				if err := a.apply(ctx); err != nil {
@@ -335,6 +341,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				if err := a.applyForwards(ctx); err != nil {
 					a.log.Error("forwards", "err", err)
 				}
+				a.scheduleDoctor()
 			}
 			a.runJobs(ctx)
 			if niv := a.driver.Intervals(); niv != iv {
@@ -382,6 +389,19 @@ func (a *Agent) pullApply(ctx context.Context) {
 	if err := a.applyForwards(ctx); err != nil {
 		a.log.Error("forwards", "err", err)
 	}
+	a.scheduleDoctor()
+}
+
+// scheduleDoctor runs the self-check shortly after an apply, once the
+// cores have had a moment to bind their listeners; the run loop does the
+// actual work so nothing races with the next pull.
+func (a *Agent) scheduleDoctor() {
+	time.AfterFunc(3*time.Second, func() {
+		select {
+		case a.doctorNow <- struct{}{}:
+		default:
+		}
+	})
 }
 
 // bootstrap keeps trying until the panel has given us both node and users.
