@@ -111,3 +111,18 @@ func TestApplyContinuesPastFailingCore(t *testing.T) {
 		t.Fatal("singbox should still have been applied")
 	}
 }
+
+// A managed node has no local store: the WARP account lands in a file
+// under the data dir and is picked up when outbounds resolve.
+func TestWARPAccountFileFallback(t *testing.T) {
+	a := New(&config.Config{DataDir: t.TempDir()}, nopDriver{}, core.NewRegistry(), nil, slog.Default())
+	if a.warpAccount() != nil {
+		t.Fatal("no account yet")
+	}
+	if err := a.saveWARP(&spec.WARPAccount{ID: "x", PrivateKey: "k", PeerPublicKey: "p"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.warpAccount(); got == nil || got.PrivateKey != "k" {
+		t.Fatalf("account should load from the file: %+v", got)
+	}
+}
