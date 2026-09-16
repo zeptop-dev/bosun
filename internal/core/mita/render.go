@@ -11,12 +11,16 @@ import (
 // serverConfig is mita's JSON server configuration (protojson of
 // mieru.appctl.ServerConfig). Only the fields bosun manages are present.
 type serverConfig struct {
-	PortBindings   []portBinding   `json:"portBindings"`
-	Users          []user          `json:"users"`
-	LoggingLevel   string          `json:"loggingLevel,omitempty"`
-	MTU            int             `json:"mtu,omitempty"`
-	DNS            *dnsConfig      `json:"dns,omitempty"`
-	TrafficPattern json.RawMessage `json:"trafficPattern,omitempty"`
+	// ListenIPAddress binds every port to one address (mita >= 3.37.0);
+	// empty listens everywhere. Older mita rejects the field, so it is
+	// only written when the binary is known to support it.
+	ListenIPAddress string          `json:"listenIPAddress,omitempty"`
+	PortBindings    []portBinding   `json:"portBindings"`
+	Users           []user          `json:"users"`
+	LoggingLevel    string          `json:"loggingLevel,omitempty"`
+	MTU             int             `json:"mtu,omitempty"`
+	DNS             *dnsConfig      `json:"dns,omitempty"`
+	TrafficPattern  json.RawMessage `json:"trafficPattern,omitempty"`
 }
 
 type portBinding struct {
@@ -42,8 +46,11 @@ type dnsConfig struct {
 
 // render builds the mita config for the given mieru inbounds. Every inbound
 // becomes one port binding; all users are shared across bindings, which is
-// how mita works (users are global, not per port).
-func render(inbounds []spec.Inbound, users []spec.User, logLevel string) ([]byte, error) {
+// how mita works (users are global, not per port). nativeListen writes the
+// inbound's bind address as listenIPAddress (one process serves one inbound,
+// so the address is per inbound in practice); without it mita listens on
+// every address and the agent's ingress guard drops the other ones.
+func render(inbounds []spec.Inbound, users []spec.User, logLevel string, nativeListen bool) ([]byte, error) {
 	cfg := serverConfig{
 		LoggingLevel: strings.ToUpper(logLevel),
 		DNS:          &dnsConfig{DualStack: "PREFER_IPv4"},
@@ -54,6 +61,12 @@ func render(inbounds []spec.Inbound, users []spec.User, logLevel string) ([]byte
 		}
 		if ib.Port <= 0 {
 			return nil, fmt.Errorf("mita: inbound %q: port is required", ib.Tag)
+		}
+		if bind := bindAddress(ib); nativeListen && bind != "" {
+			if cfg.ListenIPAddress != "" && cfg.ListenIPAddress != bind {
+				return nil, fmt.Errorf("mita: inbound %q: one process cannot listen on both %s and %s", ib.Tag, cfg.ListenIPAddress, bind)
+			}
+			cfg.ListenIPAddress = bind
 		}
 		proto := strings.ToUpper(ib.MieruTransport)
 		if proto == "" {
@@ -111,12 +124,27 @@ func render(inbounds []spec.Inbound, users []spec.User, logLevel string) ([]byte
 	return json.MarshalIndent(cfg, "", "  ")
 }
 
-// bindingsKey identifies the port-binding set so Apply can tell a users-only
-// change (hot reload) from a port change (proxy restart).
-func bindingsKey(inbounds []spec.Inbound) string {
+// bindAddress is the inbound's specific bind address, or "" when it
+// listens everywhere (unset, 0.0.0.0 or ::).
+func bindAddress(ib spec.Inbound) string {
+	switch ib.Listen {
+	case "", "0.0.0.0", "::":
+		return ""
+	}
+	return ib.Listen
+}
+
+// bindingsKey identifies the listener set so Apply can tell a users-only
+// change (hot reload) from a port or address change (proxy restart:
+// mita's reload does not replace listeners).
+func bindingsKey(inbounds []spec.Inbound, nativeListen bool) string {
 	parts := make([]string, 0, len(inbounds))
 	for _, ib := range inbounds {
-		parts = append(parts, fmt.Sprintf("%d/%s/%d", ib.Port, strings.ToUpper(ib.MieruTransport), ib.MieruMTU))
+		bind := ""
+		if nativeListen {
+			bind = bindAddress(ib)
+		}
+		parts = append(parts, fmt.Sprintf("%s@%d/%s/%d", bind, ib.Port, strings.ToUpper(ib.MieruTransport), ib.MieruMTU))
 	}
 	return strings.Join(parts, ",")
 }

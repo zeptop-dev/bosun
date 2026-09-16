@@ -292,19 +292,27 @@ func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inb
 }
 
 // applyKernelHelpers runs after the cores: the strict-ingress rules for
-// mita inbounds bound to a line address, and the firewall openings for
-// every listener. Failures are logged and shown by the doctor, never
+// mita inbounds bound to a line address (only for mita builds that cannot
+// bind one themselves), and the firewall openings for every listener. Failures are logged and shown by the doctor, never
 // fatal for the apply.
 func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag map[string]string) {
 	var rules []ingressguard.Rule
 	var ports []firewall.Port
+	// mita >= 3.37.0 binds the address itself; older builds listen
+	// everywhere and need the nftables guard.
+	guardMita := true
+	if c, ok := a.reg.Get("mita"); ok {
+		if nl, ok := c.(interface{ NativeListen() bool }); ok && nl.NativeListen() {
+			guardMita = false
+		}
+	}
 	for _, ib := range node.Inbounds {
 		if _, served := byTag[ib.Tag]; !served {
 			continue
 		}
 		for _, p := range listenPorts(ib) {
 			ports = append(ports, p)
-			if byTag[ib.Tag] == "mita" && ib.Listen != "" && ib.Listen != "0.0.0.0" && ib.Listen != "::" {
+			if guardMita && byTag[ib.Tag] == "mita" && ib.Listen != "" && ib.Listen != "0.0.0.0" && ib.Listen != "::" {
 				rules = append(rules, ingressguard.Rule{IP: ib.Listen, Proto: p.Proto, Port: p.Port})
 			}
 		}

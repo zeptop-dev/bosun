@@ -71,6 +71,19 @@ func singboxCI(version, arch string) Asset {
 // Manifest lists every release bosun knows about. Newest first per core.
 var Manifest = []Release{
 	{
+		// 1.14.1: WireGuard endpoint no longer stalls after a network change
+		// or device sleep (WARP outbounds), selector interrupts routed
+		// connections, "check" no longer shares the running registry.
+		Core: "singbox", Version: "1.14.1-r1", Status: StatusTested,
+		Note: "upstream v1.14.1 built by bosun CI with with_v2ray_api (per-user stats) and with_wireguard (WARP)",
+		Assets: map[string]Asset{
+			"linux/amd64": singboxCI("1.14.1-r1", "amd64"),
+			"linux/arm64": singboxCI("1.14.1-r1", "arm64"),
+		},
+		Build: &Build{Package: "github.com/sagernet/sing-box/cmd/sing-box", Version: "v1.14.1", Tags: singboxTags,
+			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.1"},
+	},
+	{
 		// -r2: same upstream source rebuilt with with_wireguard, which the
 		// WARP outbound and WireGuard endpoints need (the first build
 		// failed sing-box's check with "WireGuard is not included").
@@ -110,6 +123,17 @@ var Manifest = []Release{
 			"linux/arm64":  {URL: "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip", SHA256: "4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c", Archive: "zip", Member: "xray"},
 			"darwin/arm64": {URL: "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-arm64-v8a.zip", SHA256: "2e93a67e8aa1936ecefb307e120830fcbd4c643ab9b1c46a2d0838d5f8409eaf", Archive: "zip", Member: "xray"},
 		},
+	},
+	{
+		// 3.37.0 adds listenIPAddress: line-bound mieru inbounds bind the
+		// line address natively instead of relying on the nft ingress guard.
+		Core: "mita", Version: "3.37.0", Status: StatusTested,
+		Note: "official mieru server; listenIPAddress (line-bound inbounds bind natively); verified with the official mieru client and mihomo",
+		Assets: map[string]Asset{
+			"linux/amd64": {URL: "https://github.com/enfein/mieru/releases/download/v3.37.0/mita_3.37.0_linux_amd64.tar.gz", SHA256: "ebd7a4f13204ac69864a385a9841708ac17e6622c1d7ef1f4415b39502c08591", Archive: "tar.gz", Member: "mita"},
+			"linux/arm64": {URL: "https://github.com/enfein/mieru/releases/download/v3.37.0/mita_3.37.0_linux_arm64.tar.gz", SHA256: "3cf85a6eb70a2ad512e2d10e5c1c0a38868c8ba5291f2a43326c466a10512fe0", Archive: "tar.gz", Member: "mita"},
+		},
+		Build: &Build{Package: "github.com/enfein/mieru/v3/cmd/mita", Version: "v3.37.0"},
 	},
 	{
 		Core: "mita", Version: "3.36.1", Status: StatusTested,

@@ -441,12 +441,16 @@ not running.
 
 ### Strict ingress for mita and firewall auto-open
 
-mita listens on every address, so an inbound it serves that sits behind a
-line ingress with a bind address gets an nftables input rule instead
-(table `inet bosun_ingress`, `ip daddr != <bind> tcp dport <port> drop`,
-one per port, UDP for BOTH's second port): traffic for that port arriving
-on any other local address is dropped, which is nobrand's "strict ingress"
-fallback. The doctor check "Strict ingress" shows the state.
+mita 3.37.0 and later bind a line-bound inbound's address natively
+(`listenIPAddress`; bosun runs one mita process per inbound, and an address
+change restarts that process because mita's reload keeps the old
+listeners). Older mita builds listen on every address, so such an inbound
+gets an nftables input rule instead (table `inet bosun_ingress`,
+`ip daddr != <bind> tcp dport <port> drop`, one per port, UDP for BOTH's
+second port): traffic for that port arriving on any other local address is
+dropped, which is nobrand's "strict ingress" fallback. The doctor check
+"Strict ingress" shows the state; with a native-binding mita it reports no
+rules.
 
 When ufw or firewalld is active, bosun allows the ports it listens on
 (inbounds, forwards, the web panel) and removes the openings it made once

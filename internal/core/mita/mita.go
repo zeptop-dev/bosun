@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -38,6 +40,9 @@ type Options struct {
 type Core struct {
 	opt Options
 	log *slog.Logger
+
+	version string // from "mita version", "" when unknown
+	native  bool   // binary supports listenIPAddress
 
 	mu        sync.Mutex
 	instances map[string]*instance // by inbound tag
@@ -80,10 +85,45 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
-	return &Core{opt: opt, log: log.With("core", "mita"), instances: map[string]*instance{}}, nil
+	c := &Core{opt: opt, log: log.With("core", "mita"), instances: map[string]*instance{}}
+	c.version = binaryVersion(opt.Binary)
+	c.native = supportsListen(c.version)
+	if c.version == "" {
+		c.log.Warn("mita version unknown; listening on every address (ingress guard applies)")
+	} else {
+		c.log.Info("mita", "version", c.version, "native_listen", c.native)
+	}
+	return c, nil
 }
 
 func (c *Core) Name() string { return "mita" }
+
+// NativeListen reports whether the binary binds inbound addresses itself
+// (listenIPAddress, mita >= 3.37.0); when false the agent's ingress guard
+// enforces line-bound inbounds with nftables.
+func (c *Core) NativeListen() bool { return c.native }
+
+// binaryVersion runs "<mita> version" and returns the x.y.z it prints,
+// or "" when the binary cannot be run.
+func binaryVersion(bin string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, _ := exec.CommandContext(ctx, bin, "version").CombinedOutput()
+	return versionRe.FindString(string(out))
+}
+
+var versionRe = regexp.MustCompile(`\d+\.\d+\.\d+`)
+
+// supportsListen: listenIPAddress arrived in mieru v3.37.0.
+func supportsListen(version string) bool {
+	m := versionRe.FindString(version)
+	if m == "" {
+		return false
+	}
+	var a, b, c int
+	fmt.Sscanf(m, "%d.%d.%d", &a, &b, &c)
+	return a > 3 || (a == 3 && b >= 37)
+}
 
 func (c *Core) Capabilities() core.Capabilities {
 	return core.Capabilities{Protocols: []spec.Protocol{spec.Mieru}, HotUserReload: true}
@@ -99,7 +139,7 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 		if ib.Tag == "" {
 			return nil, fmt.Errorf("mita: inbound without tag")
 		}
-		cfg, err := render([]spec.Inbound{ib}, ib.EffectiveUsers(users), c.opt.LogLevel)
+		cfg, err := render([]spec.Inbound{ib}, ib.EffectiveUsers(users), c.opt.LogLevel, c.native)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +153,7 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 			}
 		}
 		b.Files[filepath.Join(ib.Tag, configFile)] = cfg
-		b.Meta[ib.Tag] = bindingsKey([]spec.Inbound{ib})
+		b.Meta[ib.Tag] = bindingsKey([]spec.Inbound{ib}, c.native)
 	}
 	return b, nil
 }
