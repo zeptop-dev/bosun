@@ -84,36 +84,45 @@ func (e *Exporter) log() *slog.Logger {
 // Configure starts, restarts or stops the loop to match cfg.
 func (e *Exporter) Configure(parent context.Context, cfg *spec.Komari) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	var next spec.Komari
 	if cfg != nil {
 		next = *cfg
 	}
 	next.Server = strings.TrimRight(strings.TrimSpace(next.Server), "/")
 	if next == e.cfg && (e.cancel != nil || !next.Enabled) {
+		e.mu.Unlock()
 		return
 	}
-	if e.cancel != nil {
-		e.cancel()
-		e.cancel = nil
-	}
+	// The old run is cancelled after the lock is released: it takes e.mu
+	// on its way out, so waiting for it here would deadlock.
+	old := e.cancel
+	e.cancel = nil
 	e.cfg = next
 	e.status = Status{Enabled: next.Enabled && next.Server != "", Server: next.Server}
-	if !next.Enabled || next.Server == "" {
-		return
+	if next.Enabled && next.Server != "" {
+		ctx, cancel := context.WithCancel(parent)
+		done := make(chan struct{})
+		e.cancel = func() { cancel(); <-done }
+		go func() {
+			defer close(done)
+			e.run(ctx, next)
+		}()
 	}
-	ctx, cancel := context.WithCancel(parent)
-	e.cancel = cancel
-	go e.run(ctx, next)
+	e.mu.Unlock()
+	if old != nil {
+		old()
+	}
 }
 
-// Stop ends reporting.
+// Stop ends reporting and returns once the reporting goroutine is gone,
+// so nothing of the exporter runs after it (tests swap package hooks).
 func (e *Exporter) Stop() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.cancel != nil {
-		e.cancel()
-		e.cancel = nil
+	cancel := e.cancel
+	e.cancel = nil
+	e.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 

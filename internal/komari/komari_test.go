@@ -89,6 +89,7 @@ func TestExporterRegistersReportsAndPings(t *testing.T) {
 	e := &Exporter{CredFile: filepath.Join(t.TempDir(), "komari.json"), Sampler: fakeSampler{}, Prober: fakeProber{}, Version: "v0.17.1"}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	defer e.Stop() // runs before the hook above is restored (LIFO)
 	e.Configure(ctx, &spec.Komari{Enabled: true, Server: srv.URL + "/", Key: "adkey-1234567890", Name: "jp1", Interval: 1})
 	deadline := time.Now().Add(6 * time.Second)
 	for time.Now().Before(deadline) {
