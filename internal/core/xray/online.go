@@ -1,8 +1,8 @@
 package xray
 
 import (
-	"strings"
 	"context"
+	"strings"
 	"sync"
 	"time"
 
