@@ -69,6 +69,9 @@ type Deps struct {
 	Node  *spec.Node
 	Users []spec.User
 	Cores []CoreState
+	// Skipped lists inbounds the agent left out of the last apply, by tag,
+	// with the reason (missing certificate, no core, waiting for users).
+	Skipped map[string]string
 	// CoresKnown false = this process does not run the cores (CLI): skip.
 	CoresKnown bool
 	Forwards   []ForwardState
@@ -235,7 +238,9 @@ func checkInbounds(ctx context.Context, d *Deps) []Check {
 	var out []Check
 	for _, ib := range ibs {
 		c := Check{ID: "inbound:" + ib.Tag, Name: "Inbound " + ib.Tag + " listening"}
-		if udpOnly(ib) {
+		if reason, ok := d.Skipped[ib.Tag]; ok {
+			c.Status, c.Detail = Warn, "not applied: "+reason
+		} else if udpOnly(ib) {
 			c.Status, c.Detail = Skip, "udp"
 		} else if err := d.dial(ctx, listenAddr(ib)); err != nil {
 			c.Status, c.Detail = Fail, listenAddr(ib)+": "+err.Error()

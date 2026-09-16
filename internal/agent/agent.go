@@ -551,9 +551,22 @@ func (a *Agent) apply(ctx context.Context) error {
 		if err != nil {
 			s.LastError = err.Error()
 		}
-		s.Skipped = a.skipped
+		if s.Skipped == nil {
+			s.Skipped = a.skipped
+		}
 	})
 	return err
+}
+
+// withSkip adds a reason to the skipped map without touching the shared
+// certificate-driven one (copy on first write).
+func withSkip(m map[string]string, tag, reason string) map[string]string {
+	cp := make(map[string]string, len(m)+1)
+	for k, v := range m {
+		cp[k] = v
+	}
+	cp[tag] = reason
+	return cp
 }
 
 func (a *Agent) applyInner(ctx context.Context) error {
@@ -581,10 +594,32 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		}
 		inbounds = append(inbounds, ib)
 	}
-	assign, err := a.reg.Assign(inbounds)
-	if err != nil {
-		return err
+	// One inbound nobody can serve must not hold the rest hostage: it is
+	// left out with the reason (shown by the doctor) and retried next pull.
+	assign, unsupported := a.reg.Split(inbounds)
+	for tag, reason := range unsupported {
+		a.log.Warn("inbound skipped", "inbound", tag, "reason", reason)
+		skipped = withSkip(skipped, tag, reason)
 	}
+	// mita refuses to start with an empty user list ("no user found"); on
+	// a fresh node the inbounds usually arrive before the first grant, so
+	// wait for users instead of failing the apply.
+	for _, ib := range assign["mita"] {
+		if len(ib.EffectiveUsers(a.users)) == 0 {
+			a.log.Info("inbound waits for users", "inbound", ib.Tag, "core", "mita")
+			skipped = withSkip(skipped, ib.Tag, "waiting for users (mita cannot start without any)")
+		}
+	}
+	if len(assign["mita"]) > 0 {
+		kept := assign["mita"][:0:0]
+		for _, ib := range assign["mita"] {
+			if _, skip := skipped[ib.Tag]; !skip {
+				kept = append(kept, ib)
+			}
+		}
+		assign["mita"] = kept
+	}
+	a.setStatus(func(s *Status) { s.Skipped = skipped })
 	node := a.node
 	if resolved, err := a.resolveWARP(*node); err != nil {
 		return err
@@ -641,39 +676,49 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	a.setStatus(func(s *Status) { s.Assign, s.CoreInbound = byTag, perCore })
 	a.kernelNode, a.kernelByTag = node, byTag
 	defer a.applyKernelHelpers(ctx, node, byTag)
+	// Every core gets its turn even when an earlier one fails: the apply
+	// is still reported dirty (and retried) but the healthy cores serve.
+	var errs []error
 	for _, name := range a.reg.Names() {
-		c, _ := a.reg.Get(name)
-		inbounds := assign[name]
-		if len(inbounds) == 0 {
-			if c.Running() {
-				a.log.Info("core has no inbounds, stopping", "core", name)
-				if err := c.Stop(ctx); err != nil {
-					return fmt.Errorf("%s: stop: %w", name, err)
-				}
-			}
-			continue
+		if err := a.applyCore(ctx, name, node, assign[name], restart); err != nil {
+			a.log.Error("core apply failed", "core", name, "err", err)
+			errs = append(errs, err)
 		}
-		bundle, err := c.Render(node, inbounds, a.users)
-		if err != nil {
-			return fmt.Errorf("%s: render: %w", name, err)
-		}
-		if restart && c.Running() {
-			// Certificate files changed underneath: a plain Apply would see
-			// an identical config and do nothing.
-			if err := c.Stop(ctx); err != nil {
-				return fmt.Errorf("%s: stop for reload: %w", name, err)
-			}
-		}
-		if c.Running() {
-			err = c.Apply(ctx, bundle)
-		} else {
-			err = c.Start(ctx, bundle)
-		}
-		if err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		a.log.Info("core applied", "core", name, "inbounds", len(inbounds), "users", len(a.users))
 	}
+	return errors.Join(errs...)
+}
+
+func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inbounds []spec.Inbound, restart bool) error {
+	c, _ := a.reg.Get(name)
+	if len(inbounds) == 0 {
+		if c.Running() {
+			a.log.Info("core has no inbounds, stopping", "core", name)
+			if err := c.Stop(ctx); err != nil {
+				return fmt.Errorf("%s: stop: %w", name, err)
+			}
+		}
+		return nil
+	}
+	bundle, err := c.Render(node, inbounds, a.users)
+	if err != nil {
+		return fmt.Errorf("%s: render: %w", name, err)
+	}
+	if restart && c.Running() {
+		// Certificate files changed underneath: a plain Apply would see
+		// an identical config and do nothing.
+		if err := c.Stop(ctx); err != nil {
+			return fmt.Errorf("%s: stop for reload: %w", name, err)
+		}
+	}
+	if c.Running() {
+		err = c.Apply(ctx, bundle)
+	} else {
+		err = c.Start(ctx, bundle)
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	a.log.Info("core applied", "core", name, "inbounds", len(inbounds), "users", len(a.users))
 	return nil
 }
 

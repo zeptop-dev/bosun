@@ -11,6 +11,7 @@ cores:
   xray: { version: "26.3.27", api_listen: 127.0.0.1:9102, log_level: warning }
   mita: { log_level: INFO }
   hysteria: { auth_listen: 127.0.0.1:9103, stats_listen: 127.0.0.1:9104, log_level: warn }
+  # snell: {}   # Surge snell-server (closed source, downloaded from Surge on first start); needed for snell inbounds
 
 panel:
   driver: local

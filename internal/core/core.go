@@ -4,6 +4,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -108,15 +109,31 @@ func (r *Registry) Names() []string {
 // explicit Core wins if that core supports the protocol; otherwise the first
 // registered core that supports it is used. Unsatisfiable inbounds are an error.
 func (r *Registry) Assign(inbounds []spec.Inbound) (map[string][]spec.Inbound, error) {
-	out := map[string][]spec.Inbound{}
+	out, unsupported := r.Split(inbounds)
+	for _, ib := range inbounds {
+		if reason, ok := unsupported[ib.Tag]; ok {
+			return nil, errors.New(reason)
+		}
+	}
+	return out, nil
+}
+
+// Split is Assign for a running agent: inbounds no enabled core can serve
+// are returned by tag with the reason instead of failing the whole set, so
+// one stray inbound (say snell on a node without snell-server) never keeps
+// the others from being applied.
+func (r *Registry) Split(inbounds []spec.Inbound) (byCore map[string][]spec.Inbound, unsupported map[string]string) {
+	byCore = map[string][]spec.Inbound{}
+	unsupported = map[string]string{}
 	for _, ib := range inbounds {
 		name, err := r.pick(ib)
 		if err != nil {
-			return nil, err
+			unsupported[ib.Tag] = err.Error()
+			continue
 		}
-		out[name] = append(out[name], ib)
+		byCore[name] = append(byCore[name], ib)
 	}
-	return out, nil
+	return byCore, unsupported
 }
 
 func (r *Registry) pick(ib spec.Inbound) (string, error) {

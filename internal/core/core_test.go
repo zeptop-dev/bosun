@@ -55,3 +55,19 @@ func TestAssign(t *testing.T) {
 		t.Fatal("expected error for unsupported transport")
 	}
 }
+
+func TestSplit(t *testing.T) {
+	r := NewRegistry()
+	r.Register(fakeCore{"singbox", []spec.Protocol{spec.VLESS}, nil})
+	byCore, unsupported := r.Split([]spec.Inbound{
+		{Tag: "a", Protocol: spec.VLESS},
+		{Tag: "b", Protocol: spec.Snell},
+		{Tag: "c", Protocol: spec.VLESS, Core: "xray"},
+	})
+	if len(byCore["singbox"]) != 1 || byCore["singbox"][0].Tag != "a" {
+		t.Fatalf("unexpected assignment: %+v", byCore)
+	}
+	if len(unsupported) != 2 || unsupported["b"] == "" || unsupported["c"] == "" {
+		t.Fatalf("expected b and c unsupported with reasons: %v", unsupported)
+	}
+}

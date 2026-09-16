@@ -23,6 +23,8 @@ cores:
     auth_listen: 127.0.0.1:9103
     stats_listen: 127.0.0.1:9104
     log_level: warn
+  # snell:                   # Surge snell-server (closed source, fetched from Surge on first start); needed for snell inbounds
+  #   version: "5.0.0"       # or "4.1.1" for clients without v5 support
 
 # Who owns the desired state.
 #   local   - standalone: the built-in web panel edits inbounds/users/forwards
