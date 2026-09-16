@@ -193,7 +193,7 @@ func (c *Core) hotUpdate(ctx context.Context, prev, next *state) error {
 		adds, removes := diffUsers(prev.users[tag], next.users[tag])
 		for _, name := range removes {
 			rctx, cancel := context.WithTimeout(ctx, rpcTimeout)
-			err := removeUser(rctx, conn, tag, name)
+			err := removeUser(rctx, conn, tag, spec.InboundUser(name, tag))
 			cancel()
 			if err != nil {
 				return fmt.Errorf("remove %s from %s: %w", name, tag, err)

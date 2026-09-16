@@ -24,17 +24,18 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	if len(inbounds) == 0 {
 		return nil, fmt.Errorf("singbox: nothing to render")
 	}
-	// Stats counters are per user name across all inbounds.
-	seen := map[string]bool{}
+	// Stats counters are per user *and inbound*: each inbound's users
+	// carry the inbound tag in their name (spec.InboundUser), and the
+	// same names go into the stats list and the speed-limit rules.
 	names := []string{}
+	authNames := map[int64][]string{} // user id -> per-inbound names
 	ins := make([]any, 0, len(inbounds))
 	for _, ib := range inbounds {
 		ibUsers := ib.EffectiveUsers(users)
 		for _, u := range ibUsers {
-			if !seen[u.Name] {
-				seen[u.Name] = true
-				names = append(names, u.Name)
-			}
+			n := spec.InboundUser(u.Name, ib.Tag)
+			names = append(names, n)
+			authNames[u.ID] = append(authNames[u.ID], n)
 		}
 		in, err := renderInbound(ib, ibUsers)
 		if err != nil {
@@ -88,7 +89,11 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		base["tag"] = spec.SpeedTag(u.ID)
 		base["routing_mark"] = spec.SpeedMark(u.ID)
 		outs = append(outs, base)
-		limitRules = append(limitRules, m{"auth_user": []string{u.Name}, "outbound": spec.SpeedTag(u.ID)})
+		au := authNames[u.ID]
+		if len(au) == 0 {
+			au = []string{u.Name}
+		}
+		limitRules = append(limitRules, m{"auth_user": au, "outbound": spec.SpeedTag(u.ID)})
 	}
 
 	cfg := m{

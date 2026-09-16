@@ -122,7 +122,20 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		ss["sockopt"] = m{"mark": spec.SpeedMark(lu.ID)}
 		base["streamSettings"] = ss
 		outs = append(outs, base)
-		limitRules = append(limitRules, m{"type": "field", "user": []string{lu.Name}, "outboundTag": spec.SpeedTag(lu.ID)})
+		// Routing matches the email, which carries the inbound tag: one
+		// entry per inbound the user is on.
+		var emails []string
+		for _, ib := range inbounds {
+			for _, u := range ib.EffectiveUsers(users) {
+				if u.ID == lu.ID {
+					emails = append(emails, spec.InboundUser(u.Name, ib.Tag))
+				}
+			}
+		}
+		if len(emails) == 0 {
+			emails = []string{lu.Name}
+		}
+		limitRules = append(limitRules, m{"type": "field", "user": emails, "outboundTag": spec.SpeedTag(lu.ID)})
 	}
 
 	cfg := m{

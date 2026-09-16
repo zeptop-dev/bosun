@@ -325,7 +325,7 @@ func TestSpeedLimitOutbounds(t *testing.T) {
 	}
 	s := string(b)
 	for _, want := range []string{`"tag": "limit-1"`, `"tag": "limit-2"`, `"mark": 65537`, `"user": [
-          "b"
+          "b|v"
         ]`, `"outboundTag": "limit-2"`} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %s in\n%s", want, s)

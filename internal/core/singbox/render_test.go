@@ -2,6 +2,7 @@ package singbox
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -158,8 +159,9 @@ func TestRenderScopedUsers(t *testing.T) {
 		t.Fatalf("nobody: %d users", n)
 	}
 	stats := cfg["experimental"].(map[string]any)["v2ray_api"].(map[string]any)["stats"].(map[string]any)
-	if len(stats["users"].([]any)) != 2 {
-		t.Fatalf("stats users must be the union: %v", stats["users"])
+	// One counter per user and inbound: u1 and u2 on "all", u1 on "vip".
+	if got := fmt.Sprint(stats["users"]); got != "[u1|all u2|all u1|vip]" {
+		t.Fatalf("stats users must be per inbound: %v", stats["users"])
 	}
 }
 
