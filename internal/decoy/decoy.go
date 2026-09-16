@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -125,7 +126,10 @@ func (s *Server) startLocked(ctx context.Context) error {
 		return fmt.Errorf("listen %s: %w", addr, err)
 	}
 	tln := tls.NewListener(ln, tcfg)
-	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
+		// REALITY probes and scanners hit this port with half handshakes
+		// all day; net/http would print each as "TLS handshake error".
+		ErrorLog: log.New(quietHandshakes{s.log}, "", 0)}
 	s.srv = srv
 	s.status.Running = true
 	go func() {
@@ -227,4 +231,16 @@ func builtinPage(domain string) []byte {
 <style>body{margin:0;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;background:#f6f7f9;color:#1f2933;display:flex;min-height:100vh;align-items:center;justify-content:center}
 main{max-width:520px;padding:40px;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}h1{font-size:22px;margin:0 0 12px}p{line-height:1.6;margin:0 0 8px;color:#52606d}small{color:#9aa5b1}</style></head>
 <body><main><h1>` + d + `</h1><p>This site is under construction. Please check back later.</p><small>&copy; ` + strconv.Itoa(time.Now().Year()) + ` ` + d + `</small></main></body></html>`)
+}
+
+// quietHandshakes is net/http's error log: TLS handshake failures are
+// dropped (probe noise), anything else goes to the structured log.
+type quietHandshakes struct{ log *slog.Logger }
+
+func (q quietHandshakes) Write(p []byte) (int, error) {
+	line := strings.TrimSpace(string(p))
+	if !strings.Contains(line, "TLS handshake error") {
+		q.log.Warn("decoy http", "msg", line)
+	}
+	return len(p), nil
 }

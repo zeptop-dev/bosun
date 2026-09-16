@@ -6,6 +6,7 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Version and updates, or from Captain's node list).
 
+- **v0.37.1** (2026-09-16) — decoy site no longer logs every failed TLS handshake (REALITY probes and scanners produced "TLS handshake error … too many ignored records" all day); agent.go split into agent / apply / report, no behaviour change
 - **v0.37.0** (2026-09-16) — "rollback" node job: a managed node puts its previous bosun build back on the panel's request (selfupdate Rollback), reports the version it landed on and restarts; refused on non-release builds
 - **v0.36.1** (2026-09-16) — v0.36.0 follow-up found live: sing-box's stats user list and speed-limit rules, and xray's hot user removal and speed-limit rules, still used the plain user name, so sing-box counted nothing after the rename
 - **v0.36.0** (2026-09-16) — traffic is reported per user *and inbound*: xray emails and sing-box user names carry the inbound tag ("name|tag"), hysteria and mita counters are tagged by the core, the agent sends one `traffic` entry per user and inbound (`inbound` field) so a panel can charge the inbound's own group; drivers that only know users (Xboard, local) still get one summed entry per user; online IPs are merged back per user
