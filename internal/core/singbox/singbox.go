@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -139,9 +140,27 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.sup == nil {
-		c.sup = subprocess.New("sing-box", c.opt.Binary, []string{"run", "-c", path, "-D", c.opt.WorkDir, "--disable-color"}, c.opt.WorkDir, c.log).WithLineHook(c.online.feed)
+		c.sup = subprocess.New("sing-box", c.opt.Binary, []string{"run", "-c", path, "-D", c.opt.WorkDir, "--disable-color"}, c.opt.WorkDir, c.log).WithLineHook(c.online.feed).WithLogFilter(c.keepLine)
 	}
 	return c.sup.Start(ctx)
+}
+
+var levelRe = regexp.MustCompile(`\b(TRACE|DEBUG|INFO|WARN|ERROR|FATAL|PANIC)\b`)
+
+var levelRank = map[string]int{"trace": 0, "debug": 1, "info": 2, "warn": 3, "error": 4, "fatal": 5, "panic": 6}
+
+// keepLine reports whether a sing-box output line is at or above the
+// configured log_level (sing-box itself runs at info for the tracker).
+func (c *Core) keepLine(line string) bool {
+	want, ok := levelRank[strings.ToLower(c.opt.LogLevel)]
+	if !ok {
+		return true
+	}
+	m := levelRe.FindStringSubmatch(line)
+	if m == nil {
+		return true // startup banners and panics without a level tag
+	}
+	return levelRank[strings.ToLower(m[1])] >= want
 }
 
 func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {

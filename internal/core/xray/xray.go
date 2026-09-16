@@ -42,6 +42,9 @@ type Core struct {
 	sup     *subprocess.Supervisor
 	conn    *grpc.ClientConn
 	applied *state
+
+	online   *onlineWindowMap
+	pollStop context.CancelFunc
 }
 
 const rpcTimeout = 10 * time.Second
@@ -66,7 +69,7 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
-	return &Core{opt: opt, log: log.With("core", "xray")}, nil
+	return &Core{opt: opt, log: log.With("core", "xray"), online: newOnlineWindow()}, nil
 }
 
 func (c *Core) Name() string { return "xray" }
@@ -128,6 +131,11 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 	}
 	sup := c.sup
 	c.applied, _ = b.Payload.(*state)
+	if c.pollStop == nil {
+		pctx, cancel := context.WithCancel(context.Background())
+		c.pollStop = cancel
+		go c.pollOnline(pctx)
+	}
 	c.mu.Unlock()
 	return sup.Start(ctx)
 }
@@ -232,6 +240,10 @@ func (c *Core) Stop(ctx context.Context) error {
 	sup := c.sup
 	conn := c.conn
 	c.conn = nil
+	if c.pollStop != nil {
+		c.pollStop()
+		c.pollStop = nil
+	}
 	c.mu.Unlock()
 	if conn != nil {
 		_ = conn.Close()

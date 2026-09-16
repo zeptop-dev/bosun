@@ -28,13 +28,14 @@ const (
 
 // Supervisor runs one command and keeps it alive.
 type Supervisor struct {
-	lineHook func(string)
-	name     string
-	path     string
-	args     []string
-	dir      string
-	env      []string
-	log      *slog.Logger
+	lineHook  func(string)
+	logFilter func(string) bool
+	name      string
+	path      string
+	args      []string
+	dir       string
+	env       []string
+	log       *slog.Logger
 
 	mu       sync.Mutex
 	cmd      *exec.Cmd
@@ -52,6 +53,15 @@ func New(name, path string, args []string, dir string, log *slog.Logger) *Superv
 // (cores whose only per-connection signal is their log output).
 func (s *Supervisor) WithLineHook(fn func(string)) *Supervisor {
 	s.lineHook = fn
+	return s
+}
+
+// WithLogFilter decides which output lines are copied into bosun's own log;
+// the line hook still sees every line. Cores that must run at a chatty
+// level for bosun's sake (sing-box's online tracker needs info) use it to
+// keep the journal at the level the operator configured.
+func (s *Supervisor) WithLogFilter(keep func(string) bool) *Supervisor {
+	s.logFilter = keep
 	return s
 }
 
@@ -152,7 +162,9 @@ func (s *Supervisor) pipe(r io.Reader, level slog.Level) {
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
 		line := sc.Text()
-		s.log.Log(context.Background(), level, line)
+		if s.logFilter == nil || s.logFilter(line) {
+			s.log.Log(context.Background(), level, line)
+		}
 		if s.lineHook != nil {
 			s.lineHook(line)
 		}

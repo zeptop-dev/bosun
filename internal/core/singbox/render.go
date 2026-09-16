@@ -92,7 +92,11 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 
 	cfg := m{
-		"log": m{"level": opt.LogLevel, "timestamp": true},
+		// Always info: the online tracker (device limits) reads the
+		// per-connection lines sing-box only writes at that level. The
+		// operator's log_level decides what reaches bosun's journal (see
+		// Core.keepLine).
+		"log": m{"level": "info", "timestamp": true},
 		"experimental": m{
 			"v2ray_api": m{
 				"listen": opt.StatsListen,

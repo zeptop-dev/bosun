@@ -51,3 +51,20 @@ func TestOnlineLogLevel(t *testing.T) {
 		t.Fatalf("debug stays, got %s", got)
 	}
 }
+
+func TestKeepLineFiltersByConfiguredLevel(t *testing.T) {
+	c := &Core{opt: Options{LogLevel: "warn"}}
+	if c.keepLine("+0000 2026-09-16 02:12:50 INFO [1 0ms] inbound/vless[in]: inbound connection from 203.0.113.9:1") {
+		t.Fatal("info line should not reach the journal at warn")
+	}
+	if !c.keepLine("+0000 2026-09-16 02:12:50 ERROR [1 0ms] inbound/vless[in]: unknown UUID") {
+		t.Fatal("error line must be kept")
+	}
+	if !c.keepLine("panic: something without a level") {
+		t.Fatal("untagged lines must be kept")
+	}
+	c.opt.LogLevel = "info"
+	if !c.keepLine("+0000 2026-09-16 02:12:50 INFO [1 0ms] x") {
+		t.Fatal("info kept at info")
+	}
+}
