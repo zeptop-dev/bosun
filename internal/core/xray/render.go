@@ -543,8 +543,11 @@ func renderWARP(o spec.Outbound) m {
 	if ep == "" {
 		ep = "engage.cloudflareclient.com:2408"
 	}
+	// gVisor, not the kernel TUN: with kernel TUN the tunnel came up but
+	// nothing came back (live test on Debian 13, Xray 26.3.27); gVisor is
+	// also what the WireGuard inbound uses. IPv4 first inside the tunnel.
 	out := m{"tag": o.Tag, "protocol": "wireguard", "settings": m{
-		"secretKey": w.PrivateKey, "address": w.Addresses, "mtu": 1280, "domainStrategy": "ForceIPv6v4",
+		"secretKey": w.PrivateKey, "address": w.Addresses, "mtu": 1280, "domainStrategy": "ForceIPv4v6", "noKernelTun": true,
 		"peers": []m{{"publicKey": w.PeerPublicKey, "endpoint": ep, "allowedIPs": []string{"0.0.0.0/0", "::/0"}}},
 	}}
 	if len(w.Reserved) == 3 {
