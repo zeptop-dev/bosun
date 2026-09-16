@@ -1,6 +1,7 @@
 package xray
 
 import (
+	"strings"
 	"context"
 	"sync"
 	"time"
@@ -123,6 +124,7 @@ func (c *Core) sample(ctx context.Context) (map[string][]string, error) {
 	}
 	out := make(map[string][]string, len(users))
 	for _, u := range users {
+		u = onlineEmail(u)
 		ips, err := onlineIPs(rctx, conn, u)
 		if err != nil {
 			return nil, err
@@ -218,4 +220,15 @@ func (c *Core) Online(ctx context.Context) (map[string][]string, error) {
 	}
 	c.online.add(s)
 	return c.online.online(), nil
+}
+
+// onlineEmail turns what GetAllOnlineUsers returns into the email the
+// per-user counters are keyed by. Xray hands back the full counter name
+// ("user>>>EMAIL>>>online"); older builds the bare email. Feeding the
+// full name back into GetStatsOnlineIpList produced
+// "user>>>user>>>…>>>online>>>online not found", so xray never
+// contributed online addresses before this.
+func onlineEmail(name string) string {
+	name = strings.TrimPrefix(name, onlineCounterPrefixFn)
+	return strings.TrimSuffix(name, onlineCounterSuffix)
 }

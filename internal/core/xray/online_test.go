@@ -26,3 +26,15 @@ func TestOnlineWindowRemembersRecentIPs(t *testing.T) {
 		t.Fatalf("everything expired: %v", got)
 	}
 }
+
+func TestOnlineEmail(t *testing.T) {
+	for in, want := range map[string]string{
+		"user>>>u|tag>>>online": "u|tag",
+		"u|tag":                 "u|tag",
+		"user>>>plain>>>online": "plain",
+	} {
+		if got := onlineEmail(in); got != want {
+			t.Fatalf("%q -> %q, want %q", in, got, want)
+		}
+	}
+}
