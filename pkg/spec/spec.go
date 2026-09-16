@@ -25,7 +25,7 @@ const (
 	TUIC        Protocol = "tuic"
 	AnyTLS      Protocol = "anytls"
 	Mieru       Protocol = "mieru"
-	Snell       Protocol = "snell" // Surge snell-server; one shared PSK, no per-user accounting
+	Snell       Protocol = "snell" // snell-server (one shared PSK) or sing-box multi-user (SnellMultiUser)
 	SOCKS       Protocol = "socks"
 	HTTP        Protocol = "http"
 	Naive       Protocol = "naive"
@@ -197,6 +197,11 @@ type Inbound struct {
 	SnellVersion  int    `json:"snell_version,omitempty"`   // snell: 4 or 5 (0 = 5)
 	SnellObfs     string `json:"snell_obfs,omitempty"`      // snell: "", "http" or "tls"
 	SnellObfsHost string `json:"snell_obfs_host,omitempty"` // snell: obfs host header
+	// SnellMultiUser serves the inbound from sing-box's multi-user snell
+	// server: SnellPSK stays the server key, and each user connects with
+	// their own key (User.Password), so traffic is accounted per user.
+	// Needs sing-box; obfs "tls" is not available there.
+	SnellMultiUser bool `json:"snell_multi_user,omitempty"`
 
 	// Users restricts who may use this inbound. When ScopedUsers is false the
 	// node-level user list applies; when true only Users are provisioned,

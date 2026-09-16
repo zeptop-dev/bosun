@@ -80,3 +80,21 @@ func TestSupportsProxyProtocol(t *testing.T) {
 		t.Fatal("accept_proxy_protocol must route to a core that reads the header")
 	}
 }
+
+// Multi-user snell needs sing-box; obfs tls needs snell-server.
+func TestSnellCapabilities(t *testing.T) {
+	sb := Capabilities{Protocols: []spec.Protocol{spec.Snell}, SnellMultiUser: true}
+	sv := Capabilities{Protocols: []spec.Protocol{spec.Snell}, SnellObfsTLS: true}
+	multi := spec.Inbound{Protocol: spec.Snell, SnellMultiUser: true}
+	tls := spec.Inbound{Protocol: spec.Snell, SnellObfs: "tls"}
+	plain := spec.Inbound{Protocol: spec.Snell, SnellObfs: "http"}
+	if !sb.Supports(multi) || sv.Supports(multi) {
+		t.Fatal("multi-user snell must route to sing-box only")
+	}
+	if sb.Supports(tls) || !sv.Supports(tls) {
+		t.Fatal("obfs tls must route to snell-server only")
+	}
+	if !sb.Supports(plain) || !sv.Supports(plain) {
+		t.Fatal("plain snell is fine on both")
+	}
+}

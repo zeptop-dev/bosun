@@ -28,6 +28,8 @@ type Capabilities struct {
 	HotUserReload   bool     // true if users can change without a process restart
 	Fallbacks       bool     // VLESS/Trojan fallbacks to another local service
 	ProxyProtocol   bool     // inbounds may require a PROXY protocol header (relays behind)
+	SnellMultiUser  bool     // snell inbounds with per-user keys (sing-box)
+	SnellObfsTLS    bool     // snell "tls" obfuscation (snell-server only)
 }
 
 // Supports reports whether the core can serve inbound ib.
@@ -50,6 +52,14 @@ func (c Capabilities) Supports(ib spec.Inbound) bool {
 	}
 	if ib.AcceptProxyProtocol && !c.ProxyProtocol {
 		return false
+	}
+	if ib.Protocol == spec.Snell {
+		if ib.SnellMultiUser && !c.SnellMultiUser {
+			return false
+		}
+		if strings.EqualFold(ib.SnellObfs, "tls") && !c.SnellObfsTLS {
+			return false
+		}
 	}
 	tr := ib.TransportType()
 	if tr == "tcp" {

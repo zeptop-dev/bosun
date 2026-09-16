@@ -209,3 +209,27 @@ func TestRenderTUICDefaultsALPN(t *testing.T) {
 		t.Fatalf("tuic inbound should default to alpn h3: %s", cfg)
 	}
 }
+
+// Snell renders as sing-box's v5 server: shared psk alone, or with a key
+// per user in multi-user mode; obfs http maps to obfs_mode.
+func TestRenderSnell(t *testing.T) {
+	users := []spec.User{{Name: "u1", UUID: "uuid-1", Password: "key-1"}}
+	single := spec.Inbound{Tag: "sn", Protocol: spec.Snell, Port: 6160, SnellPSK: "server-psk", SnellVersion: 4, SnellObfs: "http"}
+	in, err := renderInbound(single, users)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in["type"] != "snell" || in["version"] != 5 || in["psk"] != "server-psk" || in["obfs_mode"] != "http" || in["users"] != nil {
+		t.Fatalf("single-user snell: %v", in)
+	}
+	multi := single
+	multi.SnellMultiUser, multi.SnellObfs = true, ""
+	in, err = renderInbound(multi, users)
+	if err != nil {
+		t.Fatal(err)
+	}
+	us, _ := in["users"].([]any)
+	if len(us) != 1 || us[0].(m)["userkey"] != "key-1" || us[0].(m)["name"] != "u1|sn" || in["obfs_mode"] != nil {
+		t.Fatalf("multi-user snell: %v", in)
+	}
+}

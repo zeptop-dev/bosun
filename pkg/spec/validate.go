@@ -97,6 +97,9 @@ func (i Inbound) Validate() error {
 		if i.SnellVersion != 0 && i.SnellVersion != 4 && i.SnellVersion != 5 {
 			return fmt.Errorf("snell version must be 4 or 5")
 		}
+		if i.SnellMultiUser && i.SnellObfs == "tls" {
+			return fmt.Errorf("multi-user snell (sing-box) supports obfs http only, not tls")
+		}
 		if i.SnellObfs != "" && i.SnellObfs != "http" && i.SnellObfs != "tls" {
 			return fmt.Errorf("snell obfs must be off, http or tls")
 		}

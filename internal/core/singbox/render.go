@@ -204,6 +204,22 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 	case spec.Naive:
 		in["type"] = "naive"
 		in["users"] = mapUsers(users, func(u spec.User) m { return m{"username": u.Name, "password": u.Password} })
+	case spec.Snell:
+		// sing-box speaks snell v5 (v4 is the same wire protocol without
+		// the QUIC mode nobody implements), with one server psk and, in
+		// multi-user mode, a key per user that the subscription hands out
+		// as that user's psk.
+		in["type"] = "snell"
+		in["version"] = 5
+		in["psk"] = ib.SnellPSK
+		if strings.EqualFold(ib.SnellObfs, "http") {
+			in["obfs_mode"] = "http"
+		}
+		if ib.SnellMultiUser {
+			in["users"] = mapUsers(users, func(u spec.User) m {
+				return m{"name": spec.InboundUser(u.Name, ib.Tag), "userkey": u.Password}
+			})
+		}
 	default:
 		return nil, fmt.Errorf("singbox: inbound %q: unsupported protocol %s", ib.Tag, ib.Protocol)
 	}

@@ -3,9 +3,10 @@ package subscription
 import (
 	"encoding/base64"
 	"encoding/json"
-	"github.com/zeptop-dev/bosun/pkg/wg"
 	"strings"
 	"testing"
+
+	"github.com/zeptop-dev/bosun/pkg/wg"
 
 	"gopkg.in/yaml.v3"
 
@@ -350,5 +351,22 @@ func TestProxyNameFilters(t *testing.T) {
 	ini, _ := Surge{}.RenderWith(lines, Account{}, "[Proxy]\n{{proxies}}\n[Proxy Group]\nJP = select, {{proxy_names:tag=jp}}\nALL = select, {{proxy_names}}\n")
 	if !strings.Contains(string(ini), "JP = select, 🇯🇵 JP-1\n") {
 		t.Fatalf("surge tag filter: %s", ini)
+	}
+}
+
+// A multi-user snell inbound hands each user their own key as the psk.
+func TestSnellMultiUserKey(t *testing.T) {
+	l := Line{Name: "sn", Host: "203.0.113.30", Port: 6160, Password: "user-key",
+		Inbound: spec.Inbound{Protocol: spec.Snell, SnellPSK: "server-psk", SnellMultiUser: true}}
+	if k := snellKey(l); k != "user-key" {
+		t.Fatalf("multi-user key = %q", k)
+	}
+	l.Inbound.SnellMultiUser = false
+	if k := snellKey(l); k != "server-psk" {
+		t.Fatalf("shared key = %q", k)
+	}
+	out, err := Clash{}.RenderWith([]Line{{Name: "sn", Host: "203.0.113.30", Port: 6160, Password: "user-key", Inbound: spec.Inbound{Protocol: spec.Snell, SnellPSK: "server-psk", SnellMultiUser: true}}}, Account{}, "")
+	if err != nil || !strings.Contains(string(out), "psk: user-key") {
+		t.Fatalf("clash: %v\n%s", err, out)
 	}
 }
