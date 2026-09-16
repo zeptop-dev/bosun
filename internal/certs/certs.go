@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"github.com/caddyserver/certmagic"
 	"github.com/libdns/cloudflare"
 	"go.uber.org/zap"
@@ -75,6 +77,11 @@ func New(opts Options) (*Manager, error) {
 		opts.Log = slog.Default()
 	}
 	if err := os.MkdirAll(opts.Dir, 0o750); err != nil {
+		return nil, err
+	}
+	// PEMs issued before cores.user was set belong to root; the cores
+	// must be able to read them from now on.
+	if err := runas.ChownTree(opts.Dir); err != nil {
 		return nil, err
 	}
 	m := &Manager{opts: opts, log: opts.Log.With("component", "certs"), status: map[string]*Status{}, method: map[string]string{}}
@@ -245,12 +252,20 @@ func (m *Manager) export(ctx context.Context, cfg *certmagic.Config, domain stri
 	return nil
 }
 
+// writeAtomic writes the file and hands it (and its directory) to the
+// core account when one is configured, since the cores load the PEMs.
 func writeAtomic(path string, data []byte, perm os.FileMode) error {
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, perm); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	if err := runas.Chown(filepath.Dir(path)); err != nil {
+		return err
+	}
+	return runas.Chown(path)
 }
 
 // onEvent re-exports after a renewal and tells the agent.

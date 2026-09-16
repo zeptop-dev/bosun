@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/zeptop-dev/bosun/internal/egressguard"
+
 	"log/slog"
 	"path/filepath"
 	"sync"
@@ -74,6 +76,10 @@ type Agent struct {
 	// Guard drops packets for mita ports that arrive on the wrong local
 	// address (mita cannot bind one itself); nil = not enforced.
 	Guard *ingressguard.Guard
+	// Egress keeps the core account away from private and metadata ranges;
+	// nil = off. EgressAllow are the operator's exemptions.
+	Egress      *egressguard.Guard
+	EgressAllow []string
 	// Firewall opens listening ports in ufw/firewalld; nil = off.
 	Firewall *firewall.Manager
 	// ExtraPorts are opened along with the inbounds (the web panel port).
@@ -172,6 +178,10 @@ type Status struct {
 	Shaper *shaper.Status `json:"shaper,omitempty"`
 	// Guard is the strict-ingress state (nil = no rules).
 	Guard *ingressguard.Status `json:"guard,omitempty"`
+	// Egress is the core egress guard state (nil = off).
+	Egress *egressguard.Status `json:"egress,omitempty"`
+	// CoreUser is the account the cores run as ("" = bosun itself).
+	CoreUser string `json:"core_user,omitempty"`
 	// Firewall is the auto-open state (nil = off or no firewall).
 	Firewall *firewall.Status `json:"firewall,omitempty"`
 }

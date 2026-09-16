@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/core/subprocess"
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -72,6 +74,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
+	if err := runas.ChownTree(opt.WorkDir); err != nil {
+		return nil, err
+	}
 	secret := randomSecret()
 	return &Core{
 		opt:    opt,
@@ -110,6 +115,9 @@ func (c *Core) write(b *core.Bundle) error {
 			return err
 		}
 		if err := os.Rename(p+".tmp", p); err != nil {
+			return err
+		}
+		if err := runas.Chown(p); err != nil {
 			return err
 		}
 	}

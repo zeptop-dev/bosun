@@ -441,6 +441,32 @@ it when the set changes. Host-name targets and UDP work; there are no byte
 or connection counters. The doctor fails a realm rule when the process is
 not running.
 
+### Core isolation: unprivileged cores and the egress guard
+
+With `cores.user: bosun-proxy` in config.yaml (the installer writes it for
+new nodes; on an existing node add the line and restart, the account is
+created on first start) every core process — sing-box, xray, mita,
+hysteria, snell-server, realm — runs as that system account with only
+`CAP_NET_BIND_SERVICE`, while bosun itself stays root for nftables, tc and
+the installers. bosun hands the cores what they must read: their work
+directories and configs, and the certificate PEMs (existing ones are
+re-owned at start, new ones as they are written). Nothing else on the
+node is readable by a core.
+
+The egress guard (on whenever `cores.user` is set; `cores.egress_guard:
+false` turns it off) adds an nftables output rule for that account:
+*new* connections from a core to link-local (`169.254.0.0/16`, the cloud
+metadata service), RFC 1918, CGNAT (`100.64.0.0/10`) and the IPv6
+equivalents are dropped, so a client of a compromised or badly configured
+core cannot reach the provider's internal network or the metadata
+endpoint through the node. Loopback stays open (the local DNS stub) and
+replies on established flows are never touched, so clients that arrive
+from private space (relays, line ingresses) keep working. Ranges a node
+must reach — a private upstream, a line gateway's network — go in
+`cores.egress_allow: [10.10.0.0/24]`. The doctor check "Core isolation"
+shows the account and the guard's state and warns when cores still run as
+root.
+
 ### Strict ingress for mita and firewall auto-open
 
 mita 3.37.0 and later bind a line-bound inbound's address natively

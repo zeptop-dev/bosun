@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/zeptop-dev/bosun/internal/core"
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"log/slog"
 	"path/filepath"
 	"time"
@@ -300,12 +303,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 	var ports []firewall.Port
 	// mita >= 3.37.0 binds the address itself; older builds listen
 	// everywhere and need the nftables guard.
-	guardMita := true
-	if c, ok := a.reg.Get("mita"); ok {
-		if nl, ok := c.(interface{ NativeListen() bool }); ok && nl.NativeListen() {
-			guardMita = false
-		}
-	}
+	guardMita := !nativeListen(a.reg)
 	for _, ib := range node.Inbounds {
 		if _, served := byTag[ib.Tag]; !served {
 			continue
@@ -328,6 +326,17 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 			} else {
 				s.Guard = &st
 			}
+		})
+	}
+	if a.Egress != nil {
+		uid, _ := runas.IDs()
+		if err := a.Egress.Apply(ctx, uid, a.EgressAllow); err != nil {
+			a.log.Error("egress guard", "err", err)
+		}
+		st := a.Egress.Status()
+		a.setStatus(func(s *Status) {
+			s.Egress = &st
+			s.CoreUser = runas.Name()
 		})
 	}
 	if a.Firewall != nil {
@@ -396,4 +405,15 @@ func (a *Agent) applyForwards(ctx context.Context) error {
 		rules = append(rules, a.node.Forwards...)
 	}
 	return a.fwd.Apply(rules)
+}
+
+// nativeListen reports whether the mita core binds addresses itself
+// (mita >= 3.37.0), making the ingress guard unnecessary.
+func nativeListen(reg *core.Registry) bool {
+	c, ok := reg.Get("mita")
+	if !ok {
+		return false
+	}
+	nl, ok := c.(interface{ NativeListen() bool })
+	return ok && nl.NativeListen()
 }

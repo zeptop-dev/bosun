@@ -28,6 +28,15 @@ type Config struct {
 		// registry (CI-built sing-box) when the GitLab project is private.
 		// A Deploy Token with read_package_registry is enough.
 		RegistryToken string        `yaml:"registry_token"`
+		// User is the unprivileged system account the cores run under
+		// (created if missing); "" runs them as bosun itself. Their work
+		// dirs, configs and certificates are handed to this account.
+		User string `yaml:"user"`
+		// EgressGuard drops new connections from the core account to
+		// link-local, metadata, RFC 1918 and CGNAT ranges (nftables);
+		// default on when User is set. Ranges in EgressAllow stay open.
+		EgressGuard *bool    `yaml:"egress_guard"`
+		EgressAllow []string `yaml:"egress_allow"`
 		Singbox       *SingboxCore  `yaml:"singbox"`
 		Xray          *XrayCore     `yaml:"xray"`
 		Mita          *MitaCore     `yaml:"mita"`
@@ -311,4 +320,13 @@ func (p *ProbeConfig) Spec() *spec.Probe {
 		out.Tasks = append(out.Tasks, t)
 	}
 	return out
+}
+
+// EgressGuardOn reports whether the core egress guard should be installed:
+// explicit setting, else on whenever the cores run as their own account.
+func (c *Config) EgressGuardOn() bool {
+	if c.Cores.EgressGuard != nil {
+		return *c.Cores.EgressGuard
+	}
+	return c.Cores.User != ""
 }

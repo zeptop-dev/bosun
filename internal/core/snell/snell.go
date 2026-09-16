@@ -15,6 +15,8 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/core/subprocess"
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -58,6 +60,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
+	if err := runas.ChownTree(opt.WorkDir); err != nil {
+		return nil, err
+	}
 	return &Core{opt: opt, log: log.With("core", "snell"), instances: map[string]*instance{}}, nil
 }
 
@@ -92,6 +97,9 @@ func (c *Core) newInstance(tag string) (*instance, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
+	if err := runas.Chown(dir); err != nil {
+		return nil, err
+	}
 	in := &instance{tag: tag, cfg: filepath.Join(dir, configFile)}
 	in.sup = subprocess.New("snell:"+tag, c.opt.Binary, []string{"-c", in.cfg}, dir, c.log.With("inbound", tag))
 	return in, nil
@@ -110,7 +118,10 @@ func writeFile(path string, content []byte) error {
 	if err := os.WriteFile(path+".tmp", content, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(path+".tmp", path)
+	if err := os.Rename(path+".tmp", path); err != nil {
+		return err
+	}
+	return runas.Chown(path)
 }
 
 // Start launches an instance for every inbound in the bundle.

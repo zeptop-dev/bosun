@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"github.com/zeptop-dev/bosun/internal/core/subprocess"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -91,6 +93,12 @@ func (r *Realm) apply(ctx context.Context, rules []spec.Forward) error {
 	}
 	path := filepath.Join(r.Dir, "realm.toml")
 	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
+		return err
+	}
+	if err := runas.Chown(r.Dir); err != nil {
+		return err
+	}
+	if err := runas.Chown(path); err != nil {
 		return err
 	}
 	if r.proc != nil {

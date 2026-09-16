@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/egressguard"
+
 	"github.com/zeptop-dev/bosun/internal/firewall"
 	"github.com/zeptop-dev/bosun/internal/ingressguard"
 	"github.com/zeptop-dev/bosun/internal/shaper"
@@ -95,6 +97,12 @@ type Deps struct {
 	RealmRunning bool
 	// Guard is the strict-ingress state (nil = no mita inbound binds a line address).
 	Guard *ingressguard.Status
+	// NativeListen: the mita build binds line addresses itself.
+	NativeListen bool
+	// Egress is the core egress guard state (nil = off); CoreUser the
+	// account the cores run as ("" = bosun itself).
+	Egress   *egressguard.Status
+	CoreUser string
 	// Firewall is the auto-open state (nil = off or no ufw/firewalld).
 	Firewall *firewall.Status
 	// Dial overrides TCP connects (tests).
@@ -119,7 +127,7 @@ func Run(ctx context.Context, d Deps) Report {
 	rep := Report{At: now(), Checks: []Check{}}
 	checks := []func(context.Context, *Deps) []Check{
 		checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
-		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen,
+		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen, checkIsolation,
 	}
 	for _, fn := range checks {
 		cctx, cancel := context.WithTimeout(ctx, perCheck)
@@ -461,6 +469,8 @@ func checkFirewall(ctx context.Context, d *Deps) []Check {
 func checkGuard(_ context.Context, d *Deps) []Check {
 	c := Check{ID: "ingress", Name: "Strict ingress (mita bind address)"}
 	switch {
+	case d.Guard == nil && d.NativeListen:
+		c.Status, c.Detail = OK, "mita binds line addresses itself (listenIPAddress); no nft rules needed"
 	case d.Guard == nil:
 		c.Status, c.Detail = Skip, "no mita inbound binds a line address"
 	case !d.Guard.Supported:
@@ -606,6 +616,25 @@ func checkShaper(_ context.Context, d *Deps) []Check {
 		c.Status, c.Detail = Fail, d.Shaper.Error
 	default:
 		c.Status, c.Detail = OK, fmt.Sprintf("%d users shaped on %s", d.Shaper.Users, d.Shaper.Interface)
+	}
+	return []Check{c}
+}
+
+// checkIsolation reports whether the cores run as their own account and
+// whether the egress guard keeps them off private and metadata ranges.
+func checkIsolation(_ context.Context, d *Deps) []Check {
+	c := Check{ID: "isolation", Name: "Core isolation (cores.user)"}
+	switch {
+	case d.CoreUser == "":
+		c.Status, c.Detail = Warn, "cores run as bosun (root); set cores.user (the installer does for new nodes) so they get only CAP_NET_BIND_SERVICE"
+	case d.Egress == nil:
+		c.Status, c.Detail = Warn, fmt.Sprintf("cores run as %s; egress guard is off (cores.egress_guard)", d.CoreUser)
+	case !d.Egress.Supported:
+		c.Status, c.Detail = Warn, fmt.Sprintf("cores run as %s; egress guard needs Linux with nft: %s", d.CoreUser, d.Egress.Error)
+	case d.Egress.Error != "":
+		c.Status, c.Detail = Fail, d.Egress.Error
+	default:
+		c.Status, c.Detail = OK, fmt.Sprintf("cores run as %s (uid %d); new connections to private, link-local and metadata ranges are dropped (%d exemption(s))", d.CoreUser, d.Egress.UID, d.Egress.Allowed)
 	}
 	return []Check{c}
 }

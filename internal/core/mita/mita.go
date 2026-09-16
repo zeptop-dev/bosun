@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"google.golang.org/grpc"
 
 	"github.com/zeptop-dev/bosun/internal/core"
@@ -83,6 +85,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 		opt.LogLevel = "INFO"
 	}
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
+		return nil, err
+	}
+	if err := runas.ChownTree(opt.WorkDir); err != nil {
 		return nil, err
 	}
 	c := &Core{opt: opt, log: log.With("core", "mita"), instances: map[string]*instance{}}
@@ -179,6 +184,9 @@ func (c *Core) newInstance(tag string) (*instance, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
+	if err := runas.Chown(dir); err != nil {
+		return nil, err
+	}
 	in := &instance{tag: tag, dir: dir, cfg: filepath.Join(dir, configFile), socket: socketPath(dir), log: c.log.With("inbound", tag), last: map[string]spec.Traffic{}}
 	in.sup = subprocess.New("mita:"+tag, c.opt.Binary, []string{"run"}, dir, in.log).WithEnv(
 		"MITA_CONFIG_JSON_FILE="+in.cfg,
@@ -193,7 +201,10 @@ func writeFile(path string, content []byte) error {
 	if err := os.WriteFile(path+".tmp", content, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(path+".tmp", path)
+	if err := os.Rename(path+".tmp", path); err != nil {
+		return err
+	}
+	return runas.Chown(path)
 }
 
 // tags returns the inbound tags present in a bundle, sorted.

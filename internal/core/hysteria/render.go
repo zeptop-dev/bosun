@@ -5,8 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/zeptop-dev/bosun/internal/core"
 	"strconv"
+
+	"github.com/zeptop-dev/bosun/internal/core"
 
 	"gopkg.in/yaml.v3"
 

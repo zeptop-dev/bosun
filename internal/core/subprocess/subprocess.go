@@ -14,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/zeptop-dev/bosun/internal/runas"
 )
 
 // ErrRunning is returned by Start when the process is already running.
@@ -87,6 +89,9 @@ func (s *Supervisor) Start(ctx context.Context) error {
 func (s *Supervisor) launch(ctx context.Context) error {
 	cmd := exec.Command(s.path, s.args...)
 	cmd.Dir = s.dir
+	// Cores run as the unprivileged account when one is configured
+	// (CAP_NET_BIND_SERVICE only); see internal/runas.
+	cmd.SysProcAttr = runas.Credential()
 	if len(s.env) > 0 {
 		cmd.Env = append(os.Environ(), s.env...)
 	}

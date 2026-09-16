@@ -19,6 +19,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/egressguard"
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"github.com/zeptop-dev/bosun/internal/agent"
 	"github.com/zeptop-dev/bosun/internal/authutil"
 	"github.com/zeptop-dev/bosun/internal/certs"
@@ -171,6 +174,12 @@ func setup(args []string) (*env, error) {
 		return nil, err
 	}
 
+	if err := runas.Set(cfg.Cores.User); err != nil {
+		return nil, err
+	}
+	if cfg.Cores.User != "" {
+		log.Info("cores run as an unprivileged account", "user", cfg.Cores.User)
+	}
 	reg := core.NewRegistry()
 	inst := coreinstall.New(cfg.CoresDir(), log)
 	if cfg.Cores.RegistryToken != "" {
@@ -348,6 +357,9 @@ func cmdRun(args []string) error {
 		ag.Shaper = shp
 		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return e.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(cfg.DataDir, "realm"), Log: log}
 		ag.Guard = guard
+		if cfg.EgressGuardOn() {
+			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, cfg.Cores.EgressAllow
+		}
 		ag.Firewall, ag.ExtraPorts = fw, extraPorts
 		current.ag = ag
 		return ag.Run(ctx)
@@ -512,6 +524,9 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Shaper = s.shaper
 		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return s.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(s.cfg.DataDir, "realm"), Log: s.log}
 		ag.Guard = s.guard
+		if s.cfg.EgressGuardOn() {
+			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, s.cfg.Cores.EgressAllow
+		}
 		ag.Firewall, ag.ExtraPorts = s.firewall, s.extraPorts
 		ag.WARPAccount, ag.SaveWARP = s.store.WARP, s.store.SetWARP
 		if s.bot != nil {

@@ -149,6 +149,7 @@ metrics_listen: 127.0.0.1:9100
 
 cores:
   order: [singbox, xray, mita, hysteria]
+  user: bosun-proxy   # cores run unprivileged (created on first start); egress to private/metadata ranges is dropped
   singbox: { stats_listen: 127.0.0.1:9101, log_level: warn }
   xray: { version: "26.3.27", api_listen: 127.0.0.1:9102, log_level: warning }
   mita: { log_level: INFO }

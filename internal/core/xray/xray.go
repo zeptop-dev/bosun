@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"google.golang.org/grpc"
 
 	"github.com/zeptop-dev/bosun/internal/core"
@@ -69,6 +71,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
+	if err := runas.ChownTree(opt.WorkDir); err != nil {
+		return nil, err
+	}
 	return &Core{opt: opt, log: log.With("core", "xray"), online: newOnlineWindow()}, nil
 }
 
@@ -101,6 +106,9 @@ func (c *Core) write(b *core.Bundle) error {
 			return err
 		}
 		if err := os.Rename(p+".tmp", p); err != nil {
+			return err
+		}
+		if err := runas.Chown(p); err != nil {
 			return err
 		}
 	}

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/runas"
+
 	"github.com/zeptop-dev/bosun/internal/doctor"
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -61,6 +63,7 @@ func (a *Agent) Doctor(ctx context.Context) doctor.Report {
 		Managed: managed, LastReport: lastReport, LastError: lastErr, PushInterval: a.driver.Intervals().Push,
 		KomariEnabled: ks.Enabled, KomariError: ks.LastError, Assign: assign, Shaper: a.Status().Shaper,
 		RealmRunning: a.Realm.Running(), Guard: a.Status().Guard, Firewall: a.Status().Firewall,
+		Egress: a.Status().Egress, CoreUser: runas.Name(), NativeListen: nativeListen(a.reg),
 		Skipped: a.Status().Skipped,
 	})
 }
