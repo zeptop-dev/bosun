@@ -24,7 +24,7 @@ Verified end to end against the manifest's tested releases (sing-box
 - Prometheus endpoint (`metrics_listen`, `/metrics`): core running state, provisioned users, and per-forward up/rtt/connections/bytes. No client library.
 - Supervised child process: log relay, restart with backoff, graceful stop.
 - Core installer with a tested-version manifest (`internal/coreinstall`): leave `binary` empty and bosun downloads the newest release it has verified, checks its sha256, and installs it under `<data_dir>/cores/<core>/<version>/`. Releases known to break deployments are marked `broken` and only installed when named explicitly. sing-box is downloaded from bosun's own CI build of the upstream tag with the stats API tag (GitHub pre-release `singbox-<version>`); when that build is missing it is built from source, which needs a Go toolchain on the node.
-- Config validated with `sing-box check` before every start or apply.
+- Every inbound passes `spec.Inbound.Validate()` (the shape check Captain, the local panel and the agent share: keys, TLS/REALITY fields, ciphers, transports) before rendering; an invalid one is skipped with the reason in the doctor instead of breaking the core's config. Config validated with `sing-box check` before every start or apply.
 - Failed applies are retried on the next pull and unacknowledged traffic deltas are kept across failed reports, so a panel outage loses no accounting.
 
 Core selection: `cores.order` in the config is the preference; an inbound goes to the first core that supports its protocol, transport and cipher. XHTTP only runs on Xray, HTTP/2 transport and Shadowsocks 2022 multi-user only on sing-box, mieru only on mita. Hysteria2 runs on sing-box (default) or the official server when `hysteria` is listed first.
@@ -138,11 +138,19 @@ docker compose pull && docker compose up -d   # upgrade; the panel shows this co
 ## Online devices
 
 Captain's device limit needs each node to report which client IPs a user is
-connected from. Xray (stats API), Hysteria (auth callback) and sing-box
-(joined from its per-connection log lines; the log level is raised to info
-automatically while any user carries a limit) report them. mieru (mita)
-exposes sessions without user names, so mieru inbounds do not count toward
-device limits.
+connected from. Xray (stats API, sampled every 10 s and kept for 3 minutes
+because Xray forgets an address 20 s after its last connection), Hysteria
+(auth callback) and sing-box (joined from its per-connection log lines;
+sing-box always runs at log level `info` for this, the configured
+`log_level` only filters what reaches bosun's own log) report them. mieru
+(mita) exposes sessions without user names, so mieru inbounds do not count
+toward device limits.
+
+Traffic is counted per user *and inbound*: each inbound's users get their
+own identity in the core (Xray email / sing-box name `NAME|TAG`,
+`spec.InboundUser`), and the report carries one entry per user and inbound
+so a panel can charge the inbound's own group. Panels that only know users
+(Xboard, the local panel) receive one summed entry per user.
 
 ## Probe beats
 
@@ -221,7 +229,8 @@ one stays as `bosun.backup` for "Roll back") and exits; systemd's
 `Restart=always` starts the new version. Cores restart with it, so users drop
 for a few seconds. Managed nodes can also be upgraded from Captain's node list,
 one at a time or all at once: the request rides on the next report and the node
-applies it the same way.
+applies it the same way. Captain can also roll a node back (a `rollback` job):
+bosun puts `bosun.backup` back, reports the version and restarts.
 
 Inside Docker the binary is part of the image, so the panel only shows the
 `docker compose pull && docker compose up -d` command instead. `bosun` also logs
