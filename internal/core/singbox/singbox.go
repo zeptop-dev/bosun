@@ -84,7 +84,7 @@ func (c *Core) Capabilities() core.Capabilities {
 			spec.VLESS, spec.VMess, spec.Trojan, spec.Shadowsocks,
 			spec.Hysteria2, spec.TUIC, spec.AnyTLS, spec.SOCKS, spec.HTTP, spec.Naive, spec.Snell,
 		},
-		SnellMultiUser: true,
+		SnellMultiUser:  true,
 		Transports:      []string{"ws", "grpc", "httpupgrade", "http"},
 		Shadowsocks2022: true,
 		HotUserReload:   false,
