@@ -198,7 +198,7 @@ func inbounds(d *Deps) []spec.Inbound {
 // udpOnly protocols never answer a TCP connect.
 func udpOnly(ib spec.Inbound) bool {
 	switch ib.Protocol {
-	case spec.Hysteria2, spec.TUIC:
+	case spec.Hysteria2, spec.TUIC, spec.WireGuard:
 		return true
 	case spec.Mieru:
 		return strings.EqualFold(ib.MieruTransport, "UDP")

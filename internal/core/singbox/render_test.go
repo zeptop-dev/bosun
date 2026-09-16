@@ -185,3 +185,25 @@ func TestRuleSetsSniffDNS(t *testing.T) {
 		t.Fatal("no_sniff inbound included in sniff rule")
 	}
 }
+
+func TestRenderTUICDefaultsALPN(t *testing.T) {
+	ib := spec.Inbound{Tag: "t", Protocol: spec.TUIC, Port: 9001, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "x.example", CertPath: "/c", KeyPath: "/k"}}
+	node := &spec.Node{Inbounds: []spec.Inbound{ib}}
+	cfg, err := render(node, node.Inbounds, []spec.User{{Name: "u", UUID: "id", Password: "p"}}, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Inbounds []struct {
+			TLS struct {
+				ALPN []string `json:"alpn"`
+			} `json:"tls"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal(cfg, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Inbounds) != 1 || len(doc.Inbounds[0].TLS.ALPN) != 1 || doc.Inbounds[0].TLS.ALPN[0] != "h3" {
+		t.Fatalf("tuic inbound should default to alpn h3: %s", cfg)
+	}
+}

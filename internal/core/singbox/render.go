@@ -198,6 +198,13 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 	}
 
 	if tls := renderTLS(ib.TLS); tls != nil {
+		// TUIC clients (mihomo, sing-box, Stash) offer only "h3"; unlike
+		// its hysteria2 inbound, sing-box's tuic inbound does not add it
+		// by itself and the QUIC handshake fails with "server did not
+		// select an ALPN protocol".
+		if ib.Protocol == spec.TUIC && tls["alpn"] == nil {
+			tls["alpn"] = []string{"h3"}
+		}
 		in["tls"] = tls
 	} else if requiresTLS(ib.Protocol) {
 		return nil, fmt.Errorf("singbox: inbound %q: %s requires TLS", ib.Tag, ib.Protocol)
