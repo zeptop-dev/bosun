@@ -57,6 +57,10 @@ type Client struct {
 	HTTP *http.Client
 	// Token is an optional GitHub token (rate limits on busy hosts).
 	Token string
+	// MinVersion is the oldest release this binary may move to, by update
+	// or rollback ("" = no floor). Raised after a security fix so a node
+	// cannot be talked back into a vulnerable build.
+	MinVersion string
 
 	mu      sync.Mutex
 	cached  *Info
@@ -268,12 +272,16 @@ func (c *Client) Apply(ctx context.Context, version string) (applied string, err
 	if _, ok := parseVersion(rel.TagName); ok && !Newer(rel.TagName, c.Version) {
 		return "", fmt.Errorf("%s is older than the running %s; use rollback for that", rel.TagName, c.Version)
 	}
+	if c.MinVersion != "" && Newer(c.MinVersion, rel.TagName) {
+		return "", fmt.Errorf("%s is below the minimum allowed version %s", rel.TagName, c.MinVersion)
+	}
 	assetName := fmt.Sprintf("%s-%s-%s", c.Binary, runtime.GOOS, runtime.GOARCH)
 	var assetURL, sumsURL string
+	var assetSize int64
 	for _, a := range rel.Assets {
 		switch a.Name {
 		case assetName:
-			assetURL = a.URL
+			assetURL, assetSize = a.URL, a.Size
 		case "SHA256SUMS":
 			sumsURL = a.URL
 		}
@@ -293,6 +301,9 @@ func (c *Client) Apply(ctx context.Context, version string) (applied string, err
 		return "", err
 	}
 	dir := filepath.Dir(exe)
+	if err := checkFreeSpace(dir, assetSize); err != nil {
+		return "", err
+	}
 	tmp, err := os.MkdirTemp(dir, "."+c.Binary+"-update-*")
 	if err != nil {
 		return "", fmt.Errorf("binary directory %s is not writable by this user: %w", dir, err)
@@ -349,6 +360,9 @@ func (c *Client) Rollback() (string, error) {
 	ver := "previous"
 	if b, err := os.ReadFile(exe + ".backup.version"); err == nil {
 		ver = strings.TrimSpace(string(b))
+	}
+	if c.MinVersion != "" && ver != "previous" && Newer(c.MinVersion, ver) {
+		return "", fmt.Errorf("previous version %s is below the minimum allowed version %s", ver, c.MinVersion)
 	}
 	// Keep the current one as the new backup so rollback is reversible.
 	if err := os.Rename(exe, exe+".rollback-tmp"); err != nil {
@@ -521,4 +535,22 @@ func Newer(a, b string) bool {
 	va, ok1 := parseVersion(a)
 	vb, ok2 := parseVersion(b)
 	return ok1 && ok2 && compare(va, vb) > 0
+}
+
+// checkFreeSpace refuses an update that would fill the binary's
+// filesystem: the download plus the kept backup, with headroom for the
+// logs and database next to it. Unknown asset sizes assume 48 MiB.
+func checkFreeSpace(dir string, assetSize int64) error {
+	free, err := FreeSpace(dir)
+	if err != nil {
+		return nil // unsupported platform: skip
+	}
+	if assetSize <= 0 {
+		assetSize = 48 << 20
+	}
+	need := uint64(assetSize)*2 + 32<<20
+	if free < need {
+		return fmt.Errorf("not enough free space in %s: %d MiB free, %d MiB needed", dir, free>>20, need>>20)
+	}
+	return nil
 }

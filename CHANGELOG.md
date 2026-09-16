@@ -6,6 +6,7 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Version and updates, or from Captain's node list).
 
+- **v0.39.1** (2026-09-16) — self-update (bosun and Captain, `pkg/selfupdate`) checks free space next to the binary before downloading (twice the asset plus headroom; a full disk used to fail halfway) and exports `FreeSpace`; `Client.MinVersion` is a floor that update and rollback refuse to go below (for after a security fix); README lists 1.14.1-r1 and mita 3.37.0
 - **v0.39.0** (2026-09-16) — cores: mita 3.37.0 (tested; a line-bound mieru inbound now binds its address natively through `listenIPAddress`, the process restarts on an address change, and the nftables ingress guard is only installed for older mita builds) and sing-box 1.14.1-r1 (bosun CI build; WireGuard endpoints no longer stall after network changes or sleep, selector interrupts routed connections); the mita driver logs the binary version it found
 - **v0.38.2** (2026-09-16) — xray online addresses actually reach the panel: GetAllOnlineUsers returns full counter names ("user>>>EMAIL>>>online"), which were fed back into the per-user IP query as-is and always came back not found, so only sing-box and hysteria ever reported devices; the name is now normalised first
 - **v0.38.1** (2026-09-16) — agent: report split into collectUserTraffic and collectTagged (the inbound and outbound loops were the same code twice); no behaviour change

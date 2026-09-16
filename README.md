@@ -319,11 +319,13 @@ Current manifest:
 
 | core | version | status | note |
 |---|---|---|---|
+| singbox | 1.14.1-r1 | tested | upstream 1.14.1 built with `with_v2ray_api` and `with_wireguard` (WARP); WireGuard endpoints survive network changes |
 | singbox | 1.14.0-r2 | tested | upstream 1.14.0 built with `with_v2ray_api` and `with_wireguard` (WARP) |
 | singbox | 1.14.0 | caution | first build without `with_wireguard`; WARP outbounds fail |
 | xray | 26.3.27 | tested | REALITY works with mihomo and sing-box clients |
 | xray | 26.9.9 | broken | REALITY rejects mihomo/sing-box clients |
-| mita | 3.36.1 | tested | official mieru server |
+| mita | 3.37.0 | tested | official mieru server; line-bound inbounds bind natively (`listenIPAddress`) |
+| mita | 3.36.1 | tested | official mieru server; line-bound inbounds need the nft ingress guard |
 | hysteria | 2.12.2 | tested | official Hysteria 2 server |
 | snell | 5.0.0 | caution | Surge snell-server v5 (official zip, digest pinned); not verified end to end |
 | snell | 4.1.1 | caution | Surge snell-server v4 for older clients |
@@ -343,7 +345,7 @@ tag cross-build bosun for linux amd64/arm64 and attach the binaries plus
 publishes it as a pre-release tagged `singbox-<version>`:
 
 ```
-releases/download/singbox-1.14.0-r2/sing-box-1.14.0-r2-linux-{amd64,arm64}  + SHA256SUMS
+releases/download/singbox-1.14.1-r1/sing-box-1.14.1-r1-linux-{amd64,arm64}  + SHA256SUMS
 releases/download/<tag>/bosun-linux-{amd64,arm64}                     + SHA256SUMS
 ```
 

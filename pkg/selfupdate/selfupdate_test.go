@@ -130,3 +130,33 @@ func TestCheckApplyRollback(t *testing.T) {
 		t.Fatal("failed apply must leave the binary alone")
 	}
 }
+
+func TestFreeSpaceAndFloor(t *testing.T) {
+	dir := t.TempDir()
+	free, err := FreeSpace(dir)
+	if err != nil || free == 0 {
+		t.Fatalf("FreeSpace = %d, %v", free, err)
+	}
+	if err := checkFreeSpace(dir, 1<<20); err != nil {
+		t.Fatalf("1 MiB asset refused: %v", err)
+	}
+	if err := checkFreeSpace(dir, int64(free)); err == nil {
+		t.Fatal("an asset as large as the free space must be refused")
+	}
+	// Rollback below the floor is refused and leaves both files in place.
+	exe := filepath.Join(dir, "bosun")
+	_ = os.WriteFile(exe, []byte("new"), 0o755)
+	_ = os.WriteFile(exe+".backup", []byte("old"), 0o755)
+	_ = os.WriteFile(exe+".backup.version", []byte("v0.1.0\n"), 0o644)
+	c := &Client{Binary: "bosun", Version: "v0.3.0", Exe: exe, MinVersion: "v0.2.0"}
+	if _, err := c.Rollback(); err == nil {
+		t.Fatal("rollback below MinVersion accepted")
+	}
+	if b, _ := os.ReadFile(exe); string(b) != "new" {
+		t.Fatal("refused rollback touched the binary")
+	}
+	c.MinVersion = "v0.1.0"
+	if ver, err := c.Rollback(); err != nil || ver != "v0.1.0" {
+		t.Fatalf("rollback at the floor: %v %v", ver, err)
+	}
+}
