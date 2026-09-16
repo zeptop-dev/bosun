@@ -118,6 +118,22 @@ func singboxOutbound(l Line) m {
 		o["type"] = "http"
 		o["username"] = l.UUID
 		o["password"] = l.Password
+	case spec.Snell:
+		// sing-box's client speaks v4 (same wire protocol as our v5
+		// server) and is the only client with a per-user key.
+		o["type"] = "snell"
+		o["version"] = 4
+		o["psk"] = ib.SnellPSK
+		if ib.SnellMultiUser {
+			o["user_key"] = l.Password
+		}
+		if ib.SnellObfs != "" && ib.SnellObfs != "off" {
+			o["obfs_mode"] = ib.SnellObfs
+			if ib.SnellObfsHost != "" {
+				o["obfs_host"] = ib.SnellObfsHost
+			}
+		}
+		return o
 	case spec.WireGuard:
 		c, ok := WGClient(l)
 		if !ok {

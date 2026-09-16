@@ -89,15 +89,6 @@ func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) 
 func transportType(l Line) string { return l.Inbound.TransportType() }
 
 // snellVersion defaults to 5, the version bosun installs.
-// snellKey is what the client puts as psk: the user's own key on a
-// multi-user (sing-box) inbound, the shared server psk otherwise.
-func snellKey(l Line) string {
-	if l.Inbound.SnellMultiUser && l.Password != "" {
-		return l.Password
-	}
-	return l.Inbound.SnellPSK
-}
-
 func snellVersion(ib spec.Inbound) int {
 	if ib.SnellVersion == 4 {
 		return 4

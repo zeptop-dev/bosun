@@ -120,10 +120,11 @@ func clashProxy(l Line) m {
 		}
 		delete(p, "udp")
 	case spec.Snell:
-		// One shared PSK unless the inbound is multi-user (sing-box), where
-		// the user's own key is their psk.
+		if ib.SnellMultiUser {
+			return nil // needs the user key too; only sing-box's client has it
+		}
 		p["type"] = "snell"
-		p["psk"] = snellKey(l)
+		p["psk"] = ib.SnellPSK
 		p["version"] = snellVersion(ib)
 		if ib.SnellObfs != "" && ib.SnellObfs != "off" {
 			o := m{"mode": ib.SnellObfs}

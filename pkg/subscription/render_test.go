@@ -84,8 +84,8 @@ func TestSingBox(t *testing.T) {
 		t.Fatalf("json: %v", err)
 	}
 	outs := doc["outbounds"].([]any)
-	// 2 groups + 7 servers (mieru and xhttp skipped) + direct
-	if len(outs) != 10 {
+	// 2 groups + 8 servers (mieru and xhttp skipped, snell included) + direct
+	if len(outs) != 11 {
 		t.Fatalf("outbounds: %d", len(outs))
 	}
 	r := outs[2].(map[string]any)
@@ -354,19 +354,34 @@ func TestProxyNameFilters(t *testing.T) {
 	}
 }
 
-// A multi-user snell inbound hands each user their own key as the psk.
-func TestSnellMultiUserKey(t *testing.T) {
-	l := Line{Name: "sn", Host: "203.0.113.30", Port: 6160, Password: "user-key",
-		Inbound: spec.Inbound{Protocol: spec.Snell, SnellPSK: "server-psk", SnellMultiUser: true}}
-	if k := snellKey(l); k != "user-key" {
-		t.Fatalf("multi-user key = %q", k)
+// Snell reaches sing-box clients (version 4 on the wire) with the shared
+// psk, plus the user key on a multi-user inbound; Surge and mihomo have no
+// user key, so multi-user lines are left out of their documents.
+func TestSnellRendering(t *testing.T) {
+	shared := Line{Name: "sn", Host: "203.0.113.30", Port: 6160, Password: "user-key", Inbound: spec.Inbound{Protocol: spec.Snell, SnellPSK: "server-psk", SnellObfs: "http", SnellObfsHost: "www.bing.com"}}
+	multi := shared
+	multi.Inbound.SnellMultiUser = true
+	out, err := SingBox{}.Render([]Line{shared, multi}, Account{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	l.Inbound.SnellMultiUser = false
-	if k := snellKey(l); k != "server-psk" {
-		t.Fatalf("shared key = %q", k)
+	var doc map[string]any
+	_ = json.Unmarshal(out, &doc)
+	var sn []map[string]any
+	for _, o := range doc["outbounds"].([]any) {
+		if x := o.(map[string]any); x["type"] == "snell" {
+			sn = append(sn, x)
+		}
 	}
-	out, err := Clash{}.RenderWith([]Line{{Name: "sn", Host: "203.0.113.30", Port: 6160, Password: "user-key", Inbound: spec.Inbound{Protocol: spec.Snell, SnellPSK: "server-psk", SnellMultiUser: true}}}, Account{}, "")
-	if err != nil || !strings.Contains(string(out), "psk: user-key") {
-		t.Fatalf("clash: %v\n%s", err, out)
+	if len(sn) != 2 || sn[0]["version"] != float64(4) || sn[0]["psk"] != "server-psk" || sn[0]["obfs_mode"] != "http" || sn[0]["user_key"] != nil || sn[1]["user_key"] != "user-key" {
+		t.Fatalf("sing-box snell: %v", sn)
+	}
+	clash, _ := Clash{}.RenderWith([]Line{shared, multi}, Account{}, "")
+	if strings.Count(string(clash), "type: snell") != 1 || strings.Contains(string(clash), "user-key") {
+		t.Fatalf("clash must carry only the shared-psk line:\n%s", clash)
+	}
+	surge, _ := Surge{}.Render([]Line{shared, multi}, Account{})
+	if strings.Count(string(surge), "= snell,") != 1 || strings.Contains(string(surge), "user-key") {
+		t.Fatalf("surge must carry only the shared-psk line:\n%s", surge)
 	}
 }

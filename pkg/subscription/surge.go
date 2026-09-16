@@ -80,7 +80,10 @@ func surgeLine(l Line) string {
 		parts = append(parts, "uuid="+l.UUID, "password="+l.Password, "sni="+serverName(l), "alpn=h3", "version=5")
 		return fmt.Sprintf(base, "tuic") + ", " + strings.Join(parts, ", ")
 	case spec.Snell:
-		parts = append(parts, "psk="+snellKey(l), fmt.Sprintf("version=%d", snellVersion(ib)))
+		if ib.SnellMultiUser {
+			return "" // needs the user key too; only sing-box's client has it
+		}
+		parts = append(parts, "psk="+ib.SnellPSK, fmt.Sprintf("version=%d", snellVersion(ib)))
 		if ib.SnellObfs != "" && ib.SnellObfs != "off" {
 			parts = append(parts, "obfs="+ib.SnellObfs)
 			if ib.SnellObfsHost != "" {
