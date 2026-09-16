@@ -69,6 +69,20 @@ GOT=$(sha256sum "$TMP/bosun" | cut -d' ' -f1)
 [ "$WANT" = "$GOT" ] || { echo "checksum mismatch: want $WANT got $GOT" >&2; exit 1; }
 install -m 0755 "$TMP/bosun" /usr/local/bin/bosun
 
+# nft and tc back the per-user speed limits, nft forwards and strict
+# ingress; minimal images (Debian cloud, Alpine) ship without them. Best
+# effort: bosun runs without them and the doctor says what is missing.
+if ! command -v nft >/dev/null || ! command -v tc >/dev/null; then
+  echo "installing nftables and iproute2 (speed limits, nft forwards, strict ingress)"
+  if command -v apt-get >/dev/null; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables iproute2 >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
+  elif command -v apk >/dev/null; then
+    apk add -q nftables iproute2 >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
+  elif command -v dnf >/dev/null; then
+    dnf install -y -q nftables iproute-tc >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
+  fi
+fi
+
 # ask prints a prompt on the terminal and reads the answer from /dev/tty, so
 # the questions work even when the script itself arrives through a pipe.
 ask() { printf '%s' "$1" >/dev/tty; read -r ans </dev/tty || ans=""; }
