@@ -27,7 +27,7 @@ type Config struct {
 		// RegistryToken authenticates downloads from bosun's own package
 		// registry (CI-built sing-box) when the GitLab project is private.
 		// A Deploy Token with read_package_registry is enough.
-		RegistryToken string        `yaml:"registry_token"`
+		RegistryToken string `yaml:"registry_token"`
 		// User is the unprivileged system account the cores run under
 		// (created if missing); "" runs them as bosun itself. Their work
 		// dirs, configs and certificates are handed to this account.
@@ -35,13 +35,13 @@ type Config struct {
 		// EgressGuard drops new connections from the core account to
 		// link-local, metadata, RFC 1918 and CGNAT ranges (nftables);
 		// default on when User is set. Ranges in EgressAllow stay open.
-		EgressGuard *bool    `yaml:"egress_guard"`
-		EgressAllow []string `yaml:"egress_allow"`
-		Singbox       *SingboxCore  `yaml:"singbox"`
-		Xray          *XrayCore     `yaml:"xray"`
-		Mita          *MitaCore     `yaml:"mita"`
-		Hysteria      *HysteriaCore `yaml:"hysteria"`
-		Snell         *SnellCore    `yaml:"snell"`
+		EgressGuard *bool         `yaml:"egress_guard"`
+		EgressAllow []string      `yaml:"egress_allow"`
+		Singbox     *SingboxCore  `yaml:"singbox"`
+		Xray        *XrayCore     `yaml:"xray"`
+		Mita        *MitaCore     `yaml:"mita"`
+		Hysteria    *HysteriaCore `yaml:"hysteria"`
+		Snell       *SnellCore    `yaml:"snell"`
 	} `yaml:"cores"`
 
 	// Probe runs the latency checks on a node that is not managed by
