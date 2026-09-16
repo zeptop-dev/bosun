@@ -170,10 +170,10 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		})}
 	case spec.VMess:
 		in["protocol"] = "vmess"
-		in["settings"] = m{"clients": mapUsers(users, func(u spec.User) m { return m{"id": u.UUID, "email": u.Name} })}
+		in["settings"] = m{"clients": mapUsers(users, func(u spec.User) m { return m{"id": u.UUID, "email": spec.InboundUser(u.Name, ib.Tag)} })}
 	case spec.Trojan:
 		in["protocol"] = "trojan"
-		in["settings"] = m{"clients": mapUsers(users, func(u spec.User) m { return m{"password": u.Password, "email": u.Name} })}
+		in["settings"] = m{"clients": mapUsers(users, func(u spec.User) m { return m{"password": u.Password, "email": spec.InboundUser(u.Name, ib.Tag)} })}
 	case spec.Shadowsocks:
 		if strings.HasPrefix(ib.Cipher, "2022-") {
 			return nil, fmt.Errorf("xray: inbound %q: shadowsocks 2022 multi-user is served by sing-box, not xray", ib.Tag)
@@ -182,7 +182,7 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		in["settings"] = m{
 			"network": "tcp,udp",
 			"clients": mapUsers(users, func(u spec.User) m {
-				return m{"method": ib.Cipher, "password": u.Password, "email": u.Name}
+				return m{"method": ib.Cipher, "password": u.Password, "email": spec.InboundUser(u.Name, ib.Tag)}
 			}),
 		}
 	case spec.SOCKS:
@@ -266,7 +266,7 @@ func fallbackDest(d string) any {
 }
 
 func vlessClient(u spec.User, ib spec.Inbound) m {
-	c := m{"id": u.UUID, "email": u.Name}
+	c := m{"id": u.UUID, "email": spec.InboundUser(u.Name, ib.Tag)}
 	if ib.Flow != "" && ib.TLS != nil && ib.TransportType() == "tcp" {
 		c["flow"] = ib.Flow
 	}

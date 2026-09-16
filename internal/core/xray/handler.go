@@ -81,7 +81,7 @@ func addUser(ctx context.Context, conn *grpc.ClientConn, tag string, proto spec.
 	if err != nil {
 		return err
 	}
-	user := strField(2, u.Name)
+	user := strField(2, spec.InboundUser(u.Name, tag))
 	user = append(user, bytesField(3, acc)...)
 	op := typed(typeAddUser, bytesField(1, user))
 	return alterInbound(ctx, conn, tag, op)

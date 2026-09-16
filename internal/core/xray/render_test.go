@@ -42,7 +42,7 @@ func TestRenderVLESSRealityAndKey(t *testing.T) {
 		t.Fatalf("inbound: %v", in)
 	}
 	c := in["settings"].(map[string]any)["clients"].([]any)[0].(map[string]any)
-	if c["email"] != "u1" || c["flow"] != "xtls-rprx-vision" {
+	if c["email"] != "u1|in" || c["flow"] != "xtls-rprx-vision" {
 		t.Fatalf("client: %v", c)
 	}
 	ss := in["streamSettings"].(map[string]any)

@@ -135,7 +135,7 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 	case spec.VLESS:
 		in["type"] = "vless"
 		in["users"] = mapUsers(users, func(u spec.User) m {
-			x := m{"name": u.Name, "uuid": u.UUID}
+			x := m{"name": spec.InboundUser(u.Name, ib.Tag), "uuid": u.UUID}
 			if ib.Flow != "" && ib.TLS != nil {
 				x["flow"] = ib.Flow
 			}
@@ -143,10 +143,10 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		})
 	case spec.VMess:
 		in["type"] = "vmess"
-		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": u.Name, "uuid": u.UUID, "alterId": 0} })
+		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": spec.InboundUser(u.Name, ib.Tag), "uuid": u.UUID, "alterId": 0} })
 	case spec.Trojan:
 		in["type"] = "trojan"
-		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": u.Name, "password": u.Password} })
+		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": spec.InboundUser(u.Name, ib.Tag), "password": u.Password} })
 	case spec.Shadowsocks:
 		in["type"] = "shadowsocks"
 		in["method"] = ib.Cipher
@@ -162,7 +162,7 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 			if keyLen > 0 {
 				pw = ss2022UserKey(u.UUID, keyLen)
 			}
-			return m{"name": u.Name, "password": pw}
+			return m{"name": spec.InboundUser(u.Name, ib.Tag), "password": pw}
 		})
 	case spec.Hysteria2:
 		in["type"] = "hysteria2"
@@ -175,19 +175,21 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		if ib.Obfs != "" {
 			in["obfs"] = m{"type": ib.Obfs, "password": ib.ObfsPassword}
 		}
-		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": u.Name, "password": u.Password} })
+		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": spec.InboundUser(u.Name, ib.Tag), "password": u.Password} })
 	case spec.TUIC:
 		in["type"] = "tuic"
 		if ib.CongestionControl != "" {
 			in["congestion_control"] = ib.CongestionControl
 		}
-		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": u.Name, "uuid": u.UUID, "password": u.Password} })
+		in["users"] = mapUsers(users, func(u spec.User) m {
+			return m{"name": spec.InboundUser(u.Name, ib.Tag), "uuid": u.UUID, "password": u.Password}
+		})
 	case spec.AnyTLS:
 		in["type"] = "anytls"
 		if len(ib.PaddingScheme) > 0 {
 			in["padding_scheme"] = ib.PaddingScheme
 		}
-		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": u.Name, "password": u.Password} })
+		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": spec.InboundUser(u.Name, ib.Tag), "password": u.Password} })
 	case spec.SOCKS:
 		in["type"] = "socks"
 		in["users"] = mapUsers(users, func(u spec.User) m { return m{"username": u.Name, "password": u.Password} })

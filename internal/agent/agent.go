@@ -92,7 +92,7 @@ type Agent struct {
 	kernelByTag map[string]string
 	// pending* are traffic deltas the cores already zeroed but the panel
 	// has not acknowledged; they ride along on the next report.
-	pendingTraffic  map[int64]*spec.UserTraffic
+	pendingTraffic  map[trafficKey]*spec.UserTraffic
 	pendingInbound  map[string]spec.Traffic
 	pendingOutbound map[string]spec.Traffic
 	// counters for /metrics
@@ -578,6 +578,13 @@ func (a *Agent) apply(ctx context.Context) error {
 	return err
 }
 
+// trafficKey is one user's counter on one inbound ("" when the core
+// cannot tell the inbound).
+type trafficKey struct {
+	user int64
+	tag  string
+}
+
 // withSkip adds a reason to the skipped map without touching the shared
 // certificate-driven one (copy on first write).
 func withSkip(m map[string]string, tag, reason string) map[string]string {
@@ -832,7 +839,7 @@ func listenPorts(ib spec.Inbound) []firewall.Port {
 // with a host snapshot. It returns true when the panel signals newer state.
 func (a *Agent) report(ctx context.Context) bool {
 	if a.pendingTraffic == nil {
-		a.pendingTraffic = map[int64]*spec.UserTraffic{}
+		a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
 		a.pendingInbound = map[string]spec.Traffic{}
 		a.pendingOutbound = map[string]spec.Traffic{}
 	}
@@ -849,25 +856,44 @@ func (a *Agent) report(ctx context.Context) bool {
 			a.log.Warn("stats failed", "core", name, "err", err)
 			continue
 		}
-		for userName, t := range stats {
+		for key, t := range stats {
 			if t.Up == 0 && t.Down == 0 {
 				continue
 			}
+			// Cores count per inbound ("name|tag") where they can; the
+			// panel charges by the inbound's group, drivers that only
+			// know users get the sum.
+			userName, tag := spec.SplitInboundUser(key)
 			id, ok := a.userIDs[userName]
 			if !ok {
 				continue
 			}
-			ut := totals[id]
+			k := trafficKey{id, tag}
+			ut := totals[k]
 			if ut == nil {
-				ut = &spec.UserTraffic{UserID: id}
-				totals[id] = ut
+				ut = &spec.UserTraffic{UserID: id, Inbound: tag}
+				totals[k] = ut
 			}
 			ut.Up += t.Up
 			ut.Down += t.Down
 		}
 	}
-	list := make([]spec.UserTraffic, 0, len(totals))
+	// Per user for the drivers (Xboard, local); per user and inbound for
+	// the Captain report below.
+	perUser := map[int64]*spec.UserTraffic{}
+	perInboundList := make([]spec.UserTraffic, 0, len(totals))
 	for _, t := range totals {
+		perInboundList = append(perInboundList, *t)
+		ut := perUser[t.UserID]
+		if ut == nil {
+			ut = &spec.UserTraffic{UserID: t.UserID}
+			perUser[t.UserID] = ut
+		}
+		ut.Up += t.Up
+		ut.Down += t.Down
+	}
+	list := make([]spec.UserTraffic, 0, len(perUser))
+	for _, t := range perUser {
 		list = append(list, *t)
 	}
 	perInbound := a.pendingInbound
@@ -917,7 +943,7 @@ func (a *Agent) report(ctx context.Context) bool {
 	host := sysinfo.Snapshot(ctx)
 
 	if rep, ok := a.driver.(panel.Reporter); ok {
-		full := a.buildReport(list, host)
+		full := a.buildReport(perInboundList, host)
 		full.Jobs = a.takeJobResults()
 		if len(perInbound) > 0 {
 			full.Inbounds = perInbound
@@ -937,7 +963,7 @@ func (a *Agent) report(ctx context.Context) bool {
 			a.statusMu.Unlock()
 			return false
 		}
-		a.pendingTraffic, a.pendingInbound, a.pendingOutbound = map[int64]*spec.UserTraffic{}, map[string]spec.Traffic{}, map[string]spec.Traffic{}
+		a.pendingTraffic, a.pendingInbound, a.pendingOutbound = map[trafficKey]*spec.UserTraffic{}, map[string]spec.Traffic{}, map[string]spec.Traffic{}
 		a.lastReportOK.Store(time.Now().Unix())
 		a.log.Debug("report sent", "users", len(list), "state_changed", changed)
 		a.statusMu.Lock()
@@ -985,7 +1011,8 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 				a.log.Warn("online lookup failed", "core", name, "err", err)
 				continue
 			}
-			for user, ips := range online {
+			for key, ips := range online {
+				user, _ := spec.SplitInboundUser(key)
 				rep.Online[user] = append(rep.Online[user], ips...)
 			}
 		}

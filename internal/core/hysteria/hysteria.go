@@ -229,7 +229,21 @@ func (c *Core) Online(_ context.Context) (map[string][]string, error) {
 func (c *Core) Stats(ctx context.Context, reset bool) (map[string]spec.Traffic, error) {
 	rctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
-	return c.stats.traffic(rctx, reset)
+	raw, err := c.stats.traffic(rctx, reset)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	tag := ""
+	if c.applied != nil {
+		tag = c.applied.tag
+	}
+	c.mu.Unlock()
+	out := make(map[string]spec.Traffic, len(raw))
+	for name, t := range raw {
+		out[spec.InboundUser(name, tag)] = t // one process, one inbound
+	}
+	return out, nil
 }
 
 // waitReady polls the traffic stats API until hysteria answers.

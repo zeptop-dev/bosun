@@ -259,7 +259,7 @@ func (c *Core) Stats(ctx context.Context, _ bool) (map[string]spec.Traffic, erro
 	defer c.mu.Unlock()
 	out := map[string]spec.Traffic{}
 	var firstErr error
-	for _, in := range c.instances {
+	for tag, in := range c.instances {
 		if !in.sup.Running() {
 			continue
 		}
@@ -272,10 +272,11 @@ func (c *Core) Stats(ctx context.Context, _ bool) (map[string]spec.Traffic, erro
 			continue
 		}
 		for name, d := range deltas {
-			t := out[name]
+			key := spec.InboundUser(name, tag) // one instance per inbound
+			t := out[key]
 			t.Up += d.Up
 			t.Down += d.Down
-			out[name] = t
+			out[key] = t
 		}
 	}
 	if len(out) == 0 && firstErr != nil {

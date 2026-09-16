@@ -54,3 +54,18 @@ func TestValidate(t *testing.T) {
 		}
 	}
 }
+
+func TestInboundUser(t *testing.T) {
+	if got := InboundUser("u", "in"); got != "u|in" {
+		t.Fatalf("got %q", got)
+	}
+	if got := InboundUser("u", ""); got != "u" {
+		t.Fatalf("got %q", got)
+	}
+	for _, c := range []struct{ in, name, tag string }{{"u|in", "u", "in"}, {"u", "u", ""}, {"a|b|c", "a|b", "c"}} {
+		n, tag := SplitInboundUser(c.in)
+		if n != c.name || tag != c.tag {
+			t.Fatalf("%q -> %q %q", c.in, n, tag)
+		}
+	}
+}

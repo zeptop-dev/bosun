@@ -25,6 +25,7 @@ type renderOptions struct {
 
 // state carries Render results to Start/Apply.
 type state struct {
+	tag   string               // the one inbound this process serves
 	key   string               // hash of the server config; users are not part of it
 	users map[string]spec.User // by password (the auth string), for the auth endpoint
 }
@@ -78,7 +79,7 @@ func render(inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]by
 	}
 	sum := sha256.Sum256(out)
 	ibUsers := ib.EffectiveUsers(users)
-	st := &state{key: hex.EncodeToString(sum[:8]), users: make(map[string]spec.User, len(ibUsers))}
+	st := &state{tag: ib.Tag, key: hex.EncodeToString(sum[:8]), users: make(map[string]spec.User, len(ibUsers))}
 	for _, u := range ibUsers {
 		st.users[u.Password] = u
 	}

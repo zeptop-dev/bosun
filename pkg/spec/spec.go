@@ -472,6 +472,28 @@ type UserTraffic struct {
 	UserID int64 `json:"user_id,omitempty"`
 	Up     int64 `json:"up"`
 	Down   int64 `json:"down"`
+	// Inbound is the tag the bytes went through when the core can tell
+	// (xray, sing-box, hysteria, mita); "" when it cannot. A panel that
+	// charges per inbound group needs it; older panels add the entries up.
+	Inbound string `json:"inbound,omitempty"`
+}
+
+// InboundUser is the per-inbound identity a core gets for a user (xray's
+// email, sing-box's user name): the stats counters and connection logs
+// then say which inbound the bytes went through. Tags never contain "|".
+func InboundUser(name, tag string) string {
+	if tag == "" {
+		return name
+	}
+	return name + "|" + tag
+}
+
+// SplitInboundUser undoes InboundUser; a plain name comes back with "".
+func SplitInboundUser(s string) (name, tag string) {
+	if i := strings.LastIndexByte(s, '|'); i >= 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
 }
 
 // SystemStatus is a host resource snapshot.
