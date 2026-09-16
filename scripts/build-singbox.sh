@@ -4,12 +4,14 @@
 # module checksums are verified by the Go toolchain.
 #
 # usage: scripts/build-singbox.sh <version> <goos> <goarch> [outdir]
+# SUFFIX (env, e.g. "-r2") names a rebuild of the same upstream version
+# with more tags; the manifest refers to it as <version><suffix>.
 set -euo pipefail
 VERSION=${1:?version, e.g. 1.14.0}
 GOOS=${2:?goos}
 GOARCH=${3:?goarch}
 OUT=$(mkdir -p "${4:-dist}" && cd "${4:-dist}" && pwd)
-TAGS="with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme"
+TAGS="with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme,with_wireguard"
 
 WORK_TMP=$(mktemp -d)
 trap 'rm -rf "$WORK_TMP"' EXIT
@@ -25,7 +27,7 @@ CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" GOPATH="$WORK_TMP/gopath" GOBIN= GOF
     "github.com/sagernet/sing-box/cmd/sing-box@v${VERSION}"
 
 BIN=$(find "$WORK_TMP/gopath/bin" -type f -name 'sing-box*' | head -1)
-NAME="sing-box-${VERSION}-${GOOS}-${GOARCH}"
+NAME="sing-box-${VERSION}${SUFFIX:-}-${GOOS}-${GOARCH}"
 cp "$BIN" "$OUT/$NAME"
 chmod 0755 "$OUT/$NAME"
 echo "built $OUT/$NAME"

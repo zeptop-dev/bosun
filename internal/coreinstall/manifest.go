@@ -55,7 +55,7 @@ var Binary = map[string]string{
 	"realm":    "realm",
 }
 
-var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2ray_api", "with_gvisor", "with_acme"}
+var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2ray_api", "with_gvisor", "with_acme", "with_wireguard"}
 
 // singboxCI points at the sing-box builds the bosun CI publishes as a
 // GitHub pre-release tagged singbox-<version> (workflow singbox.yml).
@@ -71,8 +71,21 @@ func singboxCI(version, arch string) Asset {
 // Manifest lists every release bosun knows about. Newest first per core.
 var Manifest = []Release{
 	{
-		Core: "singbox", Version: "1.14.0", Status: StatusTested,
-		Note: "upstream tag built with with_v2ray_api by bosun CI; official release binaries lack the stats API",
+		// -r2: same upstream source rebuilt with with_wireguard, which the
+		// WARP outbound and WireGuard endpoints need (the first build
+		// failed sing-box's check with "WireGuard is not included").
+		Core: "singbox", Version: "1.14.0-r2", Status: StatusTested,
+		Note: "upstream v1.14.0 built by bosun CI with with_v2ray_api (per-user stats) and with_wireguard (WARP)",
+		Assets: map[string]Asset{
+			"linux/amd64": singboxCI("1.14.0-r2", "amd64"),
+			"linux/arm64": singboxCI("1.14.0-r2", "arm64"),
+		},
+		Build: &Build{Package: "github.com/sagernet/sing-box/cmd/sing-box", Version: "v1.14.0", Tags: singboxTags,
+			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.0"},
+	},
+	{
+		Core: "singbox", Version: "1.14.0", Status: StatusCaution,
+		Note: "first bosun CI build without with_wireguard: WARP outbounds fail; use 1.14.0-r2",
 		Assets: map[string]Asset{
 			"linux/amd64": singboxCI("1.14.0", "amd64"),
 			"linux/arm64": singboxCI("1.14.0", "arm64"),

@@ -310,7 +310,8 @@ Current manifest:
 
 | core | version | status | note |
 |---|---|---|---|
-| singbox | 1.14.0 | tested | built from source with `with_v2ray_api` |
+| singbox | 1.14.0-r2 | tested | upstream 1.14.0 built with `with_v2ray_api` and `with_wireguard` (WARP) |
+| singbox | 1.14.0 | caution | first build without `with_wireguard`; WARP outbounds fail |
 | xray | 26.3.27 | tested | REALITY works with mihomo and sing-box clients |
 | xray | 26.9.9 | broken | REALITY rejects mihomo/sing-box clients |
 | mita | 3.36.1 | tested | official mieru server |
@@ -333,7 +334,7 @@ tag cross-build bosun for linux amd64/arm64 and attach the binaries plus
 publishes it as a pre-release tagged `singbox-<version>`:
 
 ```
-releases/download/singbox-1.14.0/sing-box-1.14.0-linux-{amd64,arm64}  + SHA256SUMS
+releases/download/singbox-1.14.0-r2/sing-box-1.14.0-r2-linux-{amd64,arm64}  + SHA256SUMS
 releases/download/<tag>/bosun-linux-{amd64,arm64}                     + SHA256SUMS
 ```
 
