@@ -6,6 +6,7 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Version and updates, or from Captain's node list).
 
+- **v0.38.1** (2026-09-16) — agent: report split into collectUserTraffic and collectTagged (the inbound and outbound loops were the same code twice); no behaviour change
 - **v0.38.0** (2026-09-16) — PROXY protocol across relays: a forward with `proxy_protocol` (built-in relay or realm) sends a v2 header, an inbound with `accept_proxy_protocol` (xray, `sockopt.acceptProxyProtocol`) reads the client's address from it, so device counting and logs behind a relay see the real client; capabilities route such inbounds to xray; `Validate()` and the forward checks refuse the nft backend for it
 - **v0.37.1** (2026-09-16) — decoy site no longer logs every failed TLS handshake (REALITY probes and scanners produced "TLS handshake error … too many ignored records" all day); agent.go split into agent / apply / report, no behaviour change
 - **v0.37.0** (2026-09-16) — "rollback" node job: a managed node puts its previous bosun build back on the panel's request (selfupdate Rollback), reports the version it landed on and restarts; refused on non-release builds
