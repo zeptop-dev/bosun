@@ -13,8 +13,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/zeptop-dev/bosun/internal/connlog"
 
 	"github.com/zeptop-dev/bosun/internal/runas"
 
@@ -33,6 +36,9 @@ type Options struct {
 	WorkDir   string // where config.json is written
 	APIListen string // gRPC API listen address, e.g. 127.0.0.1:9102
 	LogLevel  string // xray loglevel: debug, info, warning, error, none
+	// ConnSink receives each accepted connection from the access log
+	// (user "name|tag", client IP, destination); nil = off.
+	ConnSink func(user, clientIP, host string, port int, network string)
 }
 
 // Core is the Xray adapter.
@@ -90,7 +96,7 @@ func (c *Core) Capabilities() core.Capabilities {
 }
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
-	cfg, st, err := render(node, inbounds, users, renderOptions{LogLevel: c.opt.LogLevel, APIListen: c.opt.APIListen})
+	cfg, st, err := render(node, inbounds, users, renderOptions{LogLevel: c.opt.LogLevel, APIListen: c.opt.APIListen, ConnLog: node != nil && node.ConnLog && c.opt.ConnSink != nil})
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +142,7 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 	}
 	c.mu.Lock()
 	if c.sup == nil {
-		c.sup = subprocess.New("xray", c.opt.Binary, []string{"run", "-c", path}, c.opt.WorkDir, c.log)
+		c.sup = subprocess.New("xray", c.opt.Binary, []string{"run", "-c", path}, c.opt.WorkDir, c.log).WithLineHook(c.feedConn)
 	}
 	sup := c.sup
 	c.applied, _ = b.Payload.(*state)
@@ -313,4 +319,14 @@ func (c *Core) dial() (*grpc.ClientConn, error) {
 	}
 	c.conn = conn
 	return conn, nil
+}
+
+// feedConn hands access-log lines to the connection log.
+func (c *Core) feedConn(line string) {
+	if c.opt.ConnSink == nil || !strings.Contains(line, " accepted ") {
+		return
+	}
+	if user, ip, host, port, network, ok := connlog.ParseXray(line); ok {
+		c.opt.ConnSink(user, ip, host, port, network)
+	}
 }

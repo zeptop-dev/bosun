@@ -328,6 +328,9 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 			}
 		})
 	}
+	if a.Conn != nil {
+		a.Conn.SetEnabled(node.ConnLog)
+	}
 	if a.Egress != nil {
 		uid, _ := runas.IDs()
 		if err := a.Egress.Apply(ctx, uid, a.EgressAllow); err != nil {

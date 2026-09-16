@@ -436,6 +436,9 @@ type Node struct {
 	// UserSpeedLimitMbps caps every user without a limit of their own
 	// (0 = none). Enforced by the node's shaper for xray/sing-box traffic.
 	UserSpeedLimitMbps int `json:"user_speed_limit_mbps,omitempty"`
+	// ConnLog asks the node to report each accepted connection (user,
+	// client address, destination) with its reports; off by default.
+	ConnLog bool `json:"conn_log,omitempty"`
 	// DNS lists resolvers the cores use for outbound names ("1.1.1.1",
 	// "tls://1.1.1.1", "https://dns.google/dns-query"); empty = system.
 	DNS []string `json:"dns,omitempty"`

@@ -13,8 +13,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/zeptop-dev/bosun/internal/connlog"
 
 	"github.com/zeptop-dev/bosun/internal/runas"
 
@@ -30,14 +33,19 @@ type Options struct {
 	AuthListen  string // bosun's auth endpoint, e.g. 127.0.0.1:9103
 	StatsListen string // hysteria's traffic stats API, e.g. 127.0.0.1:9104
 	LogLevel    string // hysteria log level: debug, info, warn, error
+	// ConnSink receives each request from hysteria's debug log (user
+	// "name|tag", client IP, destination); nil = off.
+	ConnSink func(user, clientIP, host string, port int, network string)
 }
 
 // Core is the Hysteria adapter.
 type Core struct {
-	opt    Options
-	log    *slog.Logger
-	secret string
-	stats  *statsClient
+	connLog    bool // node asked for the connection log
+	supConnLog bool // what the running process was started with
+	opt        Options
+	log        *slog.Logger
+	secret     string
+	stats      *statsClient
 
 	mu      sync.Mutex
 	auth    *authServer
@@ -93,6 +101,9 @@ func (c *Core) Capabilities() core.Capabilities {
 }
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
+	c.mu.Lock()
+	c.connLog = node != nil && node.ConnLog && c.opt.ConnSink != nil
+	c.mu.Unlock()
 	opt := renderOptions{
 		AuthURL:     "http://" + c.opt.AuthListen + "/auth",
 		StatsListen: c.opt.StatsListen,
@@ -142,10 +153,26 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 		c.auth = a
 	}
 	c.auth.setUsers(st.users)
+	if c.sup != nil && c.supConnLog != c.connLog {
+		// The log level is a command-line flag: switching the connection
+		// log on or off means a new process.
+		old := c.sup
+		c.sup = nil
+		c.mu.Unlock()
+		_ = old.Stop(ctx)
+		c.mu.Lock()
+	}
 	if c.sup == nil {
+		level := c.opt.LogLevel
+		if c.connLog {
+			level = "debug" // hysteria logs requests at debug only
+		}
+		c.supConnLog = c.connLog
 		c.sup = subprocess.New("hysteria", c.opt.Binary,
-			[]string{"server", "-c", filepath.Join(c.opt.WorkDir, configFile), "--log-level", c.opt.LogLevel, "--disable-update-check"},
-			c.opt.WorkDir, c.log)
+			[]string{"server", "-c", filepath.Join(c.opt.WorkDir, configFile), "--log-level", level, "--disable-update-check"},
+			c.opt.WorkDir, c.log).WithLineHook(c.feedConn).WithLogFilter(func(line string) bool {
+			return !c.connLog || !strings.Contains(line, "\tDEBUG\t") && !strings.Contains(line, " DEBUG ")
+		})
 	}
 	sup := c.sup
 	c.applied = st
@@ -166,7 +193,10 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	sup, auth, prev := c.sup, c.auth, c.applied
 	c.mu.Unlock()
-	if sup == nil || !sup.Running() || auth == nil {
+	c.mu.Lock()
+	restart := c.supConnLog != c.connLog
+	c.mu.Unlock()
+	if sup == nil || !sup.Running() || auth == nil || restart {
 		return c.Start(ctx, b)
 	}
 	auth.setUsers(next.users)
@@ -275,4 +305,14 @@ func (c *Core) waitReady(ctx context.Context) error {
 		}
 	}
 	return fmt.Errorf("hysteria: not ready after %s: %w", readyTimeout, lastErr)
+}
+
+// feedConn hands request lines to the connection log.
+func (c *Core) feedConn(line string) {
+	if c.opt.ConnSink == nil || !strings.Contains(line, " request") {
+		return
+	}
+	if user, ip, host, port, network, ok := connlog.ParseHysteria(line); ok {
+		c.opt.ConnSink(user, ip, host, port, network)
+	}
 }

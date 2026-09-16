@@ -1,13 +1,14 @@
 package singbox
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 	"time"
 )
 
 func TestOnlineTrackerJoinsLines(t *testing.T) {
-	tr := newOnlineTracker()
+	tr := newOnlineTracker(nil)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	now := base
 	tr.now = func() time.Time { return now }
@@ -68,3 +69,21 @@ func TestKeepLineFiltersByConfiguredLevel(t *testing.T) {
 		t.Fatal("info kept at info")
 	}
 }
+
+// The tracker also hands each joined connection (user, client, destination)
+// to the connection-log sink, for TCP and UDP lines alike.
+func TestTrackerConnSink(t *testing.T) {
+	var got []string
+	tr := newOnlineTracker(func(user, ip, host string, port int, network string) {
+		got = append(got, user+" "+ip+" "+host+" "+network+" "+itoa(port))
+	})
+	tr.feed("+0000 2026-09-16 12:00:00 INFO [1001 0ms] inbound/vless[in]: inbound connection from 203.0.113.9:51234")
+	tr.feed("+0000 2026-09-16 12:00:00 INFO [1001 1ms] inbound/vless[in]: [alice|in] inbound connection to example.com:443")
+	tr.feed("+0000 2026-09-16 12:00:01 INFO [1002 0ms] inbound/hysteria2[hy]: [bob|hy] inbound packet connection from 203.0.113.10:4000")
+	tr.feed("+0000 2026-09-16 12:00:01 INFO [1002 1ms] inbound/hysteria2[hy]: [bob|hy] inbound packet connection to 1.1.1.1:53")
+	if len(got) != 2 || got[0] != "alice|in 203.0.113.9 example.com tcp 443" || got[1] != "bob|hy 203.0.113.10 1.1.1.1 udp 53" {
+		t.Fatalf("sink got %q", got)
+	}
+}
+
+func itoa(n int) string { return fmt.Sprint(n) }

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/zeptop-dev/bosun/internal/connlog"
+
 	"github.com/zeptop-dev/bosun/internal/egressguard"
 
 	"log/slog"
@@ -80,6 +82,9 @@ type Agent struct {
 	// nil = off. EgressAllow are the operator's exemptions.
 	Egress      *egressguard.Guard
 	EgressAllow []string
+	// Conn buffers accepted connections for the report when the node spec
+	// asks for them; nil = never.
+	Conn *connlog.Collector
 	// Firewall opens listening ports in ufw/firewalld; nil = off.
 	Firewall *firewall.Manager
 	// ExtraPorts are opened along with the inbounds (the web panel port).

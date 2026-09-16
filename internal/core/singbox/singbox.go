@@ -34,6 +34,9 @@ type Options struct {
 	WorkDir     string // where config.json is written
 	StatsListen string // v2ray_api listen address, e.g. 127.0.0.1:9101
 	LogLevel    string
+	// ConnSink receives each accepted connection parsed from the log
+	// (user "name|tag", client IP, destination); nil = off.
+	ConnSink func(user, clientIP, host string, port int, network string)
 }
 
 // Core is the sing-box adapter.
@@ -71,7 +74,7 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := runas.ChownTree(opt.WorkDir); err != nil {
 		return nil, err
 	}
-	return &Core{opt: opt, log: log.With("core", "singbox"), online: newOnlineTracker()}, nil
+	return &Core{opt: opt, log: log.With("core", "singbox"), online: newOnlineTracker(opt.ConnSink)}, nil
 }
 
 func (c *Core) Name() string { return "singbox" }

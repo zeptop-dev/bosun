@@ -91,6 +91,22 @@ type Report struct {
 	Inbounds map[string]spec.Traffic `json:"inbounds,omitempty"`
 	// Outbounds is traffic per outbound tag since the last report.
 	Outbounds map[string]spec.Traffic `json:"outbounds,omitempty"`
+	// Connections are the accepted connections since the last report when
+	// the node spec asks for them (Node.ConnLog); ConnDropped counts the
+	// ones the bounded buffer had to discard.
+	Connections []ConnEvent `json:"connections,omitempty"`
+	ConnDropped int         `json:"conn_dropped,omitempty"`
+}
+
+// ConnEvent is one accepted connection.
+type ConnEvent struct {
+	At       int64  `json:"at"` // unix seconds
+	User     string `json:"user"`
+	Inbound  string `json:"inbound,omitempty"`
+	ClientIP string `json:"client_ip"`
+	Host     string `json:"host"` // destination host name or address
+	Port     int    `json:"port"`
+	Network  string `json:"net,omitempty"` // tcp or udp
 }
 
 // DoctorCheck is one verdict of the node's self-check.

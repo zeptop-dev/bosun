@@ -18,6 +18,9 @@ type m = map[string]any
 type renderOptions struct {
 	LogLevel  string
 	APIListen string
+	// ConnLog switches the access log on (to stdout, parsed by bosun);
+	// otherwise it is off so the pipe only carries real log lines.
+	ConnLog bool
 }
 
 // state is carried from Render to Start/Apply so Apply can decide between a
@@ -138,8 +141,12 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		limitRules = append(limitRules, m{"type": "field", "user": emails, "outboundTag": spec.SpeedTag(lu.ID)})
 	}
 
+	access := "none"
+	if opt.ConnLog {
+		access = ""
+	}
 	cfg := m{
-		"log": m{"loglevel": opt.LogLevel},
+		"log": m{"loglevel": opt.LogLevel, "access": access},
 		"api": m{
 			"tag":      "api",
 			"listen":   opt.APIListen,

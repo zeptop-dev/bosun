@@ -441,6 +441,18 @@ it when the set changes. Host-name targets and UDP work; there are no byte
 or connection counters. The doctor fails a realm rule when the process is
 not running.
 
+### Connection log
+
+When the panel asks for it (`Node.ConnLog`, Captain's Settings → Connection
+log), the agent reports every accepted connection with the next report:
+user, inbound, client address, destination host and port, TCP/UDP. The
+facts come from the cores' own logs — sing-box and xray at their normal
+level (xray's access log is switched on only then), hysteria at debug
+(bosun filters those lines out of its own log) — so nothing extra runs on
+the node; mita has no per-connection log and is not covered. A bounded
+buffer (5000 events) drops the oldest when the panel is slow and reports
+how many. Off by default; nothing is recorded until the panel enables it.
+
 ### Core isolation: unprivileged cores and the egress guard
 
 With `cores.user: bosun-proxy` in config.yaml (the installer writes it for

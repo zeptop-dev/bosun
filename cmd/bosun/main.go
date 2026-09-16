@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/connlog"
+
 	"github.com/zeptop-dev/bosun/internal/egressguard"
 	"github.com/zeptop-dev/bosun/internal/runas"
 
@@ -139,6 +141,7 @@ type env struct {
 	driver panel.Driver // nil for driver "local"
 	reg    *core.Registry
 	inst   *coreinstall.Installer
+	conns  *connlog.Collector
 }
 
 func setup(args []string) (*env, error) {
@@ -181,6 +184,7 @@ func setup(args []string) (*env, error) {
 		log.Info("cores run as an unprivileged account", "user", cfg.Cores.User)
 	}
 	reg := core.NewRegistry()
+	conns := &connlog.Collector{}
 	inst := coreinstall.New(cfg.CoresDir(), log)
 	if cfg.Cores.RegistryToken != "" {
 		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
@@ -208,6 +212,7 @@ func setup(args []string) (*env, error) {
 				WorkDir:     filepath.Join(cfg.DataDir, "singbox"),
 				StatsListen: sb.StatsListen,
 				LogLevel:    sb.LogLevel,
+				ConnSink:    conns.Add,
 			}, log)
 		},
 		"xray": func() (core.Core, error) {
@@ -224,6 +229,7 @@ func setup(args []string) (*env, error) {
 				WorkDir:   filepath.Join(cfg.DataDir, "xray"),
 				APIListen: xr.APIListen,
 				LogLevel:  xr.LogLevel,
+				ConnSink:  conns.Add,
 			}, log)
 		},
 		"hysteria": func() (core.Core, error) {
@@ -241,6 +247,7 @@ func setup(args []string) (*env, error) {
 				AuthListen:  hy.AuthListen,
 				StatsListen: hy.StatsListen,
 				LogLevel:    hy.LogLevel,
+				ConnSink:    conns.Add,
 			}, log)
 		},
 		"mita": func() (core.Core, error) {
@@ -279,7 +286,7 @@ func setup(args []string) (*env, error) {
 			reg.Register(c)
 		}
 	}
-	return &env{cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst}, nil
+	return &env{cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns}, nil
 }
 
 func cmdRun(args []string) error {
@@ -357,6 +364,7 @@ func cmdRun(args []string) error {
 		ag.Shaper = shp
 		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return e.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(cfg.DataDir, "realm"), Log: log}
 		ag.Guard = guard
+		ag.Conn = e.conns
 		if cfg.EgressGuardOn() {
 			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, cfg.Cores.EgressAllow
 		}
@@ -397,7 +405,7 @@ func cmdRun(args []string) error {
 		st := store.Settings()
 		return telegram.Settings{Token: st.TelegramToken, ChatID: st.TelegramChatID, Notify: st.TelegramNotify}
 	}}
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
+	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, conns: e.conns, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
 		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
@@ -462,6 +470,7 @@ type supervisor struct {
 	bot        *telegram.Bot
 	shaper     *shaper.Shaper
 	guard      *ingressguard.Guard
+	conns      *connlog.Collector
 	firewall   *firewall.Manager
 	extraPorts []firewall.Port
 	onAgent    func(*agent.Agent)
@@ -524,6 +533,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Shaper = s.shaper
 		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return s.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(s.cfg.DataDir, "realm"), Log: s.log}
 		ag.Guard = s.guard
+		ag.Conn = s.conns
 		if s.cfg.EgressGuardOn() {
 			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, s.cfg.Cores.EgressAllow
 		}

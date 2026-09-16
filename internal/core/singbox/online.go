@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zeptop-dev/bosun/internal/connlog"
 )
 
 // sing-box has no API that lists the client addresses behind a user, but at
@@ -23,6 +25,9 @@ type onlineTracker struct {
 	src  map[string]srcSeen              // context id -> source address
 	seen map[string]map[string]time.Time // user -> ip -> last seen
 	now  func() time.Time
+	// sink receives (user, client ip, destination) per accepted
+	// connection for the connection log; nil = off.
+	sink func(user, clientIP, host string, port int, network string)
 }
 
 type srcSeen struct {
@@ -38,11 +43,11 @@ const (
 var (
 	lineRe = regexp.MustCompile(`\[(\d+) [^\]]*\] (?:inbound/[^:]*): (.*)$`)
 	fromRe = regexp.MustCompile(`^(?:\[([^\]]+)\] )?inbound (?:packet )?connection from (\S+)$`)
-	userRe = regexp.MustCompile(`^\[([^\]]+)\] inbound (?:packet )?connection to `)
+	userRe = regexp.MustCompile(`^\[([^\]]+)\] inbound (packet )?connection to (\S+)$`)
 )
 
-func newOnlineTracker() *onlineTracker {
-	return &onlineTracker{src: map[string]srcSeen{}, seen: map[string]map[string]time.Time{}, now: time.Now}
+func newOnlineTracker(sink func(user, clientIP, host string, port int, network string)) *onlineTracker {
+	return &onlineTracker{src: map[string]srcSeen{}, seen: map[string]map[string]time.Time{}, now: time.Now, sink: sink}
 }
 
 // feed consumes one log line.
@@ -62,7 +67,6 @@ func (t *onlineTracker) feed(line string) {
 		}
 		if f[1] != "" { // packet line carries the user already
 			t.mark(f[1], ip, now)
-			return
 		}
 		t.src[id] = srcSeen{ip: ip, at: now}
 		if len(t.src) > 4096 {
@@ -74,6 +78,14 @@ func (t *onlineTracker) feed(line string) {
 		if s, ok := t.src[id]; ok {
 			t.mark(u[1], s.ip, now)
 			delete(t.src, id)
+			if t.sink != nil {
+				host, port := connlog.SplitHostPort(u[3])
+				network := "tcp"
+				if u[2] != "" {
+					network = "udp"
+				}
+				t.sink(u[1], s.ip, host, port, network)
+			}
 		}
 	}
 }
