@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/caddyserver/certmagic v0.25.4
 	github.com/libdns/cloudflare v0.2.2
+	github.com/prometheus-community/pro-bing v0.9.1
 	github.com/shirou/gopsutil/v4 v4.26.8
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.57.0
@@ -24,7 +25,6 @@ require (
 	github.com/mholt/acmez/v3 v3.1.6 // indirect
 	github.com/miekg/dns v1.1.72 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/prometheus-community/pro-bing v0.9.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect

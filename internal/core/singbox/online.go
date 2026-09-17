@@ -20,6 +20,11 @@ import (
 // from 203.0.113.9:51234".) onlineTracker joins them and remembers which
 // IPs each user was seen from recently, which is what the panel's device
 // limit needs.
+// hostRe is what a destination may look like: a domain or an IP literal.
+// sing-box writes the client's requested destination into the log without
+// escaping it, so anything else is a forgery attempt (see README).
+var hostRe = regexp.MustCompile(`^[A-Za-z0-9._:\[\]-]{1,253}$`)
+
 type onlineTracker struct {
 	mu   sync.Mutex
 	src  map[string]srcSeen              // context id -> source address
@@ -28,6 +33,17 @@ type onlineTracker struct {
 	// sink receives (user, client ip, destination) per accepted
 	// connection for the connection log; nil = off.
 	sink func(user, clientIP, host string, port int, network string)
+	// users are the names this node serves ("name|tag" and the bare
+	// name); nil accepts every name (tests).
+	users map[string]bool
+}
+
+// setUsers records who this node serves, so a forged log line naming
+// somebody else is ignored.
+func (t *onlineTracker) setUsers(names map[string]bool) {
+	t.mu.Lock()
+	t.users = names
+	t.mu.Unlock()
 }
 
 type srcSeen struct {
@@ -66,6 +82,9 @@ func (t *onlineTracker) feed(line string) {
 			return
 		}
 		if f[1] != "" { // packet line carries the user already
+			if !t.believable(f[1], "") {
+				return
+			}
 			t.mark(f[1], ip, now)
 		}
 		t.src[id] = srcSeen{ip: ip, at: now}
@@ -75,11 +94,16 @@ func (t *onlineTracker) feed(line string) {
 		return
 	}
 	if u := userRe.FindStringSubmatch(msg); u != nil {
+		host, _ := connlog.SplitHostPort(u[3])
+		if !t.believable(u[1], host) {
+			delete(t.src, id)
+			return
+		}
 		if s, ok := t.src[id]; ok {
 			t.mark(u[1], s.ip, now)
 			delete(t.src, id)
 			if t.sink != nil {
-				host, port := connlog.SplitHostPort(u[3])
+				_, port := connlog.SplitHostPort(u[3])
 				network := "tcp"
 				if u[2] != "" {
 					network = "udp"
@@ -88,6 +112,15 @@ func (t *onlineTracker) feed(line string) {
 			}
 		}
 	}
+}
+
+// believable filters what the log claims: the user must be one this node
+// serves and the host must look like a host. Callers hold t.mu.
+func (t *onlineTracker) believable(user, host string) bool {
+	if t.users != nil && !t.users[user] {
+		return false
+	}
+	return host == "" || hostRe.MatchString(host)
 }
 
 func (t *onlineTracker) mark(user, ip string, now time.Time) {

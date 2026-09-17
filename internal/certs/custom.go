@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/runas"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
@@ -68,7 +69,7 @@ func Install(dir string, c spec.Certificate) (certPath, keyPath string, notAfter
 		return "", "", time.Time{}, errors.New("bad certificate domain")
 	}
 	d := filepath.Join(dir, "custom", name)
-	if err := os.MkdirAll(d, 0o750); err != nil {
+	if err := runas.MkdirRoot(d); err != nil {
 		return "", "", time.Time{}, err
 	}
 	certPath, keyPath = filepath.Join(d, "fullchain.pem"), filepath.Join(d, "privkey.pem")

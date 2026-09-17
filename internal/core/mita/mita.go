@@ -87,7 +87,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
-	if err := runas.ChownTree(opt.WorkDir); err != nil {
+	// The work dir stays owned by bosun (0755, traversable): a core that
+	// owned it could plant a symlink for a later root-run write.
+	if err := runas.MkdirRoot(opt.WorkDir); err != nil {
 		return nil, err
 	}
 	c := &Core{opt: opt, log: log.With("core", "mita"), instances: map[string]*instance{}}
@@ -198,13 +200,7 @@ func (c *Core) newInstance(tag string) (*instance, error) {
 }
 
 func writeFile(path string, content []byte) error {
-	if err := os.WriteFile(path+".tmp", content, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(path+".tmp", path); err != nil {
-		return err
-	}
-	return runas.Chown(path)
+	return runas.WriteFile(path, content, 0o600, true)
 }
 
 // tags returns the inbound tags present in a bundle, sorted.

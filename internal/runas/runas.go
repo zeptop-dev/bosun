@@ -14,7 +14,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 )
 
 var (
@@ -23,6 +25,7 @@ var (
 	uid      = -1
 	gid      = -1
 	netAdmin bool
+	setupErr string
 )
 
 // SetNetAdmin says whether cores need CAP_NET_ADMIN on top of the bind
@@ -54,9 +57,26 @@ func Set(account string) error {
 	u, err := user.Lookup(account)
 	if err != nil {
 		if runtime.GOOS == "linux" && os.Geteuid() == 0 {
-			// -r system account, no home, no login shell.
-			if out, cerr := exec.Command("useradd", "-r", "-M", "-s", "/usr/sbin/nologin", "-d", "/nonexistent", account).CombinedOutput(); cerr != nil {
-				return fmt.Errorf("runas: account %q does not exist and could not be created: %v: %s", account, cerr, out)
+			// A system account with no home and no login shell. Alpine and
+			// other busybox systems have adduser instead of useradd.
+			cmds := [][]string{
+				{"useradd", "-r", "-M", "-s", "/usr/sbin/nologin", "-d", "/nonexistent", account},
+				{"adduser", "-S", "-D", "-H", "-h", "/nonexistent", "-s", "/sbin/nologin", account},
+			}
+			var last error
+			for _, c := range cmds {
+				if _, lerr := exec.LookPath(c[0]); lerr != nil {
+					continue
+				}
+				if out, cerr := exec.Command(c[0], c[1:]...).CombinedOutput(); cerr != nil {
+					last = fmt.Errorf("%s: %v: %s", c[0], cerr, strings.TrimSpace(string(out)))
+					continue
+				}
+				last = nil
+				break
+			}
+			if last != nil {
+				return fmt.Errorf("runas: account %q could not be created: %w", account, last)
 			}
 			u, err = user.Lookup(account)
 		}
@@ -81,10 +101,25 @@ func Set(account string) error {
 	return nil
 }
 
+// SetError records why the configured account could not be used, for the
+// doctor; the cores then run as bosun itself.
+func SetError(msg string) {
+	mu.Lock()
+	setupErr = msg
+	mu.Unlock()
+}
+
+// Error returns that message ("" when the account is fine).
+func Error() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	return setupErr
+}
+
 // Clear returns to running cores as bosun itself (tests).
 func Clear() {
 	mu.Lock()
-	name, uid, gid = "", -1, -1
+	name, uid, gid, setupErr = "", -1, -1, ""
 	mu.Unlock()
 }
 
@@ -133,4 +168,46 @@ func ChownTree(dir string) error {
 		}
 		return Chown(path)
 	})
+}
+
+// WriteFile writes data through a temporary file and renames it into
+// place, never following a symlink at either path. A core owns some of
+// these directories, so a plain os.WriteFile could be redirected at a
+// root-owned file by a planted link.
+func WriteFile(path string, data []byte, perm os.FileMode, chown bool) error {
+	tmp := path + ".tmp"
+	_ = os.Remove(tmp)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, perm)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Chmod(tmp, perm); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if chown {
+		if err := Chown(tmp); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
+	}
+	return os.Rename(tmp, path)
+}
+
+// MkdirRoot creates a directory that stays owned by bosun and is only
+// traversable by the cores, so a core cannot plant entries in it.
+func MkdirRoot(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.Chmod(dir, 0o755)
 }

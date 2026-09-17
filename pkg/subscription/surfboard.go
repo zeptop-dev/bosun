@@ -26,7 +26,7 @@ func (Surfboard) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error)
 
 func surfboardLine(l Line) string {
 	ib := l.Inbound
-	base := fmt.Sprintf("%s = %%s, %s, %d", l.Name, l.Host, l.Port)
+	line := func(kind string) string { return fmt.Sprintf("%s = %s, %s, %d", iniName(l.Name), kind, l.Host, l.Port) }
 	var parts []string
 	switch ib.Protocol {
 	case spec.Shadowsocks:
@@ -34,7 +34,7 @@ func surfboardLine(l Line) string {
 			return "" // no SS2022 multi-user keys, as in Surge
 		}
 		parts = append(parts, "encrypt-method="+ib.Cipher, "password="+ssPassword(l), "udp-relay=true")
-		return fmt.Sprintf(base, "ss") + ", " + strings.Join(parts, ", ")
+		return line("ss") + ", " + strings.Join(parts, ", ")
 	case spec.VMess:
 		parts = append(parts, "username="+l.UUID, "udp-relay=true")
 		switch transportType(l) {
@@ -51,13 +51,13 @@ func surfboardLine(l Line) string {
 			parts = append(parts, "tls=true", "sni="+serverName(l), "skip-cert-verify=false")
 		}
 		parts = append(parts, "vmess-aead=true")
-		return fmt.Sprintf(base, "vmess") + ", " + strings.Join(parts, ", ")
+		return line("vmess") + ", " + strings.Join(parts, ", ")
 	case spec.Trojan:
 		if transportType(l) != "tcp" || isReality(l) {
 			return ""
 		}
 		parts = append(parts, "password="+l.Password, "udp-relay=true", "sni="+serverName(l), "skip-cert-verify=false")
-		return fmt.Sprintf(base, "trojan") + ", " + strings.Join(parts, ", ")
+		return line("trojan") + ", " + strings.Join(parts, ", ")
 	}
 	return ""
 }

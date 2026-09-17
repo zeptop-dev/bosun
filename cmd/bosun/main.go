@@ -54,9 +54,10 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 )
 
-// newUpdater returns the self-update client for this binary.
-func newUpdater() *selfupdate.Client {
-	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version}
+// newUpdater returns the self-update client for this binary. minVersion
+// (config min_version) is the floor no update or rollback may go below.
+func newUpdater(minVersion string) *selfupdate.Client {
+	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version, MinVersion: minVersion}
 }
 
 // upgradeHook applies a panel-requested release and restarts. In a container
@@ -181,9 +182,12 @@ func setup(args []string) (*env, error) {
 	}
 
 	if err := runas.Set(cfg.Cores.User); err != nil {
-		return nil, err
-	}
-	if cfg.Cores.User != "" {
+		// Degrade instead of refusing to start: a node whose agent will
+		// not run cannot be fixed from the panel either. The doctor's
+		// isolation check reports it.
+		log.Error("cores.user unusable, running cores as bosun itself", "user", cfg.Cores.User, "err", err)
+		runas.SetError(err.Error())
+	} else if cfg.Cores.User != "" {
 		log.Info("cores run as an unprivileged account", "user", cfg.Cores.User)
 	}
 	reg := core.NewRegistry()
@@ -322,7 +326,7 @@ func cmdRun(args []string) error {
 		log.Info("metrics endpoint", "listen", cfg.MetricsListen)
 	}
 
-	upd := newUpdater()
+	upd := newUpdater(cfg.MinVersion)
 	go watchUpdates(ctx, log, upd)
 
 	// Certificate automation for inbounds (and the panel). Renewals restart
@@ -377,6 +381,7 @@ func cmdRun(args []string) error {
 		ag.Audit = e.audits
 		if cfg.EgressGuardOn() {
 			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, cfg.Cores.EgressAllow
+			ag.EgressLoopbackPorts = loopbackPorts(cfg)
 		}
 		ag.Firewall, ag.ExtraPorts = fw, extraPorts
 		current.ag = ag
@@ -548,6 +553,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Audit = s.audits
 		if s.cfg.EgressGuardOn() {
 			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, s.cfg.Cores.EgressAllow
+			ag.EgressLoopbackPorts = loopbackPorts(s.cfg)
 		}
 		ag.Firewall, ag.ExtraPorts = s.firewall, s.extraPorts
 		ag.WARPAccount, ag.SaveWARP = s.store.WARP, s.store.SetWARP
@@ -810,4 +816,20 @@ func (s *supervisor) telegramStatus(ctx context.Context) string {
 		fmt.Fprintf(&b, "last report: %s ago", time.Since(rt.LastReport).Round(time.Second))
 	}
 	return b.String()
+}
+
+// loopbackPorts lists the local ports the egress guard keeps open for the
+// cores: hysteria dials bosun's auth endpoint on every new client. The
+// cores' own API sockets, bosun's metrics and the web panel are left
+// closed on purpose (see internal/egressguard).
+func loopbackPorts(cfg *config.Config) []int {
+	var out []int
+	if cfg.Cores.Hysteria != nil {
+		if _, port, err := net.SplitHostPort(cfg.Cores.Hysteria.AuthListen); err == nil {
+			if n, err := strconv.Atoi(port); err == nil {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
 }

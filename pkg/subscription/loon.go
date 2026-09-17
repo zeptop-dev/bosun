@@ -29,7 +29,9 @@ func (Loon) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 func loonLine(l Line) string {
 	ib := l.Inbound
 	q := func(s string) string { return `"` + s + `"` }
-	head := func(kind string) []string { return []string{l.Name + " = " + kind, l.Host, fmt.Sprint(l.Port)} }
+	head := func(kind string) []string {
+		return []string{iniName(l.Name) + " = " + kind, l.Host, fmt.Sprint(l.Port)}
+	}
 	var parts []string
 	switch ib.Protocol {
 	case spec.Shadowsocks:

@@ -105,6 +105,10 @@ type Deps struct {
 	CoreUser string
 	// CoreNetAdmin: the cores were granted CAP_NET_ADMIN (speed limits).
 	CoreNetAdmin bool
+	// CoreUserError says why cores.user could not be used ("" = fine).
+	CoreUserError string
+	// RejectedRules are panel rules this node refused to render.
+	RejectedRules []string
 	// Firewall is the auto-open state (nil = off or no ufw/firewalld).
 	Firewall *firewall.Status
 	// Dial overrides TCP connects (tests).
@@ -129,7 +133,7 @@ func Run(ctx context.Context, d Deps) Report {
 	rep := Report{At: now(), Checks: []Check{}}
 	checks := []func(context.Context, *Deps) []Check{
 		checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
-		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen, checkIsolation,
+		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen, checkIsolation, checkRules,
 	}
 	for _, fn := range checks {
 		cctx, cancel := context.WithTimeout(ctx, perCheck)
@@ -627,6 +631,8 @@ func checkShaper(_ context.Context, d *Deps) []Check {
 func checkIsolation(_ context.Context, d *Deps) []Check {
 	c := Check{ID: "isolation", Name: "Core isolation (cores.user)"}
 	switch {
+	case d.CoreUserError != "":
+		c.Status, c.Detail = Fail, "cores.user could not be used, cores run as bosun: "+d.CoreUserError
 	case d.CoreUser == "":
 		c.Status, c.Detail = Warn, "cores run as bosun (root); set cores.user (the installer does for new nodes) so they get only CAP_NET_BIND_SERVICE"
 	case d.Egress == nil:
@@ -642,5 +648,18 @@ func checkIsolation(_ context.Context, d *Deps) []Check {
 		}
 		c.Status, c.Detail = OK, fmt.Sprintf("cores run as %s (uid %d); new connections to private, link-local and metadata ranges are dropped (%d exemption(s))%s", d.CoreUser, d.Egress.UID, d.Egress.Allowed, extra)
 	}
+	return []Check{c}
+}
+
+// checkRules reports the panel rules this node refused to render, which
+// would otherwise be invisible: the core simply never sees them.
+func checkRules(_ context.Context, d *Deps) []Check {
+	c := Check{ID: "rules", Name: "Panel rules"}
+	if len(d.RejectedRules) == 0 {
+		c.Status, c.Detail = OK, "every route and audit rule renders"
+		return []Check{c}
+	}
+	c.Status = Fail
+	c.Detail = strings.Join(d.RejectedRules, "; ")
 	return []Check{c}
 }

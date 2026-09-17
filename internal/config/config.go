@@ -44,6 +44,11 @@ type Config struct {
 		Snell       *SnellCore    `yaml:"snell"`
 	} `yaml:"cores"`
 
+	// MinVersion refuses any self-update or rollback below this release
+	// tag ("v0.44.2"), so a node cannot be talked back into a build with
+	// a known hole. Empty = no floor.
+	MinVersion string `yaml:"min_version"`
+
 	// Probe runs the latency checks on a node that is not managed by
 	// Captain (local or Xboard driver). Under Captain the panel's probe
 	// settings replace this section entirely.

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/zeptop-dev/bosun/internal/egressguard"
+
 	"github.com/zeptop-dev/bosun/internal/audit"
 
 	"github.com/zeptop-dev/bosun/internal/core"
@@ -200,6 +202,14 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	} else {
 		node = &resolved
 	}
+	// The panel is not trusted to send a renderable spec: one bad match
+	// makes a core refuse its whole config, which would strand every
+	// inbound on the node. Bad rules are dropped and reported.
+	if node = validateNode(node, a.log, func(msgs []string) {
+		a.setStatus(func(s *Status) { s.RejectedRules = msgs })
+	}); node == nil {
+		return fmt.Errorf("agent: node spec is unusable")
+	}
 	// Audit rules: "block" ones go first in the route list of every core
 	// with routing; the matcher records hits for both actions.
 	if blocks := audit.BlockRules(node.AuditRules); len(blocks) > 0 {
@@ -219,13 +229,6 @@ func (a *Agent) applyInner(ctx context.Context) error {
 			limits = append(limits, shaper.Limit{UserID: u.ID, Mbps: l})
 		}
 	}
-	// Marking sockets for the shaper needs CAP_NET_ADMIN; cores running as
-	// the unprivileged account get it only while limits exist, and a
-	// change means a restart so the running processes pick it up.
-	if runas.SetNetAdmin(len(limits) > 0) && runas.Active() {
-		a.log.Info("core capabilities changed, restarting cores", "net_admin", len(limits) > 0)
-		restart = true
-	}
 	if a.Shaper == nil || !a.Shaper.Supported() {
 		if len(limits) > 0 {
 			cp := *node
@@ -240,6 +243,14 @@ func (a *Agent) applyInner(ctx context.Context) error {
 			a.log.Warn("speed limits configured but shaping is unavailable on this host (needs Linux with nft and tc)")
 		}
 		limits = nil
+	}
+	// Marking sockets for the shaper needs CAP_NET_ADMIN, so sing-box and
+	// xray get it only while limits are really installed (after the
+	// branch above may have dropped them), and a change means a restart so
+	// the running processes pick it up.
+	if runas.SetNetAdmin(len(limits) > 0) && runas.Active() {
+		a.log.Info("core capabilities changed, restarting cores", "net_admin", len(limits) > 0)
+		restart = true
 	}
 	defer func() {
 		if a.Shaper != nil {
@@ -352,7 +363,15 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 	}
 	if a.Egress != nil {
 		uid, _ := runas.IDs()
-		if err := a.Egress.Apply(ctx, uid, a.EgressAllow); err != nil {
+		allow := append([]string{}, a.EgressAllow...)
+		// A private or link-local resolver is the node's only way to
+		// resolve names; keep it reachable.
+		allow = append(allow, egressguard.ResolverAllow("")...)
+		ports := append([]int{53}, a.EgressLoopbackPorts...)
+		if node.Decoy != nil && node.Decoy.Port > 0 {
+			ports = append(ports, node.Decoy.Port)
+		}
+		if err := a.Egress.Apply(ctx, uid, egressguard.Options{Allow: allow, LoopbackPorts: ports}); err != nil {
 			a.log.Error("egress guard", "err", err)
 		}
 		st := a.Egress.Status()
@@ -438,4 +457,39 @@ func nativeListen(reg *core.Registry) bool {
 	}
 	nl, ok := c.(interface{ NativeListen() bool })
 	return ok && nl.NativeListen()
+}
+
+// validateNode drops the route and audit rules the cores would refuse and
+// reports them; report gets one line per dropped rule (empty when all are
+// fine). It returns a copy, or the node unchanged when nothing was wrong.
+func validateNode(node *spec.Node, log *slog.Logger, report func([]string)) *spec.Node {
+	var msgs []string
+	routes := make([]spec.RouteRule, 0, len(node.Routes))
+	for _, r := range node.Routes {
+		if err := spec.ValidateRouteRule(r); err != nil {
+			msgs = append(msgs, "route rule dropped: "+err.Error())
+			continue
+		}
+		routes = append(routes, r)
+	}
+	rules := make([]spec.AuditRule, 0, len(node.AuditRules))
+	for _, r := range node.AuditRules {
+		if err := spec.ValidateAuditRule(r); err != nil {
+			msgs = append(msgs, "audit rule dropped: "+err.Error())
+			continue
+		}
+		rules = append(rules, r)
+	}
+	if report != nil {
+		report(msgs)
+	}
+	if len(msgs) == 0 {
+		return node
+	}
+	for _, m := range msgs {
+		log.Error("panel sent a rule this node cannot render", "detail", m)
+	}
+	cp := *node
+	cp.Routes, cp.AuditRules = routes, rules
+	return &cp
 }

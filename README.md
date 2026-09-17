@@ -459,12 +459,25 @@ The panel may push audit rules (`Node.AuditRules`): each is a route-rule
 match list (`domain:`, `full:`, `keyword:`, `regexp:`, `ip:`, `port:`,
 `inbound:`, `geosite:`, `geoip:`, `protocol:`) with action `block` or
 `log`. Block rules are prepended to the node's route rules on every core
-with routing (sing-box, xray; hysteria and mita do not route, so they
-neither block nor report). Every hit of either action is matched by bosun
+with routing (sing-box and xray). hysteria and mita cannot route, so a
+block rule does not stop their traffic; hysteria still *reports* hits
+(its request log feeds the matcher) and the panel marks those hits
+"log-only" rather than counting them as blocked. Every hit of either action is matched by bosun
 itself on the same log feed the connection log uses (so xray's access log
 and hysteria's debug log are switched on while rules exist) and reported
 with the next report as user, inbound, client address, destination and
-rule; one hit per user and rule per minute, 2000 buffered. `geosite`,
+rule; one hit per user and rule per minute, 2000 buffered. A match value
+the core would refuse (a bad CIDR, an unknown protocol, an empty pattern)
+is dropped here and reported by the doctor check "Panel rules" instead of
+being written into a config no core will load.
+
+sing-box writes the client's requested destination into its log without
+escaping it, so a crafted destination can forge whole log lines. bosun
+therefore believes a line only when it names a user this node actually
+serves on that inbound and the destination looks like a host; a forged
+line naming somebody else is dropped. xray and hysteria escape their
+fields and are not affected. Treat sing-box attribution as advisory
+anyway: it comes from a log, not from an API. `geosite`,
 `geoip` and `protocol` matches block in the core but cannot be evaluated
 for the hit log.
 
@@ -486,27 +499,45 @@ With `cores.user: bosun-proxy` in config.yaml (the installer writes it for
 new nodes; on an existing node add the line and restart, the account is
 created on first start) every core process — sing-box, xray, mita,
 hysteria, snell-server, realm — runs as that system account with only
-`CAP_NET_BIND_SERVICE` (plus `CAP_NET_ADMIN` while any user has a speed
-limit, because the limit marks sockets with `SO_MARK`; the doctor says
-when it is granted), while bosun itself stays root for nftables, tc and
-the installers. bosun hands the cores what they must read: their work
-directories and configs, and the certificate PEMs (existing ones are
-re-owned at start, new ones as they are written). Nothing else on the
-node is readable by a core.
+`CAP_NET_BIND_SERVICE`, and supplementary groups are cleared. sing-box
+and xray additionally hold `CAP_NET_ADMIN` while a speed limit is really
+installed, because the limit marks sockets with `SO_MARK`; no other core
+gets it, and the doctor says when it is granted. bosun itself stays root
+for nftables, tc and the installers. If the account cannot be created or
+used, bosun logs it, runs the cores as itself and fails the doctor's
+isolation check rather than refusing to start. The work directories stay owned by bosun
+(traversable, not writable, so a core cannot plant a symlink for a later
+root-run write) and only the files a core must read change owner: its own
+config and the two certificate PEMs of its inbounds. Every one of those
+writes refuses to follow a symlink. certmagic's store next to the PEMs,
+with the ACME account key and every site key, stays bosun's. All cores
+share one account, so they can read each other's configs; nothing else on
+the node is readable by a core.
 
 The egress guard (on whenever `cores.user` is set; `cores.egress_guard:
 false` turns it off) adds an nftables output rule for that account:
-*new* connections from a core to link-local (`169.254.0.0/16`, the cloud
-metadata service), RFC 1918, CGNAT (`100.64.0.0/10`) and the IPv6
-equivalents are dropped, so a client of a compromised or badly configured
-core cannot reach the provider's internal network or the metadata
-endpoint through the node. Loopback stays open (the local DNS stub) and
-replies on established flows are never touched, so clients that arrive
-from private space (relays, line ingresses) keep working. Ranges a node
-must reach — a private upstream, a line gateway's network — go in
-`cores.egress_allow: [10.10.0.0/24]`. The doctor check "Core isolation"
-shows the account and the guard's state and warns when cores still run as
-root.
+*new* connections from a core to loopback, link-local (`169.254.0.0/16`,
+the cloud metadata service), RFC 1918, CGNAT (`100.64.0.0/10`) and the
+IPv6 equivalents are dropped, so a subscriber cannot use the node to
+reach the provider's internal network, the metadata endpoint, or the
+node's own control services. On loopback only the ports a core genuinely
+needs stay open: port 53 for a local DNS stub, hysteria's auth callback
+and the decoy site a REALITY fallback dials. Nameservers in
+`/etc/resolv.conf` that fall inside a blocked range (a VPC or
+link-local resolver) are allowed automatically, so DNS keeps working on
+cloud images. Replies on established flows are never touched, so clients
+that arrive from private space (relays, line ingresses) keep working.
+Ranges a node must reach go in `cores.egress_allow: [10.10.0.0/24]`.
+
+The cores themselves also refuse those destinations for user traffic:
+sing-box and xray get a reject rule for loopback, link-local, RFC 1918
+and CGNAT ahead of every other rule (`Node.AllowPrivateDest` turns it
+off, `Node.PrivateDestAllow` lists exceptions). The nft guard is the
+backstop for destinations reached by name, which a route rule on
+addresses cannot see.
+
+The doctor check "Core isolation" shows the account and the guard's
+state and warns when cores still run as root.
 
 ### Strict ingress for mita and firewall auto-open
 

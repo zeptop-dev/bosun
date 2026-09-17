@@ -373,7 +373,7 @@ func TestSnellRendering(t *testing.T) {
 			sn = append(sn, x)
 		}
 	}
-	if len(sn) != 2 || sn[0]["version"] != float64(4) || sn[0]["psk"] != "server-psk" || sn[0]["obfs_mode"] != "http" || sn[0]["user_key"] != nil || sn[1]["user_key"] != "user-key" {
+	if len(sn) != 2 || sn[0]["version"] != float64(4) || sn[0]["psk"] != "server-psk" || sn[0]["obfs_mode"] != "http" || sn[0]["userkey"] != nil || sn[1]["userkey"] != "user-key" {
 		t.Fatalf("sing-box snell: %v", sn)
 	}
 	clash, _ := Clash{}.RenderWith([]Line{shared, multi}, Account{}, "")

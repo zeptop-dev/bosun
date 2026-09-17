@@ -60,7 +60,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
-	if err := runas.ChownTree(opt.WorkDir); err != nil {
+	// The work dir stays owned by bosun (0755, traversable): a core that
+	// owned it could plant a symlink for a later root-run write.
+	if err := runas.MkdirRoot(opt.WorkDir); err != nil {
 		return nil, err
 	}
 	return &Core{opt: opt, log: log.With("core", "snell"), instances: map[string]*instance{}}, nil
@@ -97,7 +99,7 @@ func (c *Core) newInstance(tag string) (*instance, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
-	if err := runas.Chown(dir); err != nil {
+	if err := runas.MkdirRoot(dir); err != nil {
 		return nil, err
 	}
 	in := &instance{tag: tag, cfg: filepath.Join(dir, configFile)}
@@ -115,13 +117,7 @@ func tags(b *core.Bundle) []string {
 }
 
 func writeFile(path string, content []byte) error {
-	if err := os.WriteFile(path+".tmp", content, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(path+".tmp", path); err != nil {
-		return err
-	}
-	return runas.Chown(path)
+	return runas.WriteFile(path, content, 0o600, true)
 }
 
 // Start launches an instance for every inbound in the bundle.

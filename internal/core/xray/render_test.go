@@ -104,7 +104,8 @@ func TestRenderTransportsAndTLS(t *testing.T) {
 
 func TestRenderOutboundsAndRoutes(t *testing.T) {
 	node := &spec.Node{
-		Inbounds: []spec.Inbound{{Tag: "in", Protocol: spec.VMess, Port: 1}},
+		AllowPrivateDest: true, // this fixture indexes the rule list
+		Inbounds:         []spec.Inbound{{Tag: "in", Protocol: spec.VMess, Port: 1}},
 		Outbounds: []spec.Outbound{{Tag: "landing", Protocol: "socks", ProxyTag: "warp",
 			Settings: map[string]any{"servers": []any{map[string]any{"address": "1.2.3.4", "port": 1080}}, "streamSettings": map[string]any{"network": "tcp"}}}},
 		Routes: []spec.RouteRule{{Match: []string{"protocol:bittorrent"}, Action: "block"}, {Match: []string{"domain:netflix.com", "ip:1.1.1.1/32"}, Action: "outbound", Value: "landing"}},

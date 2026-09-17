@@ -112,17 +112,23 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		"inbounds":  ins,
 		"outbounds": outs,
 	}
+	// The node's own neighbourhood is refused before anything else; the
+	// nft egress guard is the backstop for destinations reached by name.
+	privRules, _ := renderRoutes(node.PrivateDestRules())
 	rules, sets := renderRoutes(node.Routes)
+	rules = append(privRules, rules...)
 	rules = append(rules, limitRules...)
 	// Egress follows ingress: a direct exit bound to each inbound's own
 	// address, after the explicit rules and the speed-limited users.
 	for _, ip := range sortedKeys(node.BoundInbounds(inbounds)) {
 		tags := node.BoundInbounds(inbounds)[ip]
 		bo := m{"type": "direct", "tag": "direct@" + ip}
+		// Resolve to the bound family only: with just one bind address set,
+		// the other family would silently leave from the default address.
 		if spec.IsIPv6(ip) {
-			bo["inet6_bind_address"] = ip
+			bo["inet6_bind_address"], bo["domain_strategy"] = ip, "ipv6_only"
 		} else {
-			bo["inet4_bind_address"] = ip
+			bo["inet4_bind_address"], bo["domain_strategy"] = ip, "ipv4_only"
 		}
 		outs = append(outs, bo)
 		rules = append(rules, m{"inbound": tags, "outbound": "direct@" + ip})
@@ -231,6 +237,21 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 			in["obfs_mode"] = "http"
 		}
 		if ib.SnellMultiUser {
+			if len(users) == 0 {
+				// Without users sing-box falls back to the shared-PSK
+				// server, which every former subscriber can still use.
+				return nil, fmt.Errorf("singbox: inbound %q: multi-user snell has no users yet", ib.Tag)
+			}
+			seen := map[string]bool{}
+			for _, u := range users {
+				if u.Password == "" {
+					return nil, fmt.Errorf("singbox: inbound %q: user %q has no key", ib.Tag, u.Name)
+				}
+				if seen[u.Password] {
+					return nil, fmt.Errorf("singbox: inbound %q: two users share a key", ib.Tag)
+				}
+				seen[u.Password] = true
+			}
 			in["users"] = mapUsers(users, func(u spec.User) m {
 				return m{"name": spec.InboundUser(u.Name, ib.Tag), "userkey": u.Password}
 			})
@@ -470,7 +491,15 @@ func renderDNS(list []string) m {
 }
 
 func addMatch(rule m, match string) {
+	match = strings.TrimSpace(match)
+	if match == "" {
+		return
+	}
 	key, val, ok := cut(match, ":")
+	if ok && strings.TrimSpace(val) == "" {
+		return // an empty value would match every destination
+	}
+	val = strings.TrimSpace(val)
 	if !ok {
 		rule["domain_suffix"] = appendStr(rule["domain_suffix"], match)
 		return
@@ -491,7 +520,19 @@ func addMatch(rule m, match string) {
 	case "protocol":
 		rule["protocol"] = appendStr(rule["protocol"], val)
 	case "port":
-		rule["port_range"] = appendStr(rule["port_range"], val)
+		// sing-box wants single ports in "port" and ranges as "a:b".
+		for _, part := range strings.Split(val, ",") {
+			from, to, err := spec.ParsePortMatch(part)
+			if err != nil {
+				continue // refused by spec.ValidateMatch before it gets here
+			}
+			if from == to {
+				list, _ := rule["port"].([]int)
+				rule["port"] = append(list, from)
+			} else {
+				rule["port_range"] = appendStr(rule["port_range"], fmt.Sprintf("%d:%d", from, to))
+			}
+		}
 	case "geosite":
 		rule["rule_set"] = appendStr(rule["rule_set"], "geosite-"+val)
 	case "geoip":

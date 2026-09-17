@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -200,4 +202,147 @@ func SS2022KeyLen(cipher string) int {
 		return 32
 	}
 	return 0
+}
+
+// matchKeys are the prefixes a route or audit match may use.
+var matchKeys = map[string]bool{
+	"domain": true, "full": true, "keyword": true, "regexp": true,
+	"ip": true, "ip_cidr": true, "port": true, "inbound": true,
+	"protocol": true, "geosite": true, "geoip": true,
+}
+
+// sniffProtocols are the protocol names both cores understand.
+var sniffProtocols = map[string]bool{
+	"http": true, "tls": true, "quic": true, "dns": true, "bittorrent": true,
+	"stun": true, "dtls": true, "ssh": true, "rdp": true,
+}
+
+var geoNameRe = regexp.MustCompile(`^[a-z0-9._-]+$`)
+
+// ParsePortMatch reads one entry of a "port:" match: a single port, or a
+// range written "a-b" or "a:b". Both ends are inclusive.
+func ParsePortMatch(entry string) (from, to int, err error) {
+	entry = strings.TrimSpace(entry)
+	lo, hi, isRange := strings.Cut(entry, "-")
+	if !isRange {
+		lo, hi, isRange = strings.Cut(entry, ":")
+	}
+	parse := func(s string) (int, error) {
+		n, err := strconv.Atoi(strings.TrimSpace(s))
+		if err != nil || n < 1 || n > 65535 {
+			return 0, fmt.Errorf("port %q must be 1-65535", s)
+		}
+		return n, nil
+	}
+	if !isRange {
+		n, err := parse(lo)
+		return n, n, err
+	}
+	if from, err = parse(lo); err != nil {
+		return 0, 0, err
+	}
+	if to, err = parse(hi); err != nil {
+		return 0, 0, err
+	}
+	if to < from {
+		return 0, 0, fmt.Errorf("port range %q is backwards", entry)
+	}
+	return from, to, nil
+}
+
+// ValidateMatch checks one route or audit match entry. A value that passes
+// here renders into a configuration both cores accept; anything else is
+// refused at the panel and dropped by the agent, because one bad entry
+// otherwise takes every inbound on the node down.
+func ValidateMatch(match string) error {
+	match = strings.TrimSpace(match)
+	if match == "" {
+		return fmt.Errorf("empty match")
+	}
+	if strings.ContainsAny(match, "\r\n\"") {
+		return fmt.Errorf("match %q contains a line break or quote", match)
+	}
+	key, val, ok := strings.Cut(match, ":")
+	if !ok {
+		key, val = "domain", match
+	}
+	// An IPv6 CIDR contains colons: "ip:" is the only key that may.
+	if key == "ip" || key == "ip_cidr" {
+		val = strings.TrimSpace(val)
+	} else if strings.Contains(val, ":") && key != "port" && key != "regexp" {
+		return fmt.Errorf("match %q: unexpected colon in the value", match)
+	}
+	if !matchKeys[key] {
+		return fmt.Errorf("match %q: unknown kind %q", match, key)
+	}
+	val = strings.TrimSpace(val)
+	if val == "" {
+		return fmt.Errorf("match %q: empty value (an empty pattern matches everything)", match)
+	}
+	switch key {
+	case "ip", "ip_cidr":
+		if _, _, err := net.ParseCIDR(val); err != nil && net.ParseIP(val) == nil {
+			return fmt.Errorf("match %q: not an IP or CIDR", match)
+		}
+	case "port":
+		for _, part := range strings.Split(val, ",") {
+			if _, _, err := ParsePortMatch(part); err != nil {
+				return fmt.Errorf("match %q: %w", match, err)
+			}
+		}
+	case "regexp":
+		if _, err := regexp.Compile(val); err != nil {
+			return fmt.Errorf("match %q: %w", match, err)
+		}
+	case "protocol":
+		if !sniffProtocols[strings.ToLower(val)] {
+			return fmt.Errorf("match %q: unknown protocol (try http, tls, quic, dns, bittorrent)", match)
+		}
+	case "geosite", "geoip":
+		if !geoNameRe.MatchString(strings.ToLower(val)) {
+			return fmt.Errorf("match %q: a geo name is lowercase letters, digits, dot, dash", match)
+		}
+	case "domain", "full", "keyword", "inbound":
+		if strings.ContainsAny(val, " \t") {
+			return fmt.Errorf("match %q: contains a space", match)
+		}
+	}
+	return nil
+}
+
+// ValidateRouteRule checks a rule's matches and action.
+func ValidateRouteRule(r RouteRule) error {
+	switch r.Action {
+	case "", "direct", "block", "outbound":
+	default:
+		return fmt.Errorf("route action %q must be direct, block or outbound", r.Action)
+	}
+	if r.Action == "outbound" && strings.TrimSpace(r.Value) == "" {
+		return fmt.Errorf("route action outbound needs a tag")
+	}
+	if len(r.Match) == 0 {
+		return fmt.Errorf("route rule without a match would apply to everything")
+	}
+	for _, m := range r.Match {
+		if err := ValidateMatch(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateAuditRule checks one panel audit rule.
+func ValidateAuditRule(r AuditRule) error {
+	if r.Action != "block" && r.Action != "log" {
+		return fmt.Errorf("audit rule %q: action must be block or log", r.Name)
+	}
+	if len(r.Match) == 0 {
+		return fmt.Errorf("audit rule %q: needs at least one match", r.Name)
+	}
+	for _, m := range r.Match {
+		if err := ValidateMatch(m); err != nil {
+			return fmt.Errorf("audit rule %q: %w", r.Name, err)
+		}
+	}
+	return nil
 }

@@ -59,7 +59,7 @@ func qxLine(l Line) string {
 	default:
 		return ""
 	}
-	parts = append(parts, "fast-open=true", "udp-relay=true", "tag="+l.Name)
+	parts = append(parts, "fast-open=true", "udp-relay=true", "tag="+iniName(l.Name))
 	return strings.Join(parts, ", ")
 }
 

@@ -80,10 +80,13 @@ type Agent struct {
 	// Guard drops packets for mita ports that arrive on the wrong local
 	// address (mita cannot bind one itself); nil = not enforced.
 	Guard *ingressguard.Guard
-	// Egress keeps the core account away from private and metadata ranges;
-	// nil = off. EgressAllow are the operator's exemptions.
-	Egress      *egressguard.Guard
-	EgressAllow []string
+	// Egress keeps the core account away from private, metadata and
+	// loopback ranges; nil = off. EgressAllow are the operator's
+	// exemptions, EgressLoopbackPorts the local ports a core may reach
+	// (DNS stub, hysteria's auth callback, the decoy site).
+	Egress              *egressguard.Guard
+	EgressAllow         []string
+	EgressLoopbackPorts []int
 	// Conn buffers accepted connections for the report when the node spec
 	// asks for them; nil = never.
 	Conn *connlog.Collector
@@ -191,6 +194,8 @@ type Status struct {
 	Egress *egressguard.Status `json:"egress,omitempty"`
 	// CoreUser is the account the cores run as ("" = bosun itself).
 	CoreUser string `json:"core_user,omitempty"`
+	// RejectedRules are the panel's rules this node refused to render.
+	RejectedRules []string `json:"rejected_rules,omitempty"`
 	// Firewall is the auto-open state (nil = off or no firewall).
 	Firewall *firewall.Status `json:"firewall,omitempty"`
 }

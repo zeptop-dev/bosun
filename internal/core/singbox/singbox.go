@@ -44,9 +44,10 @@ type Core struct {
 	opt Options
 	log *slog.Logger
 
-	mu   sync.Mutex
-	sup  *subprocess.Supervisor
-	conn *grpc.ClientConn
+	mu      sync.Mutex
+	sup     *subprocess.Supervisor
+	conn    *grpc.ClientConn
+	applied []byte // the config the running process was started with
 
 	online *onlineTracker // client IPs per user, from the log (see online.go)
 }
@@ -71,7 +72,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
-	if err := runas.ChownTree(opt.WorkDir); err != nil {
+	// The work dir stays owned by bosun (0755, traversable): a core that
+	// owned it could plant a symlink for a later root-run write.
+	if err := runas.MkdirRoot(opt.WorkDir); err != nil {
 		return nil, err
 	}
 	return &Core{opt: opt, log: log.With("core", "singbox"), online: newOnlineTracker(opt.ConnSink)}, nil
@@ -95,6 +98,15 @@ func (c *Core) Capabilities() core.Capabilities {
 }
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
+	// The log tracker only believes lines naming a user this node serves.
+	names := map[string]bool{}
+	for _, ib := range inbounds {
+		for _, u := range ib.EffectiveUsers(users) {
+			names[spec.InboundUser(u.Name, ib.Tag)] = true
+			names[u.Name] = true
+		}
+	}
+	c.online.setUsers(names)
 	// Device limits need the per-connection log lines, which only exist at
 	// level info; raise the level while any user carries a limit.
 	limited := false
@@ -116,14 +128,7 @@ func (c *Core) configPath(b *core.Bundle) string { return filepath.Join(c.opt.Wo
 func (c *Core) write(b *core.Bundle) error {
 	for name, content := range b.Files {
 		p := filepath.Join(c.opt.WorkDir, name)
-		tmp := p + ".tmp"
-		if err := os.WriteFile(tmp, content, 0o640); err != nil {
-			return err
-		}
-		if err := os.Rename(tmp, p); err != nil {
-			return err
-		}
-		if err := runas.Chown(p); err != nil {
+		if err := runas.WriteFile(p, content, 0o640, true); err != nil {
 			return err
 		}
 	}
@@ -152,8 +157,9 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.sup == nil {
-		c.sup = subprocess.New("sing-box", c.opt.Binary, []string{"run", "-c", path, "-D", c.opt.WorkDir, "--disable-color"}, c.opt.WorkDir, c.log).WithLineHook(c.online.feed).WithLogFilter(c.keepLine)
+		c.sup = subprocess.New("sing-box", c.opt.Binary, []string{"run", "-c", path, "-D", c.opt.WorkDir, "--disable-color"}, c.opt.WorkDir, c.log).WithMarking().WithLineHook(c.online.feed).WithLogFilter(c.keepLine)
 	}
+	c.applied = b.Files[b.Main]
 	return c.sup.Start(ctx)
 }
 
@@ -183,13 +189,26 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 		return err
 	}
 	c.mu.Lock()
-	sup := c.sup
+	sup, applied := c.sup, c.applied
 	c.mu.Unlock()
 	if sup == nil {
 		return c.Start(ctx, b)
 	}
+	// sing-box has no hot reload, so any real change is a restart; an
+	// identical config must not cut every user's connections just
+	// because another core's apply keeps failing and the agent retries.
+	if next := b.Files[b.Main]; applied != nil && bytes.Equal(applied, next) && sup.Running() {
+		c.log.Info("config unchanged, keeping the running process")
+		return nil
+	}
 	c.log.Info("applying new config (restart)")
-	return sup.Restart(ctx)
+	if err := sup.Restart(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.applied = b.Files[b.Main]
+	c.mu.Unlock()
+	return nil
 }
 
 func (c *Core) Stop(ctx context.Context) error {

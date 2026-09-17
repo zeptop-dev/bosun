@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strconv"
 
 	"github.com/zeptop-dev/bosun/internal/core"
@@ -52,7 +53,9 @@ func render(inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]by
 		listen = ""
 	}
 	cfg := m{
-		"listen":       listen + ":" + strconv.Itoa(ib.Port),
+		// JoinHostPort brackets an IPv6 literal; "2001:db8::1:443" is not
+		// an address hysteria can bind.
+		"listen":       net.JoinHostPort(listen, strconv.Itoa(ib.Port)),
 		"tls":          m{"cert": ib.TLS.CertPath, "key": ib.TLS.KeyPath},
 		"auth":         m{"type": "http", "http": m{"url": opt.AuthURL}},
 		"trafficStats": m{"listen": opt.StatsListen, "secret": opt.StatsSecret},

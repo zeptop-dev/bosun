@@ -44,11 +44,26 @@ type Supervisor struct {
 	exited   chan struct{}
 	stopping bool
 	backoff  time.Duration
+	// creds builds the child's credentials and capabilities.
+	creds func() *syscall.SysProcAttr
+	// gen counts launches and stops: a restart sleeping through its
+	// backoff belongs to the generation it was scheduled in, so a Start
+	// or Stop that happened meanwhile cancels it instead of starting a
+	// second process nobody can reach.
+	gen uint64
 }
 
 // New prepares a supervisor; nothing runs until Start.
 func New(name, path string, args []string, dir string, log *slog.Logger) *Supervisor {
-	return &Supervisor{name: name, path: path, args: args, dir: dir, log: log.With("proc", name), backoff: minBackoff}
+	return &Supervisor{name: name, path: path, args: args, dir: dir, log: log.With("proc", name), backoff: minBackoff, creds: runas.Credential}
+}
+
+// WithMarking says this core marks its sockets for the kernel shaper, so
+// it may hold CAP_NET_ADMIN while speed limits exist. Only sing-box and
+// xray do; every other child stays without it.
+func (s *Supervisor) WithMarking() *Supervisor {
+	s.creds = runas.CredentialMarking
+	return s
 }
 
 // WithLineHook passes every stdout/stderr line to fn as well as the log
@@ -89,9 +104,11 @@ func (s *Supervisor) Start(ctx context.Context) error {
 func (s *Supervisor) launch(ctx context.Context) error {
 	cmd := exec.Command(s.path, s.args...)
 	cmd.Dir = s.dir
-	// Cores run as the unprivileged account when one is configured
-	// (CAP_NET_BIND_SERVICE only); see internal/runas.
-	cmd.SysProcAttr = runas.Credential()
+	// Cores run as the unprivileged account when one is configured; see
+	// internal/runas for which capability each core gets.
+	if s.creds != nil {
+		cmd.SysProcAttr = s.creds()
+	}
 	if len(s.env) > 0 {
 		cmd.Env = append(os.Environ(), s.env...)
 	}
@@ -110,6 +127,7 @@ func (s *Supervisor) launch(ctx context.Context) error {
 	s.mu.Lock()
 	s.cmd = cmd
 	s.exited = exited
+	s.gen++
 	s.mu.Unlock()
 	s.log.Info("started", "pid", cmd.Process.Pid, "path", s.path, "args", s.args)
 
@@ -144,6 +162,9 @@ func (s *Supervisor) restartLater(ctx context.Context, ran time.Duration) {
 	s.backoff = min(s.backoff*2, maxBackoff)
 	s.mu.Unlock()
 
+	s.mu.Lock()
+	gen := s.gen
+	s.mu.Unlock()
 	s.log.Info("restarting", "in", delay)
 	select {
 	case <-ctx.Done():
@@ -151,9 +172,10 @@ func (s *Supervisor) restartLater(ctx context.Context, ran time.Duration) {
 	case <-time.After(delay):
 	}
 	s.mu.Lock()
-	stopping := s.stopping
+	stale := s.stopping || s.gen != gen || s.cmd != nil
 	s.mu.Unlock()
-	if stopping {
+	if stale {
+		s.log.Info("restart cancelled: the process was started or stopped meanwhile")
 		return
 	}
 	if err := s.launch(ctx); err != nil {
@@ -181,6 +203,7 @@ func (s *Supervisor) pipe(r io.Reader, level slog.Level) {
 func (s *Supervisor) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	s.stopping = true
+	s.gen++
 	cmd := s.cmd
 	exited := s.exited
 	s.mu.Unlock()

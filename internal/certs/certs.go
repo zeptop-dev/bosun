@@ -76,12 +76,9 @@ func New(opts Options) (*Manager, error) {
 	if opts.Log == nil {
 		opts.Log = slog.Default()
 	}
-	if err := os.MkdirAll(opts.Dir, 0o750); err != nil {
-		return nil, err
-	}
-	// PEMs issued before cores.user was set belong to root; the cores
-	// must be able to read them from now on.
-	if err := runas.ChownTree(opts.Dir); err != nil {
+	// 0755 so a core can traverse to its own PEM; certmagic's own store
+	// underneath keeps its stricter modes.
+	if err := runas.MkdirRoot(opts.Dir); err != nil {
 		return nil, err
 	}
 	m := &Manager{opts: opts, log: opts.Log.With("component", "certs"), status: map[string]*Status{}, method: map[string]string{}}
@@ -234,7 +231,7 @@ func (m *Manager) export(ctx context.Context, cfg *certmagic.Config, domain stri
 		return fmt.Errorf("certs: read key %s: %w", domain, err)
 	}
 	certPath, keyPath := m.Paths(domain)
-	if err := os.MkdirAll(filepath.Dir(certPath), 0o750); err != nil {
+	if err := runas.MkdirRoot(filepath.Dir(certPath)); err != nil {
 		return err
 	}
 	if err := writeAtomic(certPath, certPEM, 0o644); err != nil {
@@ -252,20 +249,15 @@ func (m *Manager) export(ctx context.Context, cfg *certmagic.Config, domain stri
 	return nil
 }
 
-// writeAtomic writes the file and hands it (and its directory) to the
-// core account when one is configured, since the cores load the PEMs.
+// writeAtomic writes the file and hands that one file to the core account
+// when one is configured, since the cores load the PEMs. The directories
+// stay bosun's: the certmagic store next to them holds the ACME account
+// key and every site key, which no core needs.
 func writeAtomic(path string, data []byte, perm os.FileMode) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, perm); err != nil {
+	if err := runas.MkdirRoot(filepath.Dir(path)); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		return err
-	}
-	if err := runas.Chown(filepath.Dir(path)); err != nil {
-		return err
-	}
-	return runas.Chown(path)
+	return runas.WriteFile(path, data, perm, true)
 }
 
 // onEvent re-exports after a renewal and tells the agent.

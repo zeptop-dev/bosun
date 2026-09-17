@@ -77,7 +77,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := os.MkdirAll(opt.WorkDir, 0o750); err != nil {
 		return nil, err
 	}
-	if err := runas.ChownTree(opt.WorkDir); err != nil {
+	// The work dir stays owned by bosun (0755, traversable): a core that
+	// owned it could plant a symlink for a later root-run write.
+	if err := runas.MkdirRoot(opt.WorkDir); err != nil {
 		return nil, err
 	}
 	return &Core{opt: opt, log: log.With("core", "xray"), online: newOnlineWindow()}, nil
@@ -108,13 +110,7 @@ func (c *Core) configPath(b *core.Bundle) string { return filepath.Join(c.opt.Wo
 func (c *Core) write(b *core.Bundle) error {
 	for name, content := range b.Files {
 		p := filepath.Join(c.opt.WorkDir, name)
-		if err := os.WriteFile(p+".tmp", content, 0o640); err != nil {
-			return err
-		}
-		if err := os.Rename(p+".tmp", p); err != nil {
-			return err
-		}
-		if err := runas.Chown(p); err != nil {
+		if err := runas.WriteFile(p, content, 0o640, true); err != nil {
 			return err
 		}
 	}
@@ -142,7 +138,7 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 	}
 	c.mu.Lock()
 	if c.sup == nil {
-		c.sup = subprocess.New("xray", c.opt.Binary, []string{"run", "-c", path}, c.opt.WorkDir, c.log).WithLineHook(c.feedConn)
+		c.sup = subprocess.New("xray", c.opt.Binary, []string{"run", "-c", path}, c.opt.WorkDir, c.log).WithMarking().WithLineHook(c.feedConn)
 	}
 	sup := c.sup
 	c.applied, _ = b.Payload.(*state)

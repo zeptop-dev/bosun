@@ -105,7 +105,8 @@ func TestRenderShadowsocks2022(t *testing.T) {
 
 func TestRenderOutboundChainAndRoutes(t *testing.T) {
 	node := &spec.Node{
-		Inbounds: []spec.Inbound{{Tag: "in", Protocol: spec.Trojan, Port: 443, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "a", CertPath: "/c", KeyPath: "/k"}}},
+		AllowPrivateDest: true, // this fixture indexes the rule list
+		Inbounds:         []spec.Inbound{{Tag: "in", Protocol: spec.Trojan, Port: 443, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "a", CertPath: "/c", KeyPath: "/k"}}},
 		Outbounds: []spec.Outbound{
 			{Tag: "warp", Protocol: "wireguard", Settings: map[string]any{"private_key": "x"}},
 			{Tag: "landing", Protocol: "socks", Settings: map[string]any{"server": "1.2.3.4", "server_port": 1080}, ProxyTag: "warp"},

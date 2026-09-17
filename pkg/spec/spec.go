@@ -450,6 +450,14 @@ type Node struct {
 	// ConnLog asks the node to report each accepted connection (user,
 	// client address, destination) with its reports; off by default.
 	ConnLog bool `json:"conn_log,omitempty"`
+	// AllowPrivateDest lets a subscriber's traffic reach the node's own
+	// loopback, link-local, metadata and RFC 1918 neighbourhood. Off by
+	// default: the cores reject those destinations, so a paying user
+	// cannot use the node to reach its control services or the
+	// provider's internal network. PrivateDestAllow are the exceptions
+	// (a private upstream, a line gateway) that stay reachable either way.
+	AllowPrivateDest bool     `json:"allow_private_dest,omitempty"`
+	PrivateDestAllow []string `json:"private_dest_allow,omitempty"`
 	// EgressByIngress makes traffic that arrived on an inbound bound to a
 	// specific address leave from that same address (multi-IP hosts):
 	// each such inbound gets a direct exit bound to its listen address.
@@ -662,4 +670,40 @@ func (n *Node) BoundInbounds(inbounds []Inbound) map[string][]string {
 func IsIPv6(addr string) bool {
 	ip := net.ParseIP(addr)
 	return ip != nil && ip.To4() == nil
+}
+
+// PrivateRanges are the destinations user traffic is refused by default
+// (Node.AllowPrivateDest turns the refusal off). They are written as
+// literal CIDRs so no core needs a geo data file for them.
+var PrivateRanges = []string{
+	"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+	"172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
+}
+
+// PrivateDestRules are the reject rules for those ranges, with the node's
+// exceptions accepted first; nil when the node allows private traffic.
+func (n *Node) PrivateDestRules() []RouteRule {
+	if n == nil || n.AllowPrivateDest {
+		return nil
+	}
+	var out []RouteRule
+	var allow []string
+	for _, c := range n.PrivateDestAllow {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(c); err != nil && net.ParseIP(c) == nil {
+			continue
+		}
+		allow = append(allow, "ip:"+c)
+	}
+	if len(allow) > 0 {
+		out = append(out, RouteRule{Match: allow, Action: "direct"})
+	}
+	blocked := make([]string, 0, len(PrivateRanges))
+	for _, c := range PrivateRanges {
+		blocked = append(blocked, "ip:"+c)
+	}
+	return append(out, RouteRule{Match: blocked, Action: "block"})
 }

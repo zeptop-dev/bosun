@@ -38,7 +38,9 @@ func iniLines(lines []Line, fn func(Line) string) (string, []Named) {
 
 func surgeLine(l Line) string {
 	ib := l.Inbound
-	base := fmt.Sprintf("%s = %%s, %s, %d", l.Name, l.Host, l.Port)
+	// The name is data: a "%" in it (a remark variable such as
+	// {{USED_PERCENT}}) must not be read as a verb.
+	line := func(kind string) string { return fmt.Sprintf("%s = %s, %s, %d", iniName(l.Name), kind, l.Host, l.Port) }
 	var parts []string
 	switch ib.Protocol {
 	case spec.Shadowsocks:
@@ -46,7 +48,7 @@ func surgeLine(l Line) string {
 			return "" // Surge does not support SS2022 multi-user keys
 		}
 		parts = append(parts, "encrypt-method="+ib.Cipher, "password="+l.Password, "udp-relay=true")
-		return fmt.Sprintf(base, "ss") + ", " + strings.Join(parts, ", ")
+		return line("ss") + ", " + strings.Join(parts, ", ")
 	case spec.VMess:
 		parts = append(parts, "username="+l.UUID)
 		if hasTLS(l) {
@@ -60,7 +62,7 @@ func surgeLine(l Line) string {
 		} else if transportType(l) != "tcp" {
 			return ""
 		}
-		return fmt.Sprintf(base, "vmess") + ", " + strings.Join(parts, ", ")
+		return line("vmess") + ", " + strings.Join(parts, ", ")
 	case spec.Trojan:
 		if transportType(l) != "tcp" && transportType(l) != "ws" {
 			return ""
@@ -69,16 +71,16 @@ func surgeLine(l Line) string {
 		if transportType(l) == "ws" {
 			parts = append(parts, "ws=true", "ws-path="+ib.Transport.Path)
 		}
-		return fmt.Sprintf(base, "trojan") + ", " + strings.Join(parts, ", ")
+		return line("trojan") + ", " + strings.Join(parts, ", ")
 	case spec.Hysteria2:
 		parts = append(parts, "password="+l.Password, "sni="+serverName(l))
 		if ib.DownMbps > 0 {
 			parts = append(parts, fmt.Sprintf("download-bandwidth=%d", ib.DownMbps))
 		}
-		return fmt.Sprintf(base, "hysteria2") + ", " + strings.Join(parts, ", ")
+		return line("hysteria2") + ", " + strings.Join(parts, ", ")
 	case spec.TUIC:
 		parts = append(parts, "uuid="+l.UUID, "password="+l.Password, "sni="+serverName(l), "alpn=h3", "version=5")
-		return fmt.Sprintf(base, "tuic") + ", " + strings.Join(parts, ", ")
+		return line("tuic") + ", " + strings.Join(parts, ", ")
 	case spec.Snell:
 		if ib.SnellMultiUser {
 			return "" // needs the user key too; only sing-box's client has it
@@ -90,7 +92,7 @@ func surgeLine(l Line) string {
 				parts = append(parts, "obfs-host="+ib.SnellObfsHost)
 			}
 		}
-		return fmt.Sprintf(base, "snell") + ", " + strings.Join(parts, ", ")
+		return line("snell") + ", " + strings.Join(parts, ", ")
 	}
 	return ""
 }

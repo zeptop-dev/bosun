@@ -92,13 +92,10 @@ func (r *Realm) apply(ctx context.Context, rules []spec.Forward) error {
 		return err
 	}
 	path := filepath.Join(r.Dir, "realm.toml")
-	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
+	if err := runas.MkdirRoot(r.Dir); err != nil {
 		return err
 	}
-	if err := runas.Chown(r.Dir); err != nil {
-		return err
-	}
-	if err := runas.Chown(path); err != nil {
+	if err := runas.WriteFile(path, []byte(cfg), 0o600, true); err != nil {
 		return err
 	}
 	if r.proc != nil {

@@ -7,9 +7,14 @@ metrics_listen: 127.0.0.1:9100   # Prometheus text endpoint at /metrics; remove 
 # has tested into <data_dir>/cores/<core>/<version>/ on first start (see
 # `bosun core list`). Set `version` to pin a manifest version, or `binary` to
 # use your own build.
+# min_version: v0.44.2      # refuse any self-update or rollback below this tag
+
 cores:
   order: [singbox, xray, mita, hysteria]   # preference when several cores can serve an inbound
-  # registry_token: glpat-...   # Deploy Token (read_package_registry) if the bosun GitLab project is private
+  user: bosun-proxy           # run the cores as this unprivileged account (created on first start)
+  # egress_guard: true        # default when user is set: drop core connections to private/metadata/loopback
+  # egress_allow: [10.10.0.0/24]   # destinations that stay reachable (a private upstream, a line gateway)
+  # registry_token: ghp_...   # token for a private release registry, if the bosun repo is not public
   singbox:
     stats_listen: 127.0.0.1:9101
     log_level: warn

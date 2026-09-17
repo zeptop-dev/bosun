@@ -105,3 +105,20 @@ func joinNonEmpty(parts []string, sep string) string {
 	}
 	return strings.Join(out, sep)
 }
+
+// iniName makes a name safe to write as one field of a comma-separated
+// client line (Surge, Surfboard, Loon, Quantumult X): a comma, an equals
+// sign or a line break inside it would add fields or lines to the profile.
+func iniName(name string) string {
+	out := strings.Map(func(r rune) rune {
+		switch r {
+		case ',', '=', '\r', '\n', '\t', ';':
+			return '-'
+		}
+		if r < 0x20 {
+			return -1
+		}
+		return r
+	}, name)
+	return strings.TrimSpace(out)
+}

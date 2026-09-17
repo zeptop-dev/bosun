@@ -70,7 +70,10 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	// Outbounds, routing, DNS and the per-user limits also need a restart
 	// when they change; users alone can be hot-swapped.
-	if kb, err := json.Marshal(m{"o": node.Outbounds, "r": node.Routes, "d": node.DefaultOutbound, "dns": node.DNS, "lim": limitedUsers(node, users)}); err == nil {
+	if kb, err := json.Marshal(m{"o": node.Outbounds, "r": node.Routes, "d": node.DefaultOutbound, "dns": node.DNS, "lim": limitedUsers(node, users),
+		// Everything else that only a restart can pick up.
+		"audit": node.AuditRules, "priv": node.PrivateDestRules(), "eg": node.EgressByIngress,
+		"cl": opt.ConnLog, "ov": node.Overrides["xray"]}); err == nil {
 		keyParts = append(keyParts, string(kb))
 	}
 	sum := sha256.Sum256([]byte(strings.Join(keyParts, "\n")))
@@ -151,7 +154,13 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	sort.Strings(ips)
 	for _, ip := range ips {
-		outs = append(outs, m{"tag": "direct@" + ip, "protocol": "freedom", "sendThrough": ip})
+		// domainStrategy keeps the exit on the family it is bound to;
+		// dialling the other family from this address fails outright.
+		strategy := "UseIPv4"
+		if spec.IsIPv6(ip) {
+			strategy = "UseIPv6"
+		}
+		outs = append(outs, m{"tag": "direct@" + ip, "protocol": "freedom", "sendThrough": ip, "settings": m{"domainStrategy": strategy}})
 		limitRules = append(limitRules, m{"type": "field", "inboundTag": bound[ip], "outboundTag": "direct@" + ip})
 	}
 
@@ -173,7 +182,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		},
 		"inbounds":  ins,
 		"outbounds": outs,
-		"routing":   m{"domainStrategy": "AsIs", "rules": renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound, limitRules)},
+		"routing":   m{"domainStrategy": "AsIs", "rules": renderRoutes(append(node.PrivateDestRules(), node.Routes...), balancerTags(node), node.DefaultOutbound, limitRules)},
 	}
 	if bal := renderBalancers(node); len(bal) > 0 {
 		cfg["routing"].(m)["balancers"] = bal
@@ -548,7 +557,15 @@ func dnsServers(list []string) []any {
 }
 
 func addMatch(rule m, match string) {
+	match = strings.TrimSpace(match)
+	if match == "" {
+		return
+	}
 	key, val, ok := strings.Cut(match, ":")
+	if ok && strings.TrimSpace(val) == "" {
+		return // an empty value would match every destination
+	}
+	val = strings.TrimSpace(val)
 	if !ok {
 		rule["domain"] = appendStr(rule["domain"], "domain:"+match)
 		return
@@ -569,7 +586,25 @@ func addMatch(rule m, match string) {
 	case "protocol":
 		rule["protocol"] = appendStr(rule["protocol"], val)
 	case "port":
-		rule["port"] = val
+		// xray takes a comma list where a range is written "a-b".
+		var parts []string
+		for _, part := range strings.Split(val, ",") {
+			from, to, err := spec.ParsePortMatch(part)
+			if err != nil {
+				continue // refused by spec.ValidateMatch before it gets here
+			}
+			if from == to {
+				parts = append(parts, strconv.Itoa(from))
+			} else {
+				parts = append(parts, fmt.Sprintf("%d-%d", from, to))
+			}
+		}
+		if cur, _ := rule["port"].(string); cur != "" {
+			parts = append([]string{cur}, parts...)
+		}
+		if len(parts) > 0 {
+			rule["port"] = strings.Join(parts, ",")
+		}
 	case "geosite":
 		rule["domain"] = appendStr(rule["domain"], "geosite:"+val)
 	case "geoip":

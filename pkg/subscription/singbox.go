@@ -125,7 +125,7 @@ func singboxOutbound(l Line) m {
 		o["version"] = 4
 		o["psk"] = ib.SnellPSK
 		if ib.SnellMultiUser {
-			o["user_key"] = l.Password
+			o["userkey"] = l.Password
 		}
 		if ib.SnellObfs != "" && ib.SnellObfs != "off" {
 			o["obfs_mode"] = ib.SnellObfs
