@@ -233,3 +233,45 @@ func TestRenderSnell(t *testing.T) {
 		t.Fatalf("multi-user snell: %v", in)
 	}
 }
+
+// EgressByIngress: an inbound bound to an address gets a direct exit bound
+// to it and a rule sending its traffic there; any-address inbounds and
+// nodes with a default landing outbound are left alone.
+func TestRenderEgressByIngress(t *testing.T) {
+	node := &spec.Node{EgressByIngress: true}
+	inbounds := []spec.Inbound{
+		{Tag: "a", Protocol: spec.Shadowsocks, Port: 8388, Cipher: "aes-128-gcm", Listen: "198.51.100.20"},
+		{Tag: "b", Protocol: spec.Shadowsocks, Port: 8389, Cipher: "aes-128-gcm", Listen: "198.51.100.21"},
+		{Tag: "c", Protocol: spec.Shadowsocks, Port: 8390, Cipher: "aes-128-gcm"},
+	}
+	users := []spec.User{{ID: 1, Name: "u", Password: "p"}}
+	out, err := render(node, inbounds, users, renderOptions{StatsListen: "127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	_ = json.Unmarshal(out, &cfg)
+	var bound []string
+	for _, o := range cfg["outbounds"].([]any) {
+		if om := o.(map[string]any); om["inet4_bind_address"] != nil {
+			bound = append(bound, om["tag"].(string)+"="+om["inet4_bind_address"].(string))
+		}
+	}
+	if len(bound) != 2 || bound[0] != "direct@198.51.100.20=198.51.100.20" {
+		t.Fatalf("bound exits: %v", bound)
+	}
+	rules := cfg["route"].(map[string]any)["rules"].([]any)
+	last := rules[len(rules)-1].(map[string]any)
+	if last["outbound"] != "direct@198.51.100.21" || last["inbound"].([]any)[0] != "b" {
+		t.Fatalf("bind rule: %v", last)
+	}
+	node.DefaultOutbound = "landing"
+	node.Outbounds = []spec.Outbound{{Tag: "landing", Protocol: "socks", Settings: map[string]any{"server": "203.0.113.30", "server_port": 1080}}}
+	out, err = render(node, inbounds, users, renderOptions{StatsListen: "127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "inet4_bind_address") {
+		t.Fatal("a landing outbound must switch binding off")
+	}
+}

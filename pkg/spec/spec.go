@@ -450,6 +450,11 @@ type Node struct {
 	// ConnLog asks the node to report each accepted connection (user,
 	// client address, destination) with its reports; off by default.
 	ConnLog bool `json:"conn_log,omitempty"`
+	// EgressByIngress makes traffic that arrived on an inbound bound to a
+	// specific address leave from that same address (multi-IP hosts):
+	// each such inbound gets a direct exit bound to its listen address.
+	// Ignored when DefaultOutbound sends traffic to a landing server.
+	EgressByIngress bool `json:"egress_by_ingress,omitempty"`
 	// AuditRules are the panel's audit rules: "block" ones become route
 	// rules on every core that has routing, and every hit ("block" or
 	// "log") is reported with the user, client and destination.
@@ -628,4 +633,33 @@ type PingTask struct {
 type Intervals struct {
 	Pull time.Duration `json:"pull,omitempty"`
 	Push time.Duration `json:"push,omitempty"`
+}
+
+// BoundInbounds groups the inbounds with a specific listen address by that
+// address, for EgressByIngress; any-address inbounds are left out.
+func (n *Node) BoundInbounds(inbounds []Inbound) map[string][]string {
+	if n == nil || !n.EgressByIngress || n.DefaultOutbound != "" {
+		return nil
+	}
+	out := map[string][]string{}
+	for _, ib := range inbounds {
+		switch ib.Listen {
+		case "", "0.0.0.0", "::":
+			continue
+		}
+		if net.ParseIP(ib.Listen) == nil {
+			continue
+		}
+		out[ib.Listen] = append(out[ib.Listen], ib.Tag)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// IsIPv6 reports whether a literal address is IPv6.
+func IsIPv6(addr string) bool {
+	ip := net.ParseIP(addr)
+	return ip != nil && ip.To4() == nil
 }

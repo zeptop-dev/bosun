@@ -108,6 +108,8 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 		AuthURL:     "http://" + c.opt.AuthListen + "/auth",
 		StatsListen: c.opt.StatsListen,
 		StatsSecret: c.secret,
+
+		BindEgress: node != nil && node.EgressByIngress && node.DefaultOutbound == "",
 	}
 	if node != nil {
 		opt.Override = node.Overrides["hysteria"]

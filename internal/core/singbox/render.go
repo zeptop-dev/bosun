@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -113,6 +114,20 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	rules, sets := renderRoutes(node.Routes)
 	rules = append(rules, limitRules...)
+	// Egress follows ingress: a direct exit bound to each inbound's own
+	// address, after the explicit rules and the speed-limited users.
+	for _, ip := range sortedKeys(node.BoundInbounds(inbounds)) {
+		tags := node.BoundInbounds(inbounds)[ip]
+		bo := m{"type": "direct", "tag": "direct@" + ip}
+		if spec.IsIPv6(ip) {
+			bo["inet6_bind_address"] = ip
+		} else {
+			bo["inet4_bind_address"] = ip
+		}
+		outs = append(outs, bo)
+		rules = append(rules, m{"inbound": tags, "outbound": "direct@" + ip})
+	}
+	cfg["outbounds"] = outs
 	route := m{"rules": append(sniffRules(inbounds), rules...), "final": final}
 	if len(sets) > 0 {
 		route["rule_set"] = sets
@@ -570,4 +585,13 @@ func cloneM(src m) m {
 		}
 	}
 	return out
+}
+
+func sortedKeys(mm map[string][]string) []string {
+	keys := make([]string, 0, len(mm))
+	for k := range mm {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

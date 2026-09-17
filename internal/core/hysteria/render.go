@@ -22,6 +22,9 @@ type renderOptions struct {
 	StatsSecret string
 	// Override is the operator's JSON object merged into the config.
 	Override json.RawMessage
+	// BindEgress sends outbound traffic from the inbound's own listen
+	// address (Node.EgressByIngress).
+	BindEgress bool
 }
 
 // state carries Render results to Start/Apply.
@@ -54,6 +57,13 @@ func render(inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]by
 		"auth":         m{"type": "http", "http": m{"url": opt.AuthURL}},
 		"trafficStats": m{"listen": opt.StatsListen, "secret": opt.StatsSecret},
 		// Without masquerade hysteria answers 404 to probes; fine for now.
+	}
+	if opt.BindEgress && listen != "" {
+		key := "bindIPv4"
+		if spec.IsIPv6(listen) {
+			key = "bindIPv6"
+		}
+		cfg["outbounds"] = []any{m{"name": "direct", "type": "direct", "direct": m{"mode": "auto", key: listen}}}
 	}
 	if ib.Obfs != "" {
 		if ib.Obfs != "salamander" {

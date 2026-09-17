@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -139,6 +140,19 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 			emails = []string{lu.Name}
 		}
 		limitRules = append(limitRules, m{"type": "field", "user": emails, "outboundTag": spec.SpeedTag(lu.ID)})
+	}
+
+	// Egress follows ingress: a freedom exit sending from each inbound's
+	// own address, after the speed-limited users' rules.
+	bound := node.BoundInbounds(inbounds)
+	ips := make([]string, 0, len(bound))
+	for ip := range bound {
+		ips = append(ips, ip)
+	}
+	sort.Strings(ips)
+	for _, ip := range ips {
+		outs = append(outs, m{"tag": "direct@" + ip, "protocol": "freedom", "sendThrough": ip})
+		limitRules = append(limitRules, m{"type": "field", "inboundTag": bound[ip], "outboundTag": "direct@" + ip})
 	}
 
 	access := "none"

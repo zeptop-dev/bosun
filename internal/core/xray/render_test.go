@@ -355,3 +355,32 @@ func TestRenderAcceptProxyProtocol(t *testing.T) {
 		t.Fatalf("sockopt.acceptProxyProtocol missing:\n%s", b)
 	}
 }
+
+func TestRenderEgressByIngress(t *testing.T) {
+	node := &spec.Node{EgressByIngress: true}
+	inbounds := []spec.Inbound{
+		{Tag: "a", Protocol: spec.VLESS, Port: 443, Listen: "198.51.100.20"},
+		{Tag: "c", Protocol: spec.VLESS, Port: 444},
+	}
+	users := []spec.User{{ID: 1, Name: "u", UUID: "00000000-0000-0000-0000-000000000001"}}
+	out, _, err := render(node, inbounds, users, renderOptions{LogLevel: "warning", APIListen: "127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	_ = json.Unmarshal(out, &cfg)
+	found := false
+	for _, o := range cfg["outbounds"].([]any) {
+		if om := o.(map[string]any); om["tag"] == "direct@198.51.100.20" && om["sendThrough"] == "198.51.100.20" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no bound exit:\n%s", out)
+	}
+	rules := cfg["routing"].(map[string]any)["rules"].([]any)
+	last := rules[len(rules)-1].(map[string]any)
+	if last["outboundTag"] != "direct@198.51.100.20" || last["inboundTag"].([]any)[0] != "a" {
+		t.Fatalf("bind rule: %v", last)
+	}
+}

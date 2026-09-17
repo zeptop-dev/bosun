@@ -441,6 +441,18 @@ it when the set changes. Host-name targets and UDP work; there are no byte
 or connection counters. The doctor fails a realm rule when the process is
 not running.
 
+### Egress follows ingress (multi-IP hosts)
+
+With `Node.EgressByIngress` (Captain: node → "Egress follows ingress") an
+inbound bound to a specific address (its `listen`) sends its users' traffic
+out from that same address: sing-box gets a `direct` outbound with
+`inet4_bind_address` / `inet6_bind_address` and a rule per bound inbound,
+xray a `freedom` outbound with `sendThrough`, hysteria `bindIPv4` /
+`bindIPv6` on its direct outbound. Any-address inbounds keep the default
+route, a node with a default landing outbound ignores the option (traffic
+leaves through the landing), and speed-limited users keep their marking
+exit on sing-box and xray. mita has no per-inbound egress control.
+
 ### Audit rules
 
 The panel may push audit rules (`Node.AuditRules`): each is a route-rule
