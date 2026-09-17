@@ -55,6 +55,16 @@ func (a *Agent) report(ctx context.Context) bool {
 		if len(perOutbound) > 0 {
 			full.Outbounds = perOutbound
 		}
+		a.statusMu.Lock()
+		if a.trafficSeq == 0 {
+			a.trafficSeq = 1
+		}
+		if a.trafficSince.IsZero() {
+			a.trafficSince = time.Now()
+		}
+		full.TrafficSeq = a.trafficSeq
+		full.TrafficWindowSeconds = int(time.Since(a.trafficSince).Seconds())
+		a.statusMu.Unlock()
 		changed, err := rep.Report(ctx, full)
 		if err != nil {
 			// The deltas stay in the pending maps and go out with the next
@@ -68,6 +78,13 @@ func (a *Agent) report(ctx context.Context) bool {
 			return false
 		}
 		a.pendingTraffic, a.pendingInbound, a.pendingOutbound = map[trafficKey]*spec.UserTraffic{}, map[string]spec.Traffic{}, map[string]spec.Traffic{}
+		// The batch was accepted: the next one is a new number over a new
+		// window. A failed report keeps both, so the retry carries the
+		// same number and the panel applies it once.
+		a.statusMu.Lock()
+		a.trafficSeq++
+		a.trafficSince = time.Now()
+		a.statusMu.Unlock()
 		a.lastReportOK.Store(time.Now().Unix())
 		a.log.Debug("report sent", "users", len(list), "state_changed", changed)
 		a.statusMu.Lock()

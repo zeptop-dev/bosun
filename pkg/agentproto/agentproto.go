@@ -73,14 +73,23 @@ type Beat struct {
 
 // Report is what bosun pushes every push interval.
 type Report struct {
-	Version  string                `json:"version"`
-	Revision string                `json:"revision"` // state revision currently applied
-	Traffic  []spec.UserTraffic    `json:"traffic,omitempty"`
-	Online   map[string][]string   `json:"online,omitempty"` // user name -> client IPs
-	Forwards []ForwardStatus       `json:"forwards,omitempty"`
-	Cores    map[string]CoreStatus `json:"cores,omitempty"`
-	Certs    []CertStatus          `json:"certs,omitempty"`
-	Host     spec.SystemStatus     `json:"host"`
+	Version  string             `json:"version"`
+	Revision string             `json:"revision"` // state revision currently applied
+	Traffic  []spec.UserTraffic `json:"traffic,omitempty"`
+	// TrafficSeq identifies this delta batch. A batch that could not be
+	// acknowledged is re-sent unchanged under the same number, so the
+	// panel can apply it exactly once. 0 = an agent that does not number
+	// its batches (before bosun 0.45).
+	TrafficSeq uint64 `json:"traffic_seq,omitempty"`
+	// TrafficWindowSeconds is how long the batch has been accumulating,
+	// so a rate can be derived from it (a backlog after an outage covers
+	// many minutes, not one).
+	TrafficWindowSeconds int                   `json:"traffic_window_seconds,omitempty"`
+	Online               map[string][]string   `json:"online,omitempty"` // user name -> client IPs
+	Forwards             []ForwardStatus       `json:"forwards,omitempty"`
+	Cores                map[string]CoreStatus `json:"cores,omitempty"`
+	Certs                []CertStatus          `json:"certs,omitempty"`
+	Host                 spec.SystemStatus     `json:"host"`
 	// Doctor is the node's latest self-check, sent when it changed and at
 	// least every 30 minutes.
 	Doctor *DoctorReport `json:"doctor,omitempty"`

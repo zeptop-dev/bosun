@@ -70,7 +70,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	// Outbounds, routing, DNS and the per-user limits also need a restart
 	// when they change; users alone can be hot-swapped.
-	if kb, err := json.Marshal(m{"o": node.Outbounds, "r": node.Routes, "d": node.DefaultOutbound, "dns": node.DNS, "lim": limitedUsers(node, users),
+	if kb, err := json.Marshal(m{"o": node.Outbounds, "r": node.Routes, "d": node.DefaultOutbound, "dns": node.DNS, "lim": limitedUserIDs(node, users),
 		// Everything else that only a restart can pick up.
 		"audit": node.AuditRules, "priv": node.PrivateDestRules(), "eg": node.EgressByIngress,
 		"cl": opt.ConnLog, "ov": node.Overrides["xray"]}); err == nil {
@@ -638,6 +638,20 @@ func renderWARP(o spec.Outbound) m {
 	}
 	if o.ProxyTag != "" {
 		out["streamSettings"] = m{"sockopt": m{"dialerProxy": o.ProxyTag}}
+	}
+	return out
+}
+
+// limitedUserIDs is the part of the speed limits the config depends on:
+// which users get a marking outbound. The rate itself only reaches the
+// kernel shaper, so changing it (a dynamic throttle) must not restart the
+// core and cut every user's connections.
+func limitedUserIDs(node *spec.Node, users []spec.User) []int64 {
+	var out []int64
+	for _, u := range users {
+		if node.EffectiveSpeedLimit(u) > 0 {
+			out = append(out, u.ID)
+		}
 	}
 	return out
 }

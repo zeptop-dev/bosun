@@ -153,6 +153,8 @@ type Agent struct {
 	sentDoctorAt  time.Time
 	pendingDoctor *doctor.Report
 	lastReport    time.Time
+	trafficSeq    uint64    // batch number of the pending deltas
+	trafficSince  time.Time // when the pending deltas started accumulating
 	lastReportErr string
 }
 
