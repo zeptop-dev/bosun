@@ -118,7 +118,10 @@ func clashProxy(l Line) m {
 		if ib.MieruHandshake != "" {
 			p["handshake-mode"] = ib.MieruHandshake
 		}
-		delete(p, "udp")
+		// udp stays true: mihomo relays UDP (QUIC, DNS) over mieru as a
+		// socks5 UDP associate. Without it mihomo skips every rule that
+		// picks this proxy for UDP and the traffic falls through to
+		// DIRECT — the "QUIC goes direct with mieru" report.
 	case spec.Snell:
 		if ib.SnellMultiUser {
 			return nil // needs the user key too; only sing-box's client has it

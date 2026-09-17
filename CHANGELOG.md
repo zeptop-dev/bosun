@@ -6,6 +6,7 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Version and updates, or from Captain's node list).
 
+- **v0.44.1** (2026-09-17) — mihomo/Clash subscriptions keep `udp: true` on mieru lines (mihomo relays UDP over mieru); with it removed mihomo skipped the proxy for every UDP flow and QUIC/DNS went DIRECT
 - **v0.44.0** (2026-09-17) — egress follows ingress (`Node.EgressByIngress`): inbounds bound to a specific address exit from that address (sing-box bind address outbound + rule, xray `sendThrough`, hysteria `bindIPv4/6`); off with a default landing outbound
 - **v0.43.0** (2026-09-17) — audit rules from the panel (`Node.AuditRules`): block rules become route rules on sing-box and xray, hits of block and log rules are matched by bosun on the log feed and reported (`Report.Audits`); `keyword:` and `regexp:` host matches in route rules on both cores
 - **v0.42.1** (2026-09-16) — Snell: the sing-box subscription now carries snell outbounds (version 4 on the wire, shared psk, `user_key` on multi-user inbounds); Surge and mihomo documents leave multi-user lines out, since those clients have no user key and v0.41.0 wrongly handed them the key as the psk (authentication failed)
