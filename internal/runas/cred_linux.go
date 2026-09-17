@@ -11,9 +11,14 @@ func Credential() *syscall.SysProcAttr {
 	if u < 0 {
 		return nil
 	}
-	const capNetBindService = 10
+	const capNetBindService, capNetAdmin = 10, 12
+	caps := []uintptr{capNetBindService}
+	if NetAdmin() {
+		// SO_MARK (the per-user speed-limit marks) needs CAP_NET_ADMIN.
+		caps = append(caps, capNetAdmin)
+	}
 	return &syscall.SysProcAttr{
 		Credential:  &syscall.Credential{Uid: uint32(u), Gid: uint32(g), NoSetGroups: true},
-		AmbientCaps: []uintptr{capNetBindService},
+		AmbientCaps: caps,
 	}
 }

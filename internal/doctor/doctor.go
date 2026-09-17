@@ -103,6 +103,8 @@ type Deps struct {
 	// account the cores run as ("" = bosun itself).
 	Egress   *egressguard.Status
 	CoreUser string
+	// CoreNetAdmin: the cores were granted CAP_NET_ADMIN (speed limits).
+	CoreNetAdmin bool
 	// Firewall is the auto-open state (nil = off or no ufw/firewalld).
 	Firewall *firewall.Status
 	// Dial overrides TCP connects (tests).
@@ -634,7 +636,11 @@ func checkIsolation(_ context.Context, d *Deps) []Check {
 	case d.Egress.Error != "":
 		c.Status, c.Detail = Fail, d.Egress.Error
 	default:
-		c.Status, c.Detail = OK, fmt.Sprintf("cores run as %s (uid %d); new connections to private, link-local and metadata ranges are dropped (%d exemption(s))", d.CoreUser, d.Egress.UID, d.Egress.Allowed)
+		extra := ""
+		if d.CoreNetAdmin {
+			extra = "; CAP_NET_ADMIN granted for the speed-limit marks"
+		}
+		c.Status, c.Detail = OK, fmt.Sprintf("cores run as %s (uid %d); new connections to private, link-local and metadata ranges are dropped (%d exemption(s))%s", d.CoreUser, d.Egress.UID, d.Egress.Allowed, extra)
 	}
 	return []Check{c}
 }

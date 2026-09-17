@@ -18,11 +18,31 @@ import (
 )
 
 var (
-	mu   sync.RWMutex
-	name string
-	uid  = -1
-	gid  = -1
+	mu       sync.RWMutex
+	name     string
+	uid      = -1
+	gid      = -1
+	netAdmin bool
 )
+
+// SetNetAdmin says whether cores need CAP_NET_ADMIN on top of the bind
+// capability: the per-user speed limits mark sockets (SO_MARK), which an
+// unprivileged process may not do. It returns whether the answer changed,
+// so running cores can be restarted with the new capability set.
+func SetNetAdmin(on bool) (changed bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	changed = netAdmin != on
+	netAdmin = on
+	return changed
+}
+
+// NetAdmin reports whether cores get CAP_NET_ADMIN.
+func NetAdmin() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	return netAdmin
+}
 
 // Set resolves the account and makes it the default for cores. A missing
 // account is created as a system user when running as root on Linux.

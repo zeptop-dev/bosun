@@ -6,6 +6,7 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Version and updates, or from Captain's node list).
 
+- **v0.44.2** (2026-09-17) — core isolation regression: with `cores.user` set, speed-limited users could not connect at all (the marking outbound failed with "operation not permitted": SO_MARK needs CAP_NET_ADMIN); cores now get CAP_NET_ADMIN while limits exist and restart when that changes; the doctor shows it
 - **v0.44.1** (2026-09-17) — mihomo/Clash subscriptions keep `udp: true` on mieru lines (mihomo relays UDP over mieru); with it removed mihomo skipped the proxy for every UDP flow and QUIC/DNS went DIRECT
 - **v0.44.0** (2026-09-17) — egress follows ingress (`Node.EgressByIngress`): inbounds bound to a specific address exit from that address (sing-box bind address outbound + rule, xray `sendThrough`, hysteria `bindIPv4/6`); off with a default landing outbound
 - **v0.43.0** (2026-09-17) — audit rules from the panel (`Node.AuditRules`): block rules become route rules on sing-box and xray, hits of block and log rules are matched by bosun on the log feed and reported (`Report.Audits`); `keyword:` and `regexp:` host matches in route rules on both cores

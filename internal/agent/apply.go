@@ -219,6 +219,13 @@ func (a *Agent) applyInner(ctx context.Context) error {
 			limits = append(limits, shaper.Limit{UserID: u.ID, Mbps: l})
 		}
 	}
+	// Marking sockets for the shaper needs CAP_NET_ADMIN; cores running as
+	// the unprivileged account get it only while limits exist, and a
+	// change means a restart so the running processes pick it up.
+	if runas.SetNetAdmin(len(limits) > 0) && runas.Active() {
+		a.log.Info("core capabilities changed, restarting cores", "net_admin", len(limits) > 0)
+		restart = true
+	}
 	if a.Shaper == nil || !a.Shaper.Supported() {
 		if len(limits) > 0 {
 			cp := *node

@@ -486,7 +486,9 @@ With `cores.user: bosun-proxy` in config.yaml (the installer writes it for
 new nodes; on an existing node add the line and restart, the account is
 created on first start) every core process — sing-box, xray, mita,
 hysteria, snell-server, realm — runs as that system account with only
-`CAP_NET_BIND_SERVICE`, while bosun itself stays root for nftables, tc and
+`CAP_NET_BIND_SERVICE` (plus `CAP_NET_ADMIN` while any user has a speed
+limit, because the limit marks sockets with `SO_MARK`; the doctor says
+when it is granted), while bosun itself stays root for nftables, tc and
 the installers. bosun hands the cores what they must read: their work
 directories and configs, and the certificate PEMs (existing ones are
 re-owned at start, new ones as they are written). Nothing else on the
