@@ -96,7 +96,7 @@ func (c *Core) Capabilities() core.Capabilities {
 }
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
-	cfg, st, err := render(node, inbounds, users, renderOptions{LogLevel: c.opt.LogLevel, APIListen: c.opt.APIListen, ConnLog: node != nil && node.ConnLog && c.opt.ConnSink != nil})
+	cfg, st, err := render(node, inbounds, users, renderOptions{LogLevel: c.opt.LogLevel, APIListen: c.opt.APIListen, ConnLog: node != nil && (node.ConnLog || len(node.AuditRules) > 0) && c.opt.ConnSink != nil})
 	if err != nil {
 		return nil, err
 	}

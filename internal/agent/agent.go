@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/zeptop-dev/bosun/internal/audit"
+
 	"github.com/zeptop-dev/bosun/internal/connlog"
 
 	"github.com/zeptop-dev/bosun/internal/egressguard"
@@ -85,6 +87,8 @@ type Agent struct {
 	// Conn buffers accepted connections for the report when the node spec
 	// asks for them; nil = never.
 	Conn *connlog.Collector
+	// Audit matches connections against the node's audit rules; nil = off.
+	Audit *audit.Collector
 	// Firewall opens listening ports in ufw/firewalld; nil = off.
 	Firewall *firewall.Manager
 	// ExtraPorts are opened along with the inbounds (the web panel port).

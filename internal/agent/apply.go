@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/zeptop-dev/bosun/internal/audit"
+
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/runas"
 
@@ -197,6 +199,16 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		return err
 	} else {
 		node = &resolved
+	}
+	// Audit rules: "block" ones go first in the route list of every core
+	// with routing; the matcher records hits for both actions.
+	if blocks := audit.BlockRules(node.AuditRules); len(blocks) > 0 {
+		cp := *node
+		cp.Routes = append(append([]spec.RouteRule(nil), blocks...), node.Routes...)
+		node = &cp
+	}
+	if a.Audit != nil {
+		a.Audit.SetRules(node.AuditRules)
 	}
 	// Per-user speed limits: the kernel shaper must exist for the marks
 	// the cores stamp to mean anything; without it the limits are ignored

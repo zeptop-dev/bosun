@@ -546,6 +546,10 @@ func addMatch(rule m, match string) {
 		rule["domain"] = appendStr(rule["domain"], "domain:"+val)
 	case "full":
 		rule["domain"] = appendStr(rule["domain"], "full:"+val)
+	case "keyword":
+		rule["domain"] = appendStr(rule["domain"], "keyword:"+val)
+	case "regexp":
+		rule["domain"] = appendStr(rule["domain"], "regexp:"+val)
 	case "ip", "ip_cidr":
 		rule["ip"] = appendStr(rule["ip"], val)
 	case "protocol":

@@ -390,6 +390,17 @@ type Remote struct {
 }
 
 // RouteRule directs matched traffic to an action.
+// AuditRule is one panel-wide audit rule. Match uses the RouteRule syntax
+// plus "keyword:" and "regexp:" for host names; Action is "block" (the
+// core rejects the connection and the hit is reported) or "log" (the
+// connection proceeds, the hit is reported).
+type AuditRule struct {
+	ID     int64    `json:"id"`
+	Name   string   `json:"name,omitempty"`
+	Match  []string `json:"match"`
+	Action string   `json:"action"`
+}
+
 type RouteRule struct {
 	Match  []string `json:"match,omitempty"`  // e.g. "domain:example.com", "ip:1.1.1.1/32", "protocol:bittorrent"
 	Action string   `json:"action,omitempty"` // "direct", "block", "outbound"
@@ -439,6 +450,10 @@ type Node struct {
 	// ConnLog asks the node to report each accepted connection (user,
 	// client address, destination) with its reports; off by default.
 	ConnLog bool `json:"conn_log,omitempty"`
+	// AuditRules are the panel's audit rules: "block" ones become route
+	// rules on every core that has routing, and every hit ("block" or
+	// "log") is reported with the user, client and destination.
+	AuditRules []AuditRule `json:"audit_rules,omitempty"`
 	// DNS lists resolvers the cores use for outbound names ("1.1.1.1",
 	// "tls://1.1.1.1", "https://dns.google/dns-query"); empty = system.
 	DNS []string `json:"dns,omitempty"`

@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/audit"
+
 	"github.com/zeptop-dev/bosun/internal/connlog"
 
 	"github.com/zeptop-dev/bosun/internal/egressguard"
@@ -142,6 +144,7 @@ type env struct {
 	reg    *core.Registry
 	inst   *coreinstall.Installer
 	conns  *connlog.Collector
+	audits *audit.Collector
 }
 
 func setup(args []string) (*env, error) {
@@ -185,6 +188,12 @@ func setup(args []string) (*env, error) {
 	}
 	reg := core.NewRegistry()
 	conns := &connlog.Collector{}
+	audits := &audit.Collector{}
+	// One log feed serves the connection log and the audit matcher.
+	sink := func(user, clientIP, host string, port int, network string) {
+		conns.Add(user, clientIP, host, port, network)
+		audits.Check(user, clientIP, host, port, network)
+	}
 	inst := coreinstall.New(cfg.CoresDir(), log)
 	if cfg.Cores.RegistryToken != "" {
 		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
@@ -212,7 +221,7 @@ func setup(args []string) (*env, error) {
 				WorkDir:     filepath.Join(cfg.DataDir, "singbox"),
 				StatsListen: sb.StatsListen,
 				LogLevel:    sb.LogLevel,
-				ConnSink:    conns.Add,
+				ConnSink:    sink,
 			}, log)
 		},
 		"xray": func() (core.Core, error) {
@@ -229,7 +238,7 @@ func setup(args []string) (*env, error) {
 				WorkDir:   filepath.Join(cfg.DataDir, "xray"),
 				APIListen: xr.APIListen,
 				LogLevel:  xr.LogLevel,
-				ConnSink:  conns.Add,
+				ConnSink:  sink,
 			}, log)
 		},
 		"hysteria": func() (core.Core, error) {
@@ -247,7 +256,7 @@ func setup(args []string) (*env, error) {
 				AuthListen:  hy.AuthListen,
 				StatsListen: hy.StatsListen,
 				LogLevel:    hy.LogLevel,
-				ConnSink:    conns.Add,
+				ConnSink:    sink,
 			}, log)
 		},
 		"mita": func() (core.Core, error) {
@@ -286,7 +295,7 @@ func setup(args []string) (*env, error) {
 			reg.Register(c)
 		}
 	}
-	return &env{cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns}, nil
+	return &env{cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns, audits: audits}, nil
 }
 
 func cmdRun(args []string) error {
@@ -365,6 +374,7 @@ func cmdRun(args []string) error {
 		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return e.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(cfg.DataDir, "realm"), Log: log}
 		ag.Guard = guard
 		ag.Conn = e.conns
+		ag.Audit = e.audits
 		if cfg.EgressGuardOn() {
 			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, cfg.Cores.EgressAllow
 		}
@@ -405,7 +415,7 @@ func cmdRun(args []string) error {
 		st := store.Settings()
 		return telegram.Settings{Token: st.TelegramToken, ChatID: st.TelegramChatID, Notify: st.TelegramNotify}
 	}}
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, conns: e.conns, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
+	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, conns: e.conns, audits: e.audits, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
 		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
@@ -471,6 +481,7 @@ type supervisor struct {
 	shaper     *shaper.Shaper
 	guard      *ingressguard.Guard
 	conns      *connlog.Collector
+	audits     *audit.Collector
 	firewall   *firewall.Manager
 	extraPorts []firewall.Port
 	onAgent    func(*agent.Agent)
@@ -534,6 +545,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return s.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(s.cfg.DataDir, "realm"), Log: s.log}
 		ag.Guard = s.guard
 		ag.Conn = s.conns
+		ag.Audit = s.audits
 		if s.cfg.EgressGuardOn() {
 			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, s.cfg.Cores.EgressAllow
 		}

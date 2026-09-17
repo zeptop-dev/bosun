@@ -441,6 +441,21 @@ it when the set changes. Host-name targets and UDP work; there are no byte
 or connection counters. The doctor fails a realm rule when the process is
 not running.
 
+### Audit rules
+
+The panel may push audit rules (`Node.AuditRules`): each is a route-rule
+match list (`domain:`, `full:`, `keyword:`, `regexp:`, `ip:`, `port:`,
+`inbound:`, `geosite:`, `geoip:`, `protocol:`) with action `block` or
+`log`. Block rules are prepended to the node's route rules on every core
+with routing (sing-box, xray; hysteria and mita do not route, so they
+neither block nor report). Every hit of either action is matched by bosun
+itself on the same log feed the connection log uses (so xray's access log
+and hysteria's debug log are switched on while rules exist) and reported
+with the next report as user, inbound, client address, destination and
+rule; one hit per user and rule per minute, 2000 buffered. `geosite`,
+`geoip` and `protocol` matches block in the core but cannot be evaluated
+for the hit log.
+
 ### Connection log
 
 When the panel asks for it (`Node.ConnLog`, Captain's Settings → Connection

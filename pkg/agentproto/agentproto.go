@@ -96,6 +96,22 @@ type Report struct {
 	// ones the bounded buffer had to discard.
 	Connections []ConnEvent `json:"connections,omitempty"`
 	ConnDropped int         `json:"conn_dropped,omitempty"`
+	// Audits are the audit-rule hits since the last report (Node.AuditRules).
+	Audits       []AuditHit `json:"audits,omitempty"`
+	AuditDropped int        `json:"audit_dropped,omitempty"`
+}
+
+// AuditHit is one connection that matched an audit rule.
+type AuditHit struct {
+	At       int64  `json:"at"`
+	User     string `json:"user"`
+	Inbound  string `json:"inbound,omitempty"`
+	ClientIP string `json:"client_ip"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	RuleID   int64  `json:"rule_id"`
+	RuleName string `json:"rule_name,omitempty"`
+	Action   string `json:"action"`
 }
 
 // ConnEvent is one accepted connection.

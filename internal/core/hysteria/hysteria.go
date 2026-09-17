@@ -102,7 +102,7 @@ func (c *Core) Capabilities() core.Capabilities {
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
 	c.mu.Lock()
-	c.connLog = node != nil && node.ConnLog && c.opt.ConnSink != nil
+	c.connLog = node != nil && (node.ConnLog || len(node.AuditRules) > 0) && c.opt.ConnSink != nil
 	c.mu.Unlock()
 	opt := renderOptions{
 		AuthURL:     "http://" + c.opt.AuthListen + "/auth",

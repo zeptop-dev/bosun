@@ -215,6 +215,9 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 	if a.Conn != nil {
 		rep.Connections, rep.ConnDropped = a.Conn.Drain()
 	}
+	if a.Audit != nil {
+		rep.Audits, rep.AuditDropped = a.Audit.Drain()
+	}
 	if a.Certs != nil {
 		for _, st := range a.Certs.Status() {
 			rep.Certs = append(rep.Certs, agentproto.CertStatus{Domain: st.Domain, Method: st.Method, NotAfter: st.NotAfter, Error: st.Error})
