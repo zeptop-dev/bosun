@@ -57,7 +57,11 @@ func (a *Agent) report(ctx context.Context) bool {
 		}
 		a.statusMu.Lock()
 		if a.trafficSeq == 0 {
-			a.trafficSeq = 1
+			// Seeded from the clock, not from 1: the number lives in
+			// memory, and a series that restarted at 1 after every
+			// restart would make the panel see numbers it had already
+			// passed. Seconds are plenty — one batch per report.
+			a.trafficSeq = uint64(time.Now().Unix())
 		}
 		if a.trafficSince.IsZero() {
 			a.trafficSince = time.Now()
