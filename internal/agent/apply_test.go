@@ -126,3 +126,41 @@ func TestWARPAccountFileFallback(t *testing.T) {
 		t.Fatalf("account should load from the file: %+v", got)
 	}
 }
+
+// A rule the cores cannot render is dropped here and reported, instead of
+// being written into a config no core will load: the panel is trusted to
+// mean well, not to be correct, and one bad rule must not take a node's
+// whole configuration down.
+func TestValidateNodeDropsUnrenderableRules(t *testing.T) {
+	node := &spec.Node{
+		Routes: []spec.RouteRule{
+			{Match: []string{"domain:example.com"}, Action: "direct"},
+			{Match: []string{"ip:not-an-address"}, Action: "direct"},
+		},
+		AuditRules: []spec.AuditRule{
+			{ID: 1, Name: "bt", Match: []string{"protocol:bittorrent"}, Action: "block"},
+			{ID: 2, Name: "empty", Match: []string{"keyword:"}, Action: "block"},
+			{ID: 3, Name: "bad port", Match: []string{"port:not-a-port"}, Action: "log"},
+		},
+	}
+	var reported []string
+	got := validateNode(node, slog.Default(), func(msgs []string) { reported = msgs })
+	if len(got.Routes) != 1 || got.Routes[0].Match[0] != "domain:example.com" {
+		t.Fatalf("routes = %v", got.Routes)
+	}
+	if len(got.AuditRules) != 1 || got.AuditRules[0].ID != 1 {
+		t.Fatalf("audit rules = %v", got.AuditRules)
+	}
+	if len(reported) != 3 {
+		t.Fatalf("the doctor was told about %d of 3 dropped rules: %v", len(reported), reported)
+	}
+	// The caller's node is left alone, so nothing else sees the trimmed copy.
+	if len(node.AuditRules) != 3 {
+		t.Fatalf("the incoming node was modified in place")
+	}
+	// A node whose rules are all fine is passed through untouched.
+	clean := &spec.Node{AuditRules: []spec.AuditRule{{ID: 1, Name: "bt", Match: []string{"protocol:bittorrent"}, Action: "block"}}}
+	if validateNode(clean, slog.Default(), nil) != clean {
+		t.Fatal("a valid node was copied for no reason")
+	}
+}
