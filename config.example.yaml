@@ -7,7 +7,7 @@ metrics_listen: 127.0.0.1:9100   # Prometheus text endpoint at /metrics; remove 
 # has tested into <data_dir>/cores/<core>/<version>/ on first start (see
 # `bosun core list`). Set `version` to pin a manifest version, or `binary` to
 # use your own build.
-# min_version: v0.44.2      # refuse any self-update or rollback below this tag
+# min_version: v0.47.0      # refuse any self-update or rollback below this tag
 
 cores:
   order: [singbox, xray, mita, hysteria]   # preference when several cores can serve an inbound
