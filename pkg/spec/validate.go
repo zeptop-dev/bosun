@@ -54,6 +54,24 @@ func (i Inbound) Validate() error {
 	if i.AcceptProxyProtocol && i.Core != "" && i.Core != "xray" {
 		return fmt.Errorf("accept_proxy_protocol is served by xray only")
 	}
+	if i.ShadowTLS != nil {
+		if i.Protocol != Shadowsocks {
+			return fmt.Errorf("shadow_tls wraps a shadowsocks inbound (got %s)", i.Protocol)
+		}
+		if i.Core != "" && i.Core != "singbox" {
+			return fmt.Errorf("shadow_tls is served by sing-box; core %q cannot", i.Core)
+		}
+		host, port := i.ShadowTLS.HandshakeHostPort()
+		if host == "" || strings.ContainsAny(host, " \t\"") {
+			return fmt.Errorf("shadow_tls needs a handshake server, e.g. www.apple.com:443")
+		}
+		if port < 1 || port > 65535 {
+			return fmt.Errorf("shadow_tls handshake port out of range")
+		}
+		if i.TLS != nil && i.TLS.Mode != TLSNone {
+			return fmt.Errorf("shadow_tls provides the TLS itself; leave the inbound's own TLS off")
+		}
+	}
 	switch i.Protocol {
 	case VLESS, VMess, Trojan, HTTP, SOCKS:
 	case Shadowsocks:

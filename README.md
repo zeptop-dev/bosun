@@ -548,6 +548,35 @@ installed even when `cores.user` is unset.
 The doctor check "Core isolation" shows the account, the guard's state and
 the protected control ports, and warns when cores still run as root.
 
+### ShadowTLS
+
+A Shadowsocks inbound can be wrapped in ShadowTLS v3 (`Inbound.ShadowTLS`,
+sing-box only — Xray has no ShadowTLS; REALITY is its answer to the same
+problem). bosun then renders two inbounds: the public one is the
+`shadowtls` listener, which performs a real TLS handshake with a site you
+name (`handshake`, e.g. `www.apple.com:443`) and hands only authenticated
+clients through to the Shadowsocks inbound, which moves to loopback. A
+prober that connects sees that site's certificate and nothing else.
+
+Every user gets their own ShadowTLS password, derived from their UUID
+(`spec.ShadowTLSUserKey`), so a client needs two credentials — the
+ShadowTLS password and the Shadowsocks key — and revoking a user revokes
+both. `strict_mode` is on by default, which makes the listener refuse a
+ClientHello the handshake server would not accept.
+
+Subscriptions carry it where the client can express it: mihomo and Stash
+as `plugin: shadow-tls` with `plugin-opts`, sing-box as a `shadowtls`
+outbound the Shadowsocks outbound dials through (`detour`), Surge and Loon
+as the flat `shadow-tls-*` keys, and share links as the
+`?plugin=shadow-tls;…` form. The version is always written out because
+mihomo, Stash and the link readers default to v2.
+
+The sing-box document asks for a uTLS fingerprint, which is what makes the
+handshake look like a browser's rather than Go's. Official sing-box
+releases and the build bosun's own CI publishes both include `with_utls`;
+a sing-box compiled without that tag refuses the whole document, so build
+your own client with it if you build one.
+
 ### Strict ingress for mita and firewall auto-open
 
 mita 3.37.0 and later bind a line-bound inbound's address natively

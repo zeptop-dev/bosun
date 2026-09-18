@@ -69,6 +69,19 @@ func clashProxy(l Line) m {
 		p["type"] = "ss"
 		p["cipher"] = ib.Cipher
 		p["password"] = ssPassword(l)
+		if ib.ShadowTLS != nil {
+			// mihomo carries ShadowTLS as a plugin on the ss proxy. The
+			// version has to be written out: mihomo defaults to 2.
+			host, _ := ib.ShadowTLS.HandshakeHostPort()
+			p["plugin"] = "shadow-tls"
+			p["plugin-opts"] = map[string]any{
+				"host":     host,
+				"password": spec.ShadowTLSUserKey(l.UUID),
+				"version":  3,
+			}
+			p["client-fingerprint"] = "chrome"
+			p["udp-over-tcp"] = true
+		}
 	case spec.Hysteria2:
 		p["type"] = "hysteria2"
 		p["password"] = l.Password

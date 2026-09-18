@@ -27,6 +27,26 @@ func (SingBox) Render(lines []Line, _ Account) ([]byte, error) {
 		for k, v := range l.Extra {
 			o[k] = v
 		}
+		// ShadowTLS is a second outbound the real one dials through: the
+		// carrier holds the address and speaks TLS to the handshake site,
+		// and the protocol outbound keeps only its own credentials.
+		if st := l.Inbound.ShadowTLS; st != nil {
+			host, _ := st.HandshakeHostPort()
+			carrier := m{
+				"type":        "shadowtls",
+				"tag":         l.Name + " (shadowtls)",
+				"server":      o["server"],
+				"server_port": o["server_port"],
+				"version":     3,
+				"password":    spec.ShadowTLSUserKey(l.UUID),
+				"tls":         m{"enabled": true, "server_name": host, "utls": m{"enabled": true, "fingerprint": "chrome"}},
+			}
+			delete(o, "server")
+			delete(o, "server_port")
+			o["detour"] = carrier["tag"]
+			o["udp_over_tcp"] = m{"enabled": true, "version": 2}
+			outbounds = append(outbounds, carrier)
+		}
 		outbounds = append(outbounds, o)
 		names = append(names, l.Name)
 	}

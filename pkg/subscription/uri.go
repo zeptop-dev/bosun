@@ -69,6 +69,14 @@ func shareURI(l Line) string {
 		uriTransport(q, l)
 		return "trojan://" + url.PathEscape(l.Password) + "@" + hostPort + "?" + q.Encode() + frag
 	case spec.Shadowsocks:
+		if st := ib.ShadowTLS; st != nil {
+			// The de-facto form every converter understands. The version is
+			// always written out: readers default it to 2.
+			host, _ := st.HandshakeHostPort()
+			q := url.Values{}
+			q.Set("plugin", "shadow-tls;host="+host+";password="+spec.ShadowTLSUserKey(l.UUID)+";version=3")
+			return "ss://" + b64(ib.Cipher+":"+ssPassword(l)) + "@" + hostPort + "/?" + q.Encode() + frag
+		}
 		return "ss://" + b64(ib.Cipher+":"+ssPassword(l)) + "@" + hostPort + frag
 	case spec.Hysteria2:
 		q := url.Values{}

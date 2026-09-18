@@ -48,6 +48,10 @@ func surgeLine(l Line) string {
 			return "" // Surge does not support SS2022 multi-user keys
 		}
 		parts = append(parts, "encrypt-method="+ib.Cipher, "password="+l.Password, "udp-relay=true")
+		if st := ib.ShadowTLS; st != nil {
+			host, _ := st.HandshakeHostPort()
+			parts = append(parts, "shadow-tls-password="+spec.ShadowTLSUserKey(l.UUID), "shadow-tls-sni="+host, "shadow-tls-version=3")
+		}
 		return line("ss") + ", " + strings.Join(parts, ", ")
 	case spec.VMess:
 		parts = append(parts, "username="+l.UUID)

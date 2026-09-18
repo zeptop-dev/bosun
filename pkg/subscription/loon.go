@@ -39,6 +39,10 @@ func loonLine(l Line) string {
 			return "" // Loon has no SS2022 multi-user support
 		}
 		parts = append(head("Shadowsocks"), ib.Cipher, q(ssPassword(l)), "fast-open=false", "udp=true")
+		if st := ib.ShadowTLS; st != nil {
+			host, _ := st.HandshakeHostPort()
+			parts = append(parts, "shadow-tls-password="+spec.ShadowTLSUserKey(l.UUID), "shadow-tls-sni="+host, "shadow-tls-version=3")
+		}
 	case spec.VMess:
 		t, ok := loonTransport(l)
 		if !ok {

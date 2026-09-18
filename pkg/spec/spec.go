@@ -4,6 +4,8 @@
 package spec
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -197,6 +199,13 @@ type Inbound struct {
 	SnellVersion  int    `json:"snell_version,omitempty"`   // snell: 4 or 5 (0 = 5)
 	SnellObfs     string `json:"snell_obfs,omitempty"`      // snell: "", "http" or "tls"
 	SnellObfsHost string `json:"snell_obfs_host,omitempty"` // snell: obfs host header
+	// ShadowTLS wraps this inbound in a ShadowTLS v3 listener: the public
+	// port speaks TLS to a real site (Handshake) and only an authenticated
+	// client is handed through to the inbound itself, which then listens on
+	// loopback. sing-box only — Xray has no ShadowTLS (REALITY is its
+	// answer to the same problem). Shadowsocks is the protocol every
+	// client pairs it with.
+	ShadowTLS *ShadowTLS `json:"shadow_tls,omitempty"`
 	// SnellMultiUser serves the inbound from sing-box's multi-user snell
 	// server: SnellPSK stays the server key, and each user connects with
 	// their own key (User.Password), so traffic is accounted per user.
@@ -706,4 +715,42 @@ func (n *Node) PrivateDestRules() []RouteRule {
 		blocked = append(blocked, "ip:"+c)
 	}
 	return append(out, RouteRule{Match: blocked, Action: "block"})
+}
+
+// ShadowTLS is the v3 listener in front of an inbound. The handshake
+// server is a real HTTPS site whose certificate a prober sees; it must
+// support TLS 1.3 and should be unrelated to this node.
+type ShadowTLS struct {
+	// Handshake is the site the listener speaks TLS to, "host:port"
+	// (port defaults to 443).
+	Handshake string `json:"handshake"`
+	// StrictMode rejects clients whose ClientHello does not match what the
+	// handshake server would accept. On by default for new inbounds.
+	StrictMode bool `json:"strict_mode,omitempty"`
+}
+
+// HandshakeHostPort splits the handshake target, defaulting the port.
+func (s *ShadowTLS) HandshakeHostPort() (string, int) {
+	host, port := strings.TrimSpace(s.Handshake), 443
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		host = h
+		if n, err := strconv.Atoi(p); err == nil && n > 0 {
+			port = n
+		}
+	}
+	return host, port
+}
+
+// ShadowTLSTag is the tag of the inbound that carries the real protocol
+// behind a ShadowTLS listener; the listener keeps the operator's tag, so
+// entries, routing rules and statistics keep naming the inbound.
+func ShadowTLSTag(tag string) string { return tag + "-inner" }
+
+// ShadowTLSUserKey derives a user's ShadowTLS password from their UUID.
+// It is a separate credential from the Shadowsocks key — a client needs
+// both — and deriving it keeps the panel from having to store and push a
+// second secret per user.
+func ShadowTLSUserKey(uuid string) string {
+	sum := sha256.Sum256([]byte("shadow-tls:" + uuid))
+	return base64.StdEncoding.EncodeToString(sum[:16])
 }

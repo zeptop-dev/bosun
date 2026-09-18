@@ -33,6 +33,9 @@ func stashProxy(p m) m {
 		delete(p, "servername")
 	}
 	delete(p, "smux")
+	// mihomo-only keys; Stash understands the shadow-tls plugin itself.
+	delete(p, "client-fingerprint")
+	delete(p, "udp-over-tcp")
 	switch p["type"] {
 	case "hysteria2":
 		p["auth"] = p["password"]

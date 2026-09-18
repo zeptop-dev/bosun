@@ -42,6 +42,19 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		if err != nil {
 			return nil, err
 		}
+		// ShadowTLS: the operator's tag belongs to the public listener, and
+		// the real protocol moves to a loopback inbound it hands
+		// authenticated connections to. Statistics stay on the inner
+		// inbound, which is where the users are.
+		if ib.ShadowTLS != nil {
+			inner, ok := in["tag"].(string)
+			if !ok {
+				return nil, fmt.Errorf("singbox: inbound %q: missing tag", ib.Tag)
+			}
+			in["tag"] = spec.ShadowTLSTag(inner)
+			in["listen"], in["listen_port"] = "127.0.0.1", 0
+			ins = append(ins, renderShadowTLS(ib, ibUsers, in["tag"].(string)))
+		}
 		ins = append(ins, in)
 	}
 
@@ -635,4 +648,25 @@ func sortedKeys(mm map[string][]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// renderShadowTLS is the public listener: it speaks TLS to a real site and
+// passes an authenticated client through to the inbound behind it
+// (detour). Version 3 with one password per user, so the panel can tell
+// users apart and revoke one of them.
+func renderShadowTLS(ib spec.Inbound, users []spec.User, detour string) m {
+	host, port := ib.ShadowTLS.HandshakeHostPort()
+	return m{
+		"type":        "shadowtls",
+		"tag":         ib.Tag,
+		"listen":      listenAddr(ib.Listen),
+		"listen_port": ib.Port,
+		"detour":      detour,
+		"version":     3,
+		"strict_mode": ib.ShadowTLS.StrictMode,
+		"handshake":   m{"server": host, "server_port": port},
+		"users": mapUsers(users, func(u spec.User) m {
+			return m{"name": spec.InboundUser(u.Name, ib.Tag), "password": spec.ShadowTLSUserKey(u.UUID)}
+		}),
+	}
 }
