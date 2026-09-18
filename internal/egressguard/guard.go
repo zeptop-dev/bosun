@@ -35,7 +35,8 @@ type Status struct {
 	Supported bool   `json:"supported"`
 	UID       int    `json:"uid"`
 	Allowed   int    `json:"allowed"`
-	Loopback  bool   `json:"loopback"` // loopback closed except LoopbackPorts
+	Loopback  bool   `json:"loopback"`  // loopback closed except LoopbackPorts
+	Protected []int  `json:"protected"` // control ports only root may reach
 	Error     string `json:"error,omitempty"`
 }
 
@@ -60,6 +61,12 @@ type Options struct {
 	// (53 for a DNS stub, hysteria's auth callback, the decoy site).
 	// Everything else on loopback is dropped.
 	LoopbackPorts []int
+	// ProtectedPorts are the cores' own control APIs (sing-box's
+	// v2ray_api, xray's api): unauthenticated gRPC on loopback that can
+	// add users, edit inbounds and reset counters. Only root — bosun
+	// itself — may reach them; every other local account is dropped,
+	// whether or not it is a core.
+	ProtectedPorts []int
 }
 
 // Guard installs the table and keeps it in step with the desired state.
@@ -112,10 +119,20 @@ func (g *Guard) Status() Status {
 // Script renders the nft script for uid; opt.Allow lists cidrs (sorted, so
 // the text is stable) that stay reachable. uid < 0 renders nothing.
 func Script(uid int, opt Options) string {
-	if uid < 0 {
+	protected := ports(opt.ProtectedPorts)
+	if uid < 0 && len(protected) == 0 {
 		return ""
 	}
 	var a4, a6 []string
+	if uid < 0 {
+		// No core account: the only rule worth having is the one that
+		// keeps every non-root local process away from the control APIs.
+		var b strings.Builder
+		fmt.Fprintf(&b, "table inet %s {\n  chain output {\n    type filter hook output priority filter; policy accept;\n", table)
+		writeProtected(&b, protected)
+		b.WriteString("  }\n}\n")
+		return b.String()
+	}
 	for _, c := range opt.Allow {
 		ip, n, err := net.ParseCIDR(strings.TrimSpace(c))
 		if err != nil {
@@ -138,6 +155,7 @@ func Script(uid int, opt Options) string {
 	sort.Strings(a6)
 	var b strings.Builder
 	fmt.Fprintf(&b, "table inet %s {\n  chain output {\n    type filter hook output priority filter; policy accept;\n", table)
+	writeProtected(&b, protected)
 	if len(a4) > 0 {
 		fmt.Fprintf(&b, "    meta skuid %d ip daddr { %s } accept\n", uid, strings.Join(a4, ", "))
 	}
@@ -175,6 +193,7 @@ func Script(uid int, opt Options) string {
 // is a no-op.
 func (g *Guard) Apply(ctx context.Context, uid int, opt Options) error {
 	script := Script(uid, opt)
+	protected := ports(opt.ProtectedPorts)
 	g.mu.Lock()
 	same := script == g.applied
 	g.mu.Unlock()
@@ -196,7 +215,7 @@ func (g *Guard) Apply(ctx context.Context, uid int, opt Options) error {
 			_, err = g.run(ctx, script, "nft", "-f", "-")
 		}
 	}
-	st := Status{Supported: true, UID: uid, Allowed: len(opt.Allow), Loopback: len(opt.LoopbackPorts) > 0}
+	st := Status{Supported: true, UID: uid, Allowed: len(opt.Allow), Loopback: len(opt.LoopbackPorts) > 0, Protected: protected}
 	if err != nil {
 		st.Error = err.Error()
 		g.set(st)
@@ -259,4 +278,34 @@ func blockedIP(ip net.IP) bool {
 		}
 	}
 	return false
+}
+
+// ports normalises and sorts a port list.
+func ports(in []int) []int {
+	out := make([]int, 0, len(in))
+	seen := map[int]bool{}
+	for _, p := range in {
+		if p > 0 && p < 65536 && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	sort.Ints(out)
+	return out
+}
+
+// writeProtected drops every non-root connection to the control ports on
+// loopback. bosun runs as root and is unaffected; a core, a compromised
+// core, or any other unprivileged process on the node is not.
+func writeProtected(b *strings.Builder, protected []int) {
+	if len(protected) == 0 {
+		return
+	}
+	list := make([]string, 0, len(protected))
+	for _, p := range protected {
+		list = append(list, strconv.Itoa(p))
+	}
+	set := strings.Join(list, ", ")
+	fmt.Fprintf(b, "    meta skuid != 0 ip daddr %s tcp dport { %s } drop\n", loop4, set)
+	fmt.Fprintf(b, "    meta skuid != 0 ip6 daddr %s tcp dport { %s } drop\n", loop6, set)
 }

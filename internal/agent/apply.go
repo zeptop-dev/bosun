@@ -371,7 +371,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 		if node.Decoy != nil && node.Decoy.Port > 0 {
 			ports = append(ports, node.Decoy.Port)
 		}
-		if err := a.Egress.Apply(ctx, uid, egressguard.Options{Allow: allow, LoopbackPorts: ports}); err != nil {
+		if err := a.Egress.Apply(ctx, uid, egressguard.Options{Allow: allow, LoopbackPorts: ports, ProtectedPorts: a.EgressProtectedPorts}); err != nil {
 			a.log.Error("egress guard", "err", err)
 		}
 		st := a.Egress.Status()

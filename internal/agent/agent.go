@@ -87,6 +87,9 @@ type Agent struct {
 	Egress              *egressguard.Guard
 	EgressAllow         []string
 	EgressLoopbackPorts []int
+	// EgressProtectedPorts are the cores' own control APIs: only root
+	// (bosun) may reach them, whoever else runs on the node.
+	EgressProtectedPorts []int
 	// Conn buffers accepted connections for the report when the node spec
 	// asks for them; nil = never.
 	Conn *connlog.Collector

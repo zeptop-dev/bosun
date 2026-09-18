@@ -536,8 +536,17 @@ off, `Node.PrivateDestAllow` lists exceptions). The nft guard is the
 backstop for destinations reached by name, which a route rule on
 addresses cannot see.
 
-The doctor check "Core isolation" shows the account and the guard's
-state and warns when cores still run as root.
+The cores' own control APIs are the third layer. sing-box's `v2ray_api`
+and xray's `api` are unauthenticated gRPC on loopback (127.0.0.1:9101 and
+:9102 by default) and can add users, change inbounds and reset counters —
+upstream offers no password for either. The guard therefore drops **every
+non-root** connection to those ports, not just the core account's, so
+neither a compromised core nor any other unprivileged process on the node
+can reach them; bosun runs as root and is unaffected. This rule is
+installed even when `cores.user` is unset.
+
+The doctor check "Core isolation" shows the account, the guard's state and
+the protected control ports, and warns when cores still run as root.
 
 ### Strict ingress for mita and firewall auto-open
 

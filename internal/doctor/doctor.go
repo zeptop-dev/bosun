@@ -646,6 +646,9 @@ func checkIsolation(_ context.Context, d *Deps) []Check {
 		if d.CoreNetAdmin {
 			extra = "; CAP_NET_ADMIN granted for the speed-limit marks"
 		}
+		if n := len(d.Egress.Protected); n > 0 {
+			extra += fmt.Sprintf("; the cores' own control ports (%s) are root-only", joinPorts(d.Egress.Protected))
+		}
 		c.Status, c.Detail = OK, fmt.Sprintf("cores run as %s (uid %d); new connections to private, link-local and metadata ranges are dropped (%d exemption(s))%s", d.CoreUser, d.Egress.UID, d.Egress.Allowed, extra)
 	}
 	return []Check{c}
@@ -662,4 +665,13 @@ func checkRules(_ context.Context, d *Deps) []Check {
 	c.Status = Fail
 	c.Detail = strings.Join(d.RejectedRules, "; ")
 	return []Check{c}
+}
+
+// joinPorts renders a port list for a doctor detail line.
+func joinPorts(ports []int) string {
+	out := make([]string, 0, len(ports))
+	for _, p := range ports {
+		out = append(out, strconv.Itoa(p))
+	}
+	return strings.Join(out, ", ")
 }

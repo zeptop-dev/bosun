@@ -382,6 +382,7 @@ func cmdRun(args []string) error {
 		if cfg.EgressGuardOn() {
 			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, cfg.Cores.EgressAllow
 			ag.EgressLoopbackPorts = loopbackPorts(cfg)
+			ag.EgressProtectedPorts = controlPorts(cfg)
 		}
 		ag.Firewall, ag.ExtraPorts = fw, extraPorts
 		current.ag = ag
@@ -554,6 +555,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		if s.cfg.EgressGuardOn() {
 			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, s.cfg.Cores.EgressAllow
 			ag.EgressLoopbackPorts = loopbackPorts(s.cfg)
+			ag.EgressProtectedPorts = controlPorts(s.cfg)
 		}
 		ag.Firewall, ag.ExtraPorts = s.firewall, s.extraPorts
 		ag.WARPAccount, ag.SaveWARP = s.store.WARP, s.store.SetWARP
@@ -822,6 +824,33 @@ func (s *supervisor) telegramStatus(ctx context.Context) string {
 // cores: hysteria dials bosun's auth endpoint on every new client. The
 // cores' own API sockets, bosun's metrics and the web panel are left
 // closed on purpose (see internal/egressguard).
+// controlPorts are the cores' own API sockets: unauthenticated gRPC on
+// loopback that can add users, change inbounds and reset counters. The
+// egress guard keeps every local account except root away from them.
+func controlPorts(cfg *config.Config) []int {
+	var out []int
+	add := func(addr, def string) {
+		if strings.TrimSpace(addr) == "" {
+			addr = def
+		}
+		if _, port, err := net.SplitHostPort(addr); err == nil {
+			if n, err := strconv.Atoi(port); err == nil {
+				out = append(out, n)
+			}
+		}
+	}
+	if cfg.Cores.Singbox != nil {
+		add(cfg.Cores.Singbox.StatsListen, "127.0.0.1:9101")
+	}
+	if cfg.Cores.Xray != nil {
+		add(cfg.Cores.Xray.APIListen, "127.0.0.1:9102")
+	}
+	if cfg.Cores.Hysteria != nil {
+		add(cfg.Cores.Hysteria.StatsListen, "")
+	}
+	return out
+}
+
 func loopbackPorts(cfg *config.Config) []int {
 	var out []int
 	if cfg.Cores.Hysteria != nil {
