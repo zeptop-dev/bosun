@@ -12,7 +12,7 @@
   "dependencies": {
     "@mantine/charts": "8",
     "@mantine/core": "8",
-    "@mantine/form": "8",
+    "@mantine/form": "9",
     "@mantine/hooks": "8",
     "@mantine/modals": "8",
     "@mantine/notifications": "8",
