@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - run: scripts/build-singbox.sh "${{ inputs.version }}" linux amd64 dist
         env: { SUFFIX: "${{ inputs.suffix }}" }
@@ -32,5 +32,5 @@ jobs:
         run: |
           gh release create "singbox-${{ inputs.version }}${{ inputs.suffix }}" --prerelease \
             --title "sing-box ${{ inputs.version }}${{ inputs.suffix }} (bosun build)" \
-            --notes "Unmodified upstream sing-box v${{ inputs.version }} built with tags with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme,with_wireguard. Consumed by bosun's core installer." \
+            --notes "Unmodified upstream sing-box v${{ inputs.version }} built with $(go env GOVERSION) and tags with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme,with_wireguard. Consumed by bosun's core installer." \
             dist/sing-box-* dist/SHA256SUMS

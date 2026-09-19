@@ -18,11 +18,12 @@ jobs:
         with: { node-version: 24, cache: pnpm, cache-dependency-path: web/ui/pnpm-lock.yaml }
       - run: python3 scripts/i18n-check.py web/ui/src/i18n
       - run: cd web/ui && pnpm install --frozen-lockfile && pnpm exec oxlint src && pnpm build
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       # A tag must clear the same gates as master: a red commit may not ship.
       - run: git ls-files '*.go' | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
       - run: go vet ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
       - run: make linux VERSION="${GITHUB_REF_NAME}"
       - run: cd bin && sha256sum bosun-linux-* > SHA256SUMS && cat SHA256SUMS

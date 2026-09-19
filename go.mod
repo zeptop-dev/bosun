@@ -2,6 +2,8 @@ module github.com/zeptop-dev/bosun
 
 go 1.26.0
 
+toolchain go1.26.8
+
 require (
 	github.com/caddyserver/certmagic v0.25.4
 	github.com/libdns/cloudflare v0.2.2

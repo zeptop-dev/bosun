@@ -1,0 +1,22 @@
+# Weekly update PRs, grouped so a week's worth of bumps is one review.
+# Security updates are not grouped and arrive on their own.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      go-modules: { patterns: ["*"] }
+  - package-ecosystem: npm
+    directory: /web/ui
+    schedule: { interval: weekly }
+    groups:
+      web-minor: { patterns: ["*"], update-types: [minor, patch] }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }
