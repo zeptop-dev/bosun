@@ -41,6 +41,9 @@ type Stats struct {
 	TotalConn  int64
 	BytesIn    int64 // client -> target
 	BytesOut   int64 // target -> client
+	// Targets is per-hop state when the rule has further targets; Up and
+	// RTT above are then "some hop is up" and the preferred hop's RTT.
+	Targets []TargetStats
 }
 
 // rule is one running forward with its listeners.
@@ -55,12 +58,13 @@ type rule struct {
 	bytesIn  atomic.Int64
 	bytesOut atomic.Int64
 
-	probeMu   sync.Mutex
-	up        bool
-	rtt       time.Duration
-	lastError string
-	// nftBroken marks an nft rule whose ruleset could not be installed; the
-	// target probe then never reports it up.
+	// hops is Target followed by Targets, each with its own probe state.
+	hops   []*hop
+	pickMu sync.Mutex
+
+	probeMu sync.Mutex
+	// nftBroken marks an nft or realm rule whose backend could not be
+	// installed; the target probe then never reports it up.
 	nftBroken bool
 }
 
@@ -81,7 +85,7 @@ func NewManager(log *slog.Logger) *Manager {
 }
 
 func key(f spec.Forward) string {
-	return fmt.Sprintf("%s|%s|%d|%s|%s|%s|%t|%t", f.Tag, f.Listen, f.Port, f.Protocol, f.Target, f.Backend, f.PreserveSource, f.ProxyProtocol)
+	return fmt.Sprintf("%s|%s|%d|%s|%s|%s|%t|%t|%v|%s", f.Tag, f.Listen, f.Port, f.Protocol, f.Target, f.Backend, f.PreserveSource, f.ProxyProtocol, f.Hops(), f.BalanceMode())
 }
 
 // Apply makes the running set match forwards: unchanged rules keep their
@@ -168,7 +172,7 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 // but still probes the target so the panel sees its health.
 func startProbeOnly(f spec.Forward, log *slog.Logger) *rule {
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &rule{spec: f, cancel: cancel, log: log.With("tag", f.Tag), up: true}
+	r := &rule{spec: f, cancel: cancel, log: log.With("tag", f.Tag), hops: newHops(f)}
 	r.wg.Add(1)
 	go r.probeLoop(ctx)
 	return r
@@ -200,14 +204,27 @@ func (m *Manager) Snapshot() []Stats {
 	defer m.mu.Unlock()
 	out := make([]Stats, 0, len(m.rules))
 	for _, r := range m.rules {
-		r.probeMu.Lock()
 		s := Stats{
 			Tag: r.spec.Tag, Protocol: r.spec.Protocol, Port: r.spec.Port, Target: r.spec.Target, Backend: r.spec.Backend,
-			Up: r.up, RTT: r.rtt, LastError: r.lastError,
 			ActiveConn: r.active.Load(), TotalConn: r.total.Load(),
 			BytesIn: r.bytesIn.Load(), BytesOut: r.bytesOut.Load(),
 		}
-		r.probeMu.Unlock()
+		for i, h := range r.hops {
+			up, rtt, lastErr := h.state()
+			if up && !s.Up {
+				s.Up, s.RTT = true, rtt
+			}
+			if i == 0 {
+				s.LastError = lastErr
+			}
+			if len(r.hops) > 1 {
+				s.Targets = append(s.Targets, TargetStats{Target: h.target, Up: up, RTT: rtt, LastError: lastErr,
+					ActiveConn: h.active.Load(), TotalConn: h.total.Load()})
+			}
+		}
+		if s.Up {
+			s.LastError = ""
+		}
 		out = append(out, s)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Tag < out[j].Tag })
@@ -251,6 +268,9 @@ func validate(forwards []spec.Forward) error {
 		if _, _, err := net.SplitHostPort(f.Target); err != nil {
 			return fmt.Errorf("forward %q: target must be host:port: %w", f.Tag, err)
 		}
+		if err := f.ValidateTargets(); err != nil {
+			return fmt.Errorf("forward %q: %w", f.Tag, err)
+		}
 		for _, p := range protocols(f) {
 			k := p + ":" + f.Listen + ":" + strconv.Itoa(f.Port)
 			if other, dup := seen[k]; dup {
@@ -271,7 +291,7 @@ func protocols(f spec.Forward) []string {
 
 func start(f spec.Forward, log *slog.Logger) (*rule, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &rule{spec: f, cancel: cancel, log: log.With("tag", f.Tag), up: true}
+	r := &rule{spec: f, cancel: cancel, log: log.With("tag", f.Tag), hops: newHops(f)}
 	addr := net.JoinHostPort(f.Listen, strconv.Itoa(f.Port))
 	var closers []func()
 	for _, p := range protocols(f) {
@@ -318,15 +338,12 @@ func (r *rule) stop() {
 	r.wg.Wait()
 }
 
+// setProbe puts every hop in one state (a backend that failed to install
+// takes all of them down).
 func (r *rule) setProbe(up bool, rtt time.Duration, err error) {
-	r.probeMu.Lock()
-	r.up, r.rtt = up, rtt
-	if err != nil {
-		r.lastError = err.Error()
-	} else {
-		r.lastError = ""
+	for _, h := range r.hops {
+		h.set(up, rtt, err)
 	}
-	r.probeMu.Unlock()
 }
 
 // probeLoop measures a TCP connect to the target periodically, retrying
@@ -348,6 +365,8 @@ func (r *rule) probeLoop(ctx context.Context) {
 	}
 }
 
+// probe measures a TCP connect to every hop, concurrently, and reports
+// whether all of them answered.
 func (r *rule) probe(ctx context.Context) bool {
 	r.probeMu.Lock()
 	broken := r.nftBroken
@@ -356,30 +375,41 @@ func (r *rule) probe(ctx context.Context) bool {
 		// The ruleset is not installed; keep the apply error visible.
 		return false
 	}
-	dctx, cancel := context.WithTimeout(ctx, probeTimeout)
-	defer cancel()
-	start := time.Now()
-	var d net.Dialer
-	c, err := d.DialContext(dctx, "tcp", r.spec.Target)
-	rtt := time.Since(start)
-	wasUp := r.isUp()
-	if err != nil {
-		r.setProbe(false, 0, err)
-		if wasUp {
-			r.log.Warn("target down", "target", r.spec.Target, "err", err)
-		}
-		return false
+	var wg sync.WaitGroup
+	var down atomic.Int32
+	for _, h := range r.hops {
+		wg.Add(1)
+		go func(h *hop) {
+			defer wg.Done()
+			dctx, cancel := context.WithTimeout(ctx, probeTimeout)
+			defer cancel()
+			start := time.Now()
+			var d net.Dialer
+			c, err := d.DialContext(dctx, "tcp", h.target)
+			rtt := time.Since(start)
+			if err != nil {
+				down.Add(1)
+				if h.set(false, 0, err) {
+					r.log.Warn("target down", "target", h.target, "err", err)
+				}
+				return
+			}
+			c.Close()
+			if h.set(true, rtt, nil) {
+				r.log.Info("target up", "target", h.target, "rtt", rtt.Round(time.Millisecond))
+			}
+		}(h)
 	}
-	c.Close()
-	r.setProbe(true, rtt, nil)
-	if !wasUp {
-		r.log.Info("target up", "target", r.spec.Target, "rtt", rtt.Round(time.Millisecond))
-	}
-	return true
+	wg.Wait()
+	return down.Load() == 0
 }
 
+// isUp says whether some hop is up.
 func (r *rule) isUp() bool {
-	r.probeMu.Lock()
-	defer r.probeMu.Unlock()
-	return r.up
+	for _, h := range r.hops {
+		if h.isUp() {
+			return true
+		}
+	}
+	return false
 }

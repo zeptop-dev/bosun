@@ -437,7 +437,21 @@
     "preserveSourceHint": "No MASQUERADE: the target sees the real client address, so it must route replies back through this node or nothing connects.",
     "preserveShort": "source kept",
     "backendRealm": "Realm (separate process)",
-    "backendRealmHint": "bosun installs and runs a zhboner/realm relay: high throughput, hostname targets and UDP; no connection or traffic counters."
+    "backendRealmHint": "bosun installs and runs a zhboner/realm relay: high throughput, hostname targets and UDP; no connection or traffic counters.",
+    "moreTargets": "More targets",
+    "moreTargetsHint": "Further next hops for the same rule: a backup line, or more lines to spread connections over. Health is a TCP connect every 30 s.",
+    "addTarget": "Add target",
+    "weight": "Weight",
+    "primaryWeight": "Weight of the first target",
+    "balance": "With several targets",
+    "balanceFailover": "Failover — first healthy target",
+    "balanceRoundRobin": "Round-robin — spread by weight",
+    "balanceFailoverHint": "New connections go to the first target that passes its health check; a failed connect moves on to the next before the client notices.",
+    "balanceRoundRobinHint": "New connections are spread over the healthy targets in proportion to their weights. One connection still uses one target.",
+    "realmRoundRobinOnly": "realm spreads connections but cannot retry another target, so it only offers round-robin.",
+    "nftOneTarget": "nftables forwards to one address; use the built-in relay or realm for several targets.",
+    "failoverShort": "failover",
+    "roundRobinShort": "round-robin"
   },
   "settings": {
     "title": "Settings",

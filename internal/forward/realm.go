@@ -47,6 +47,18 @@ func realmConfig(rules []spec.Forward) string {
 			listen = "0.0.0.0"
 		}
 		fmt.Fprintf(&b, "\n[[endpoints]]\n# %s\nlisten = %q\nremote = %q\n", f.Tag, net.JoinHostPort(listen, strconv.Itoa(f.Port)), f.Target)
+		if len(f.Targets) > 0 {
+			// realm balances per connection (no failover; the spec check
+			// refuses that combination) with weights for remote first.
+			var extra, weights []string
+			for i, h := range f.Hops() {
+				if i > 0 {
+					extra = append(extra, strconv.Quote(h.Target))
+				}
+				weights = append(weights, strconv.Itoa(h.Weight))
+			}
+			fmt.Fprintf(&b, "extra_remotes = [%s]\nbalance = \"roundrobin: %s\"\n", strings.Join(extra, ", "), strings.Join(weights, ", "))
+		}
 		var opts []string
 		switch f.Protocol {
 		case "udp":

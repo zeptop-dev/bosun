@@ -69,3 +69,34 @@ func TestInboundUser(t *testing.T) {
 		}
 	}
 }
+
+func TestForwardValidateTargets(t *testing.T) {
+	two := []ForwardTarget{{Target: "b.example:443"}}
+	cases := []struct {
+		name string
+		f    Forward
+		ok   bool
+	}{
+		{"single target", Forward{Target: "a:1"}, true},
+		{"failover relay", Forward{Target: "a:1", Targets: two}, true},
+		{"roundrobin realm", Forward{Target: "a:1", Backend: "realm", Balance: BalanceRoundRobin, Targets: two}, true},
+		{"failover realm", Forward{Target: "a:1", Backend: "realm", Targets: two}, false},
+		{"nft", Forward{Target: "a:1", Backend: "nft", Targets: two}, false},
+		{"unknown balance", Forward{Target: "a:1", Balance: "random"}, false},
+		{"bad extra", Forward{Target: "a:1", Targets: []ForwardTarget{{Target: "nohost"}}}, false},
+		{"bad port", Forward{Target: "a:1", Targets: []ForwardTarget{{Target: "b:70000"}}}, false},
+		{"duplicate", Forward{Target: "a:1", Targets: []ForwardTarget{{Target: "a:1"}}}, false},
+		{"weight", Forward{Target: "a:1", Targets: []ForwardTarget{{Target: "b:1", Weight: 101}}}, false},
+		{"quote", Forward{Target: "a:1", Targets: []ForwardTarget{{Target: `b":1`}}}, false},
+		{"too many", Forward{Target: "a:1", Targets: make([]ForwardTarget, MaxForwardHops)}, false},
+	}
+	for _, c := range cases {
+		if err := c.f.ValidateTargets(); (err == nil) != c.ok {
+			t.Errorf("%s: err = %v, want ok=%v", c.name, err, c.ok)
+		}
+	}
+	h := Forward{Target: "a:1", Weight: 0, Targets: []ForwardTarget{{Target: "b:1", Weight: 3}}}.Hops()
+	if len(h) != 2 || h[0].Weight != 1 || h[1].Weight != 3 {
+		t.Fatalf("hops: %+v", h)
+	}
+}

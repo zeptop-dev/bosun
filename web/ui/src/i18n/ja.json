@@ -437,7 +437,21 @@
     "preserveSourceHint": "MASQUERADE しないため宛先にはクライアントの実 IP が見えます。宛先サーバーが応答をこのノード経由で返すよう経路設定されていないと接続できません。",
     "preserveShort": "送信元保持",
     "backendRealm": "Realm（別プロセス）",
-    "backendRealmHint": "bosun が zhboner/realm を導入して実行。高スループット、ホスト名の宛先と UDP に対応。接続数・通信量の統計なし。"
+    "backendRealmHint": "bosun が zhboner/realm を導入して実行。高スループット、ホスト名の宛先と UDP に対応。接続数・通信量の統計なし。",
+    "moreTargets": "追加のターゲット",
+    "moreTargetsHint": "同じルールの別の転送先：予備回線、または接続を分散する追加の回線。ヘルスチェックは 30 秒ごとの TCP 接続です。",
+    "addTarget": "ターゲットを追加",
+    "weight": "重み",
+    "primaryWeight": "最初のターゲットの重み",
+    "balance": "ターゲットが複数あるとき",
+    "balanceFailover": "フェイルオーバー — 最初の正常なターゲット",
+    "balanceRoundRobin": "ラウンドロビン — 重みで分散",
+    "balanceFailoverHint": "新しい接続はヘルスチェックに通った最初のターゲットへ。接続に失敗すると、クライアントが気づく前に次へ切り替えます。",
+    "balanceRoundRobinHint": "新しい接続を正常なターゲットへ重みに比例して分散します。1 本の接続は 1 つのターゲットだけを使います。",
+    "realmRoundRobinOnly": "realm は接続を分散できますが別のターゲットへ再接続しないため、ラウンドロビンのみです。",
+    "nftOneTarget": "nftables は 1 つのアドレスにしか転送できません。複数のターゲットには内蔵リレーか realm を使ってください。",
+    "failoverShort": "フェイルオーバー",
+    "roundRobinShort": "ラウンドロビン"
   },
   "settings": {
     "title": "設定",

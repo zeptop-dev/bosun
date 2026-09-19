@@ -19,7 +19,7 @@ Verified end to end against the manifest's tested releases (sing-box
 - mita adapter (official mieru server): config file + `mita run` as a child, gRPC over a unix socket for hot user reload, proxy restart on port change, and per-user counters (deltas computed by bosun). Verified with the official mieru client. Inbounds carry the client knobs too: `mieru_mtu` (server `mtu` and the link's `mtu=`), `mieru_multiplexing` (`MULTIPLEXING_OFF|LOW|MIDDLE|HIGH`), `mieru_handshake` (`HANDSHAKE_NO_WAIT|STANDARD`), and `mieru_transport: BOTH` binds TCP at the port and UDP at port+1 in one inbound (the `mierus://` link lists both).
 - Snell: served by sing-box (bosun >= 0.41; its snell server speaks v5, which is v4's wire protocol without the QUIC mode nobody implements) with one server `psk`, optional `obfs` http, and — with `snell_multi_user` — a key per user (the user's password) so traffic is accounted per user like every other sing-box inbound. Only sing-box's own client (1.14+) can present a user key, so the sing-box subscription carries such lines with `user_key` while Surge, Stash and mihomo documents leave them out; shared-psk lines reach every client. Surge's closed-source `snell-server` stays as the `snell` core for `obfs` tls or when sing-box is disabled: one process per inbound, everyone shares the PSK, no per-user accounting. The share "link" is a Surge proxy line (`NAME = snell, host, port, psk=…, version=5`), which Surge, Loon and mihomo import.
 - Per-user traffic via each core's own control plane, hand-encoded protobuf, no generated stubs (`internal/core/grpcraw`).
-- Built-in relay (`internal/forward`): TCP and UDP port forwarding to the next hop with per-rule byte and connection counters and a TCP probe of the target (5 s retry while down, 30 s while up). Rules come from the config file with Xboard; a panel that manages forwarding (Captain) supplies them through the `panel.ForwardSource` interface. Two more backends per rule: nftables kernel DNAT and a supervised realm process (see "Forwarding chains"). Verified e2e: mihomo connecting to the relay port reaches an Xray REALITY landing behind it.
+- Built-in relay (`internal/forward`): TCP and UDP port forwarding to the next hop with per-rule byte and connection counters and a TCP probe of the target (5 s retry while down, 30 s while up); a rule may list further targets for failover or weighted round-robin (see "Several targets"). Rules come from the config file with Xboard; a panel that manages forwarding (Captain) supplies them through the `panel.ForwardSource` interface. Two more backends per rule: nftables kernel DNAT and a supervised realm process (see "Forwarding chains"). Verified e2e: mihomo connecting to the relay port reaches an Xray REALITY landing behind it.
 - Online devices: cores that know which IPs a user connects from report them (Xray via its online-IP stats API, Hysteria from auth callbacks); the panel uses them for device limits. Upstream sing-box and mita expose no per-user connection info, so inbounds on those cores do not count toward device limits.
 - Prometheus endpoint (`metrics_listen`, `/metrics`): core running state, provisioned users, and per-forward up/rtt/connections/bytes. No client library.
 - Supervised child process: log relay, restart with backoff, graceful stop.
@@ -416,6 +416,28 @@ each hop, pointing at the next hop. The landing node serves the real protocol
 front of it relay raw bytes and report bytes, connections and probe results.
 Clients get the landing node's protocol settings with the entry host and port,
 which Xboard's separate `host`/`port` vs `server_port` fields already express.
+
+### Several targets: failover and round-robin
+
+A rule can name further next hops in `targets` (`[{target, weight}]`, at
+most eight hops in all) — a backup line for when the first one is down, or
+more lines to spread connections over. `balance` picks per new connection:
+
+- `failover` (the default): the first hop whose TCP probe is up. A dial
+  that fails moves on to the next hop at once, before the client has sent
+  a byte, and marks the failed hop down without waiting for its next probe;
+  a recovered hop takes new connections again. Built-in relay only.
+- `roundrobin`: connections spread over the hops that are up, in
+  proportion to `weight` (`weight` on the rule is the first target's),
+  interleaved rather than in runs. Built-in relay and realm (realm's
+  `extra_remotes` + `balance = "roundrobin: …"`; realm does not retry a
+  failed hop, which is why it offers no failover).
+
+One connection always uses one hop: this spreads and survives lines, it does
+not make a single download faster. nftables DNAT forwards to one address and
+refuses extra targets. The report carries per-hop health, RTT and
+connection counts (`targets` in each forward status; bosun ≥ 0.49), and an
+older agent ignores the extra fields and keeps using `target`.
 
 ### PROXY protocol (real client addresses behind a relay)
 

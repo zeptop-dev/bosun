@@ -437,7 +437,21 @@
     "preserveSourceHint": "不做 MASQUERADE，目标看到的是客户端真实 IP；目标服务器必须把回包路由回本机，否则不通。",
     "preserveShort": "保留源 IP",
     "backendRealm": "Realm（独立进程）",
-    "backendRealmHint": "由 bosun 安装并运行 zhboner/realm 中转，吞吐高，支持域名目标和 UDP；没有连接数和流量统计。"
+    "backendRealmHint": "由 bosun 安装并运行 zhboner/realm 中转，吞吐高，支持域名目标和 UDP；没有连接数和流量统计。",
+    "moreTargets": "更多目标",
+    "moreTargetsHint": "同一规则的其他下一跳：备用线路，或用来分摊连接的更多线路。健康检测为每 30 秒一次 TCP 连接。",
+    "addTarget": "添加目标",
+    "weight": "权重",
+    "primaryWeight": "第一个目标的权重",
+    "balance": "多个目标时",
+    "balanceFailover": "故障切换 — 用第一个健康的目标",
+    "balanceRoundRobin": "轮询 — 按权重分摊",
+    "balanceFailoverHint": "新连接走第一个通过健康检测的目标；连接失败会在客户端察觉之前改连下一个。",
+    "balanceRoundRobinHint": "新连接按权重分摊到健康的目标上。单条连接仍只走一个目标。",
+    "realmRoundRobinOnly": "realm 能分摊连接，但不会改连另一个目标，所以只支持轮询。",
+    "nftOneTarget": "nftables 只能转发到一个地址；多个目标请用内置转发或 realm。",
+    "failoverShort": "故障切换",
+    "roundRobinShort": "轮询"
   },
   "settings": {
     "title": "设置",

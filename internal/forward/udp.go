@@ -7,10 +7,24 @@ import (
 	"time"
 )
 
-// udpSession is one client address mapped to one socket towards the target.
+// udpSession is one client address mapped to one socket towards a hop.
 type udpSession struct {
 	conn net.Conn
+	hop  *hop
 	last time.Time
+}
+
+// dialUDP opens a socket towards the first candidate hop that can be dialed
+// (for UDP that only fails on resolution or routing).
+func (r *rule) dialUDP() (net.Conn, *hop) {
+	for _, h := range r.candidates() {
+		t, err := net.DialTimeout("udp", h.target, dialTimeout)
+		if err == nil {
+			return t, h
+		}
+		r.log.Debug("udp dial target failed", "target", h.target, "err", err)
+	}
+	return nil, nil
 }
 
 // serveUDP relays datagrams with a per-client NAT table.
@@ -42,6 +56,7 @@ func (r *rule) serveUDP(ctx context.Context, pc net.PacketConn) {
 						s.conn.Close()
 						delete(sessions, k)
 						r.active.Add(-1)
+						s.hop.active.Add(-1)
 					}
 				}
 				mu.Unlock()
@@ -62,22 +77,24 @@ func (r *rule) serveUDP(ctx context.Context, pc net.PacketConn) {
 		mu.Lock()
 		s, ok := sessions[k]
 		if !ok {
-			t, err := net.DialTimeout("udp", r.spec.Target, dialTimeout)
-			if err != nil {
+			t, h := r.dialUDP()
+			if t == nil {
 				mu.Unlock()
-				r.log.Debug("udp dial target failed", "target", r.spec.Target, "err", err)
 				continue
 			}
-			s = &udpSession{conn: t, last: time.Now()}
+			s = &udpSession{conn: t, hop: h, last: time.Now()}
 			sessions[k] = s
 			r.total.Add(1)
 			r.active.Add(1)
+			h.total.Add(1)
+			h.active.Add(1)
 			r.wg.Add(1)
 			go r.udpReturn(ctx, pc, from, s, func() {
 				mu.Lock()
 				if cur, still := sessions[k]; still && cur == s {
 					delete(sessions, k)
 					r.active.Add(-1)
+					s.hop.active.Add(-1)
 				}
 				mu.Unlock()
 			})

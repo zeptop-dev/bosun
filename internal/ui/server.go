@@ -476,8 +476,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		st := a.Status()
 		ag = st
 		for _, f := range st.Forwards {
-			forwards = append(forwards, agentproto.ForwardStatus{Tag: f.Tag, Up: f.Up, RTTMillis: f.RTT.Milliseconds(), LastError: f.LastError,
-				ActiveConn: f.ActiveConn, TotalConn: f.TotalConn, BytesIn: f.BytesIn, BytesOut: f.BytesOut})
+			forwards = append(forwards, f.Status())
 		}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
@@ -761,8 +760,7 @@ func (s *Server) listForwards(w http.ResponseWriter, r *http.Request) {
 	status := map[string]agentproto.ForwardStatus{}
 	if a := s.currentAgent(); a != nil {
 		for _, f := range a.ForwardStats() {
-			status[f.Tag] = agentproto.ForwardStatus{Tag: f.Tag, Up: f.Up, RTTMillis: f.RTT.Milliseconds(), LastError: f.LastError,
-				ActiveConn: f.ActiveConn, TotalConn: f.TotalConn, BytesIn: f.BytesIn, BytesOut: f.BytesOut}
+			status[f.Tag] = f.Status()
 		}
 	}
 	type row struct {

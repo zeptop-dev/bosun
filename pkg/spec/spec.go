@@ -438,6 +438,54 @@ type Forward struct {
 	// online-device counting. Not for the nft backend (kernel DNAT keeps
 	// the source anyway when PreserveSource is on).
 	ProxyProtocol bool `json:"proxy_protocol,omitempty"`
+	// Targets are further next hops of the same rule (built-in relay and
+	// realm): a backup line for when Target's is down, or more lines to
+	// spread connections over. Balance decides which hop a new connection
+	// takes; an old agent ignores both and keeps using Target.
+	Targets []ForwardTarget `json:"targets,omitempty"`
+	// Balance is "failover" (the default: the first hop whose probe is up,
+	// and a failed dial moves on to the next before the client has sent a
+	// byte; built-in relay only) or "roundrobin" (connections spread by
+	// weight over the hops that are up).
+	Balance string `json:"balance,omitempty"`
+	// Weight is Target's share under roundrobin; 0 means 1.
+	Weight int `json:"weight,omitempty"`
+}
+
+// ForwardTarget is a further next hop of a Forward.
+type ForwardTarget struct {
+	Target string `json:"target"`           // host:port
+	Weight int    `json:"weight,omitempty"` // share under roundrobin; 0 means 1
+}
+
+// Balance modes of a Forward with several hops.
+const (
+	BalanceFailover   = "failover"
+	BalanceRoundRobin = "roundrobin"
+)
+
+// MaxForwardHops bounds Target plus Targets.
+const MaxForwardHops = 8
+
+// Hops returns Target followed by Targets, with weights defaulted to 1.
+func (f Forward) Hops() []ForwardTarget {
+	out := make([]ForwardTarget, 0, 1+len(f.Targets))
+	out = append(out, ForwardTarget{Target: f.Target, Weight: f.Weight})
+	out = append(out, f.Targets...)
+	for i := range out {
+		if out[i].Weight <= 0 {
+			out[i].Weight = 1
+		}
+	}
+	return out
+}
+
+// BalanceMode is Balance with the default filled in.
+func (f Forward) BalanceMode() string {
+	if f.Balance == "" {
+		return BalanceFailover
+	}
+	return f.Balance
 }
 
 // Node is the complete desired state for this server.

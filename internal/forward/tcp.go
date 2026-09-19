@@ -35,15 +35,14 @@ func (r *rule) handleTCP(ctx context.Context, c net.Conn) {
 	r.active.Add(1)
 	defer r.active.Add(-1)
 
-	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
-	var d net.Dialer
-	t, err := d.DialContext(dctx, "tcp", r.spec.Target)
-	cancel()
-	if err != nil {
-		r.log.Debug("dial target failed", "target", r.spec.Target, "err", err)
+	t, h := r.dialTCP(ctx)
+	if t == nil {
 		return
 	}
 	defer t.Close()
+	h.total.Add(1)
+	h.active.Add(1)
+	defer h.active.Add(-1)
 	if tc, ok := c.(*net.TCPConn); ok {
 		_ = tc.SetKeepAlive(true)
 	}
@@ -53,7 +52,7 @@ func (r *rule) handleTCP(ctx context.Context, c net.Conn) {
 	if r.spec.ProxyProtocol {
 		// Tell the target who really connected (PROXY protocol v2).
 		if _, err := t.Write(proxyHeaderV2(c.RemoteAddr(), c.LocalAddr())); err != nil {
-			r.log.Debug("proxy protocol header failed", "target", r.spec.Target, "err", err)
+			r.log.Debug("proxy protocol header failed", "target", h.target, "err", err)
 			return
 		}
 	}

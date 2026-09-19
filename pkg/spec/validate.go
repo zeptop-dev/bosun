@@ -364,3 +364,50 @@ func ValidateAuditRule(r AuditRule) error {
 	}
 	return nil
 }
+
+// ValidateTargets checks a forward's further hops and balance mode against
+// its backend. The panel and the agent run the same check, so a rule the
+// node would refuse never reaches it.
+func (f Forward) ValidateTargets() error {
+	switch f.Balance {
+	case "", BalanceFailover, BalanceRoundRobin:
+	default:
+		return fmt.Errorf("balance must be failover or roundrobin")
+	}
+	if f.Weight < 0 || f.Weight > 100 {
+		return fmt.Errorf("weight must be between 0 and 100")
+	}
+	if len(f.Targets) == 0 {
+		return nil
+	}
+	switch {
+	case f.Backend == "nft":
+		return fmt.Errorf("several targets need the built-in relay or realm; nft forwards to one address")
+	case f.Backend == "realm" && f.BalanceMode() == BalanceFailover:
+		return fmt.Errorf("failover needs the built-in relay; realm spreads connections (roundrobin) but does not retry another target")
+	case 1+len(f.Targets) > MaxForwardHops:
+		return fmt.Errorf("at most %d targets per rule", MaxForwardHops)
+	}
+	seen := map[string]bool{f.Target: true}
+	for i, t := range f.Targets {
+		n := i + 2
+		if !Plain(t.Target) || strings.ContainsAny(t.Target, "\"' ") {
+			return fmt.Errorf("target %d contains invalid characters", n)
+		}
+		host, port, err := net.SplitHostPort(t.Target)
+		if err != nil || host == "" {
+			return fmt.Errorf("target %d must be host:port", n)
+		}
+		if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
+			return fmt.Errorf("target %d has a bad port", n)
+		}
+		if t.Weight < 0 || t.Weight > 100 {
+			return fmt.Errorf("target %d: weight must be between 0 and 100", n)
+		}
+		if seen[t.Target] {
+			return fmt.Errorf("target %s is listed twice", t.Target)
+		}
+		seen[t.Target] = true
+	}
+	return nil
+}

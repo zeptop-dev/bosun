@@ -250,10 +250,7 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 	}
 	a.statusMu.Unlock()
 	for _, s := range a.fwd.Snapshot() {
-		rep.Forwards = append(rep.Forwards, agentproto.ForwardStatus{
-			Tag: s.Tag, Up: s.Up, RTTMillis: s.RTT.Milliseconds(), LastError: s.LastError,
-			ActiveConn: s.ActiveConn, TotalConn: s.TotalConn, BytesIn: s.BytesIn, BytesOut: s.BytesOut,
-		})
+		rep.Forwards = append(rep.Forwards, s.Status())
 	}
 	return rep
 }

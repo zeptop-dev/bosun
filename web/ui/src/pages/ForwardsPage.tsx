@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Card, Group, Modal, NumberInput, Select, Stack, Switch, Table, Tabs, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Badge, Button, Card, Group, Modal, NumberInput, Select, Stack, Switch, Table, Tabs, Text, TextInput, Tooltip } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -12,8 +12,19 @@ import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
 import RoutingPage from './RoutingPage'
 
-type Values = { tag: string; listen: string; port: number; protocol: string; target: string; backend: string; preserve_source: boolean }
-const empty: Values = { tag: '', listen: '', port: 10000, protocol: 'tcp', target: '', backend: '', preserve_source: false }
+type Values = {
+  tag: string; listen: string; port: number; protocol: string; target: string; backend: string; preserve_source: boolean; proxy_protocol: boolean
+  targets: { target: string; weight: number }[]; balance: string; weight: number
+}
+const empty: Values = { tag: '', listen: '', port: 10000, protocol: 'tcp', target: '', backend: '', preserve_source: false, proxy_protocol: false, targets: [], balance: 'failover', weight: 1 }
+
+// payload drops what the chosen backend cannot use: nft forwards to one
+// address, realm only spreads (no failover), blank rows are ignored.
+function payload(v: Values) {
+  const targets = v.backend === 'nft' ? [] : v.targets.filter((x) => x.target.trim() !== '').map((x) => ({ target: x.target.trim(), weight: x.weight }))
+  const balance = targets.length === 0 ? '' : v.backend === 'realm' ? 'roundrobin' : v.balance
+  return { ...v, targets, balance, weight: balance === 'roundrobin' ? v.weight : 0 }
+}
 
 export default function ForwardsPage() {
   const { t } = useTranslation()
@@ -23,14 +34,25 @@ export default function ForwardsPage() {
   const readOnly = me?.mode !== 'local' || !!me?.fixed
   const q = useQuery({ queryKey: ['forwards'], queryFn: () => api.get<Forward[]>('/api/forwards'), refetchInterval: 5_000 })
   const [editing, setEditing] = useState<Forward | 'new' | null>(null)
-  const form = useForm<Values>({ initialValues: empty, validate: { target: (v) => (/^.+:\d+$/.test(v) ? null : t('forwards.targetInvalid')), port: (v) => (v > 0 && v < 65536 ? null : t('form.port')) } })
+  const form = useForm<Values>({ initialValues: empty, validate: {
+    target: (v) => (/^.+:\d+$/.test(v) ? null : t('forwards.targetInvalid')),
+    port: (v) => (v > 0 && v < 65536 ? null : t('form.port')),
+    targets: { target: (v) => (v.trim() === '' || /^.+:\d+$/.test(v.trim()) ? null : t('forwards.targetInvalid')) },
+  } })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['forwards'] })
   const save = useMutation({
-    mutationFn: (v: Values) => editing === 'new' ? api.post('/api/forwards', v) : api.put(`/api/forwards/${encodeURIComponent((editing as Forward).tag)}`, v),
+    mutationFn: (v: Values) => editing === 'new' ? api.post('/api/forwards', payload(v)) : api.put(`/api/forwards/${encodeURIComponent((editing as Forward).tag)}`, payload(v)),
     onSuccess: () => { toast.ok(t('common.saved')); setEditing(null); invalidate() }, onError: toast.err,
   })
   const del = useMutation({ mutationFn: (tag: string) => api.del(`/api/forwards/${encodeURIComponent(tag)}`), onSuccess: () => { toast.ok(t('common.deleted')); invalidate() }, onError: toast.err })
-  const open = (f: Forward | 'new') => { form.setValues(f === 'new' ? empty : { tag: f.tag, listen: f.listen ?? '', port: f.port, protocol: f.protocol, target: f.target, backend: f.backend ?? '', preserve_source: !!f.preserve_source }); setEditing(f) }
+  const open = (f: Forward | 'new') => {
+    form.setValues(f === 'new' ? empty : {
+      tag: f.tag, listen: f.listen ?? '', port: f.port, protocol: f.protocol, target: f.target, backend: f.backend ?? '',
+      preserve_source: !!f.preserve_source, proxy_protocol: !!f.proxy_protocol,
+      targets: (f.targets ?? []).map((x) => ({ target: x.target, weight: x.weight || 1 })), balance: f.balance || 'failover', weight: f.weight || 1,
+    })
+    setEditing(f)
+  }
   return (
     <>
       <PageHeader title={t('outbound.title')} subtitle={t('outbound.subtitle')} actions={tab === 'forwards' && !readOnly && <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>{t('forwards.create')}</Button>} />
@@ -49,8 +71,10 @@ export default function ForwardsPage() {
               <Table.Tr key={f.tag}>
                 <Table.Td><Text fw={600} size="sm">{f.tag}</Text></Table.Td>
                 <Table.Td><Text size="sm">{f.listen || '0.0.0.0'}:{f.port} <Badge variant="outline" color="gray" ml={4}>{f.protocol}</Badge></Text></Table.Td>
-                <Table.Td><Text size="sm" ff="monospace">{f.target}</Text>{f.backend === 'realm' && <Badge size="xs" variant="light" color="indigo" ml={4}>realm</Badge>}{f.backend === 'nft' && <Badge size="xs" variant="light" color="grape" ml={4}>nft{f.preserve_source ? ' · ' + t('forwards.preserveShort') : ''}</Badge>}</Table.Td>
-                <Table.Td>{f.status ? <Badge color={f.status.up ? 'teal' : 'red'} title={f.status.last_error}>{f.status.up ? `${f.status.rtt_ms} ms` : t('forwards.down')}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
+                <Table.Td><Text size="sm" ff="monospace" span>{f.target}</Text>{(f.targets ?? []).length > 0 && <Tooltip label={(f.targets ?? []).map((x) => x.target).join(', ')}><Badge size="xs" variant="light" ml={4}>+{f.targets!.length} · {f.balance === 'roundrobin' ? t('forwards.roundRobinShort') : t('forwards.failoverShort')}</Badge></Tooltip>}{f.backend === 'realm' && <Badge size="xs" variant="light" color="indigo" ml={4}>realm</Badge>}{f.backend === 'nft' && <Badge size="xs" variant="light" color="grape" ml={4}>nft{f.preserve_source ? ' · ' + t('forwards.preserveShort') : ''}</Badge>}</Table.Td>
+                <Table.Td>{f.status?.targets ? (
+                  <Group gap={4}>{f.status.targets.map((h) => <Tooltip key={h.target} label={`${h.target}${h.last_error ? ' — ' + h.last_error : ''} · ${h.active_conn} / ${h.total_conn}`}><Badge color={h.up ? 'teal' : 'red'}>{h.up ? `${h.rtt_ms} ms` : t('forwards.down')}</Badge></Tooltip>)}</Group>
+                ) : f.status ? <Badge color={f.status.up ? 'teal' : 'red'} title={f.status.last_error}>{f.status.up ? `${f.status.rtt_ms} ms` : t('forwards.down')}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
                 <Table.Td><Text size="sm">{f.status ? `${f.status.active_conn} / ${f.status.total_conn}` : '—'}</Text></Table.Td>
                 <Table.Td><Text size="sm">{f.status ? `↑ ${bytes(f.status.bytes_in)} ↓ ${bytes(f.status.bytes_out)}` : '—'}</Text></Table.Td>
                 <Table.Td><Group gap={4} justify="flex-end" wrap="nowrap">
@@ -74,6 +98,23 @@ export default function ForwardsPage() {
           <TextInput label={t('forwards.target')} description={form.values.backend === 'nft' ? t('forwards.targetNftHint') : t('forwards.targetHint')} placeholder="203.0.113.30:443" required {...form.getInputProps('target')} />
           <Select label={t('forwards.backend')} description={form.values.backend === 'nft' ? t('forwards.backendNftHint') : form.values.backend === 'realm' ? t('forwards.backendRealmHint') : t('forwards.backendRelayHint')} data={[{ value: '', label: t('forwards.backendRelay') }, { value: 'nft', label: t('forwards.backendNft') }, { value: 'realm', label: t('forwards.backendRealm') }]} allowDeselect={false} {...form.getInputProps('backend')} />
           {form.values.backend === 'nft' && <Switch label={t('forwards.preserveSource')} description={t('forwards.preserveSourceHint')} {...form.getInputProps('preserve_source', { type: 'checkbox' })} />}
+          {form.values.backend === 'nft' ? <Text size="xs" c="dimmed">{t('forwards.nftOneTarget')}</Text> : <Stack gap={6}>
+            <Text size="sm" fw={500}>{t('forwards.moreTargets')}</Text>
+            <Text size="xs" c="dimmed" mt={-4}>{t('forwards.moreTargetsHint')}</Text>
+            {form.values.targets.map((_, i) => (
+              <Group key={i} gap="xs" wrap="nowrap" align="flex-start">
+                <TextInput style={{ flex: 1 }} placeholder="198.51.100.20:443" {...form.getInputProps(`targets.${i}.target`)} />
+                {(form.values.balance === 'roundrobin' || form.values.backend === 'realm') && <NumberInput w={90} min={1} max={100} placeholder={t('forwards.weight')} {...form.getInputProps(`targets.${i}.weight`)} />}
+                <ActionIcon variant="subtle" color="red" mt={6} onClick={() => form.removeListItem('targets', i)}><IconTrash size={16} /></ActionIcon>
+              </Group>
+            ))}
+            <Group><Button variant="subtle" size="xs" leftSection={<IconPlus size={14} />} onClick={() => form.insertListItem('targets', { target: '', weight: 1 })}>{t('forwards.addTarget')}</Button></Group>
+            {form.values.targets.length > 0 && (form.values.backend === 'realm'
+              ? <Text size="xs" c="dimmed">{t('forwards.realmRoundRobinOnly')}</Text>
+              : <Select label={t('forwards.balance')} description={form.values.balance === 'roundrobin' ? t('forwards.balanceRoundRobinHint') : t('forwards.balanceFailoverHint')}
+                  data={[{ value: 'failover', label: t('forwards.balanceFailover') }, { value: 'roundrobin', label: t('forwards.balanceRoundRobin') }]} allowDeselect={false} {...form.getInputProps('balance')} />)}
+            {form.values.targets.length > 0 && (form.values.balance === 'roundrobin' || form.values.backend === 'realm') && <NumberInput label={t('forwards.primaryWeight')} min={1} max={100} {...form.getInputProps('weight')} />}
+          </Stack>}
           <Group justify="flex-end"><Button variant="default" onClick={() => setEditing(null)}>{t('common.cancel')}</Button><Button type="submit" loading={save.isPending}>{t('common.save')}</Button></Group>
         </Stack></form>
       </Modal>

@@ -437,7 +437,21 @@
     "preserveSourceHint": "MASQUERADE 없이 대상에 클라이언트 실제 IP가 보입니다. 대상 서버가 응답을 이 노드로 되돌려 보내도록 라우팅되어야 연결됩니다.",
     "preserveShort": "원본 유지",
     "backendRealm": "Realm(별도 프로세스)",
-    "backendRealmHint": "bosun 이 zhboner/realm 을 설치·실행합니다. 높은 처리량, 호스트명 대상과 UDP 지원. 연결 수/트래픽 통계 없음."
+    "backendRealmHint": "bosun 이 zhboner/realm 을 설치·실행합니다. 높은 처리량, 호스트명 대상과 UDP 지원. 연결 수/트래픽 통계 없음.",
+    "moreTargets": "추가 대상",
+    "moreTargetsHint": "같은 규칙의 다른 다음 홉: 예비 회선이나 연결을 분산할 추가 회선. 상태 확인은 30초마다 TCP 연결입니다.",
+    "addTarget": "대상 추가",
+    "weight": "가중치",
+    "primaryWeight": "첫 번째 대상의 가중치",
+    "balance": "대상이 여러 개일 때",
+    "balanceFailover": "장애 조치 — 첫 번째 정상 대상",
+    "balanceRoundRobin": "라운드 로빈 — 가중치로 분산",
+    "balanceFailoverHint": "새 연결은 상태 확인을 통과한 첫 번째 대상으로 갑니다. 연결에 실패하면 클라이언트가 알아차리기 전에 다음 대상으로 넘어갑니다.",
+    "balanceRoundRobinHint": "새 연결을 정상 대상에 가중치 비율로 분산합니다. 한 연결은 여전히 한 대상만 사용합니다.",
+    "realmRoundRobinOnly": "realm은 연결을 분산하지만 다른 대상으로 재시도하지 않으므로 라운드 로빈만 지원합니다.",
+    "nftOneTarget": "nftables는 한 주소로만 전달합니다. 여러 대상에는 내장 릴레이나 realm을 사용하세요.",
+    "failoverShort": "장애 조치",
+    "roundRobinShort": "라운드 로빈"
   },
   "settings": {
     "title": "설정",

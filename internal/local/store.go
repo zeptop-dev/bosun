@@ -596,6 +596,9 @@ func (s *Store) PutForward(f spec.Forward, prevTag string) error {
 	if !strings.Contains(f.Target, ":") {
 		return errors.New("target must be host:port")
 	}
+	if err := f.ValidateTargets(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx := -1
