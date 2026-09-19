@@ -19,7 +19,8 @@ cores:
     stats_listen: 127.0.0.1:9101
     log_level: warn
   xray:                      # optional; the only core for xhttp, hot user add/remove on vless/vmess/trojan
-    version: "26.3.27"       # 26.9.9 breaks REALITY for mihomo/sing-box clients
+    version: "26.3.27"       # 26.9.9 breaks REALITY for mihomo/sing-box clients; a bare
+                             # upstream version uses bosun's newest tested rebuild (26.3.27-r1)
     api_listen: 127.0.0.1:9102
     log_level: warning
   mita:                      # official mieru server, for mieru nodes

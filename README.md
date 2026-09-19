@@ -8,7 +8,7 @@ API). Changes per release: [CHANGELOG.md](CHANGELOG.md).
 ## Status
 
 Verified end to end against the manifest's tested releases (sing-box
-1.14.0, Xray 26.3.27, mita 3.36.1, Hysteria 2.12.2; see the table under
+1.14.1, Xray 26.3.27, mita 3.37.0, Hysteria 2.12.3; see the table under
 "Run"):
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
@@ -319,40 +319,52 @@ Current manifest:
 
 | core | version | status | note |
 |---|---|---|---|
+| singbox | 1.14.1-r2 | tested | upstream 1.14.1 rebuilt with Go 1.26.8 (`-r1` was compiled with Go 1.26.0) |
 | singbox | 1.14.1-r1 | tested | upstream 1.14.1 built with `with_v2ray_api` and `with_wireguard` (WARP); WireGuard endpoints survive network changes |
 | singbox | 1.14.0-r2 | tested | upstream 1.14.0 built with `with_v2ray_api` and `with_wireguard` (WARP) |
 | singbox | 1.14.0 | caution | first build without `with_wireguard`; WARP outbounds fail |
-| xray | 26.3.27 | tested | REALITY works with mihomo and sing-box clients |
+| xray | 26.3.27-r1 | tested | upstream 26.3.27 rebuilt by bosun CI with Go 1.26.8 (the official binary is Go 1.26.1); REALITY works with mihomo and sing-box clients |
+| xray | 26.3.27 | tested | official binary; REALITY works with mihomo and sing-box clients |
 | xray | 26.9.9 | broken | REALITY rejects mihomo/sing-box clients |
 | mita | 3.37.0 | tested | official mieru server; line-bound inbounds bind natively (`listenIPAddress`) |
 | mita | 3.36.1 | tested | official mieru server; line-bound inbounds need the nft ingress guard |
+| hysteria | 2.12.3 | tested | official Hysteria 2 server |
 | hysteria | 2.12.2 | tested | official Hysteria 2 server |
 | snell | 5.0.0 | caution | Surge snell-server v5 (official zip, digest pinned); not verified end to end |
 | snell | 4.1.1 | caution | Surge snell-server v4 for older clients |
 | realm | 2.9.6 | caution | zhboner/realm for the `realm` forward backend; not verified end to end |
 
-## sing-box binary and CI
+## sing-box and Xray binaries, and CI
 
 Official sing-box release builds do **not** include the V2Ray stats API, which
 per-user accounting needs. `scripts/build-singbox.sh` builds the unmodified
 upstream tag with the extra tags (`with_v2ray_api` among them); module
 checksums are verified by the Go toolchain. Not a fork.
 
+Xray's official binaries are fine feature-wise but trail Go's security
+releases (26.3.27 is Go 1.26.1, which misses the crypto/tls and net/http fixes
+since), so `scripts/build-xray.sh` rebuilds the unmodified upstream tag with
+upstream's own release flags and the Go toolchain pinned in bosun's `go.mod`.
+Every Go binary bosun ships or builds — bosun itself, sing-box, Xray — uses
+that one toolchain line, and a weekly `govulncheck` run says when it is due.
+
 GitHub Actions (`.github/workflows/`) run tests on every push, and on a `v*`
 tag cross-build bosun for linux amd64/arm64 and attach the binaries plus
 `SHA256SUMS` to the GitHub Release, and push the container image. The
-`singbox` workflow (run by hand with a version) builds sing-box the same way and
-publishes it as a pre-release tagged `singbox-<version>`:
+`singbox` and `xray` workflows (run by hand with a version and a rebuild
+suffix) build those cores the same way and publish them as pre-releases:
 
 ```
-releases/download/singbox-1.14.1-r1/sing-box-1.14.1-r1-linux-{amd64,arm64}  + SHA256SUMS
+releases/download/singbox-1.14.1-r2/sing-box-1.14.1-r2-linux-{amd64,arm64}  + SHA256SUMS
+releases/download/xray-26.3.27-r1/xray-26.3.27-r1-linux-{amd64,arm64}      + SHA256SUMS
 releases/download/<tag>/bosun-linux-{amd64,arm64}                     + SHA256SUMS
 ```
 
-The installer downloads sing-box from there and verifies it against the
-published SHA256SUMS. If the download is not available (workflow not run for
-that version yet), the installer falls back to building from source, which
-needs a Go toolchain on the node. `cores.registry_token` in config.yaml is
+The installer downloads sing-box and Xray from there and verifies them against
+the published SHA256SUMS. If a sing-box download is not available (workflow not
+run for that version yet), the installer falls back to building from source,
+which needs a Go toolchain on the node; for Xray, name an older release in
+`cores.xray.version` instead. `cores.registry_token` in config.yaml is
 a leftover from the GitLab package registry days: it is sent as a
 `Deploy-Token` header, and only to bosun's own release downloads on GitHub,
 which are public and need no token, so leave it unset (the comment next to

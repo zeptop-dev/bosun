@@ -3,7 +3,10 @@
 // bosun never picks "latest", it picks the newest release marked tested.
 package coreinstall
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // Status describes how much trust a release has earned.
 type Status string
@@ -68,8 +71,28 @@ func singboxCI(version, arch string) Asset {
 	return Asset{URL: base + "sing-box-" + version + "-linux-" + arch, SumsURL: base + "SHA256SUMS", Archive: "raw"}
 }
 
+// xrayCI points at the Xray-core rebuilds published by workflow xray.yml as a
+// GitHub pre-release tagged xray-<version>.
+func xrayCI(version, arch string) Asset {
+	base := RegistryBase + "xray-" + version + "/"
+	return Asset{URL: base + "xray-" + version + "-linux-" + arch, SumsURL: base + "SHA256SUMS", Archive: "raw"}
+}
+
 // Manifest lists every release bosun knows about. Newest first per core.
 var Manifest = []Release{
+	{
+		// -r2: the same upstream v1.14.1 rebuilt with Go 1.26.8; -r1 was
+		// compiled with Go 1.26.0 and missed the crypto/tls and net/http
+		// fixes of 1.26.1-1.26.8.
+		Core: "singbox", Version: "1.14.1-r2", Status: StatusTested,
+		Note: "upstream v1.14.1 built by bosun CI (Go 1.26.8) with with_v2ray_api (per-user stats) and with_wireguard (WARP)",
+		Assets: map[string]Asset{
+			"linux/amd64": singboxCI("1.14.1-r2", "amd64"),
+			"linux/arm64": singboxCI("1.14.1-r2", "arm64"),
+		},
+		Build: &Build{Package: "github.com/sagernet/sing-box/cmd/sing-box", Version: "v1.14.1", Tags: singboxTags,
+			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.1"},
+	},
 	{
 		// 1.14.1: WireGuard endpoint no longer stalls after a network change
 		// or device sleep (WARP outbounds), selector interrupts routed
@@ -113,6 +136,18 @@ var Manifest = []Release{
 			"linux/amd64":  {URL: "https://github.com/XTLS/Xray-core/releases/download/v26.9.9/Xray-linux-64.zip", Archive: "zip", Member: "xray"},
 			"linux/arm64":  {URL: "https://github.com/XTLS/Xray-core/releases/download/v26.9.9/Xray-linux-arm64-v8a.zip", Archive: "zip", Member: "xray"},
 			"darwin/arm64": {URL: "https://github.com/XTLS/Xray-core/releases/download/v26.9.9/Xray-macos-arm64-v8a.zip", Archive: "zip", Member: "xray"},
+		},
+	},
+	{
+		// -r1: upstream v26.3.27 rebuilt by bosun CI (workflow xray.yml) with
+		// Go 1.26.8 and upstream's release flags; the official binaries are
+		// Go 1.26.1. macOS dev machines keep upstream's build.
+		Core: "xray", Version: "26.3.27-r1", Status: StatusTested,
+		Note: "upstream v26.3.27 built by bosun CI with Go 1.26.8; REALITY verified with mihomo and sing-box clients",
+		Assets: map[string]Asset{
+			"linux/amd64":  xrayCI("26.3.27-r1", "amd64"),
+			"linux/arm64":  xrayCI("26.3.27-r1", "arm64"),
+			"darwin/arm64": {URL: "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-arm64-v8a.zip", SHA256: "2e93a67e8aa1936ecefb307e120830fcbd4c643ab9b1c46a2d0838d5f8409eaf", Archive: "zip", Member: "xray"},
 		},
 	},
 	{
@@ -176,6 +211,17 @@ var Manifest = []Release{
 		},
 	},
 	{
+		// 2.12.3: plain HTTP through the HTTP proxy no longer cut after 10 s,
+		// port-hopping rules no longer redirect unrelated outbound UDP.
+		Core: "hysteria", Version: "2.12.3", Status: StatusTested,
+		Note: "official Hysteria 2 server; verified with the official client, HTTP auth and traffic stats",
+		Assets: map[string]Asset{
+			"linux/amd64":  {URL: "https://github.com/apernet/hysteria/releases/download/app%2Fv2.12.3/hysteria-linux-amd64", SHA256: "8c7a68a906998b747a0db87586e364f995fbfddb95693ae6e2fdb68a6e920d3e", Archive: "raw"},
+			"linux/arm64":  {URL: "https://github.com/apernet/hysteria/releases/download/app%2Fv2.12.3/hysteria-linux-arm64", SHA256: "c8dc653c3ba0a28d29a26b8fa52d2086f27c0927afddce95c09965e7174e78b0", Archive: "raw"},
+			"darwin/arm64": {URL: "https://github.com/apernet/hysteria/releases/download/app%2Fv2.12.3/hysteria-darwin-arm64", SHA256: "9065dc5dc9cd75f7ba881f481e8cb77e7eae17139460ca09d399682ca6fad443", Archive: "raw"},
+		},
+	},
+	{
 		Core: "hysteria", Version: "2.12.2", Status: StatusTested,
 		Note: "official Hysteria 2 server; verified with the official client, HTTP auth and traffic stats",
 		Assets: map[string]Asset{
@@ -219,6 +265,25 @@ func Find(core, version string) (Release, bool) {
 		}
 	}
 	return Release{}, false
+}
+
+// Resolve picks the release for a configured version: "" is Default, a
+// version with a rebuild suffix ("26.3.27-r1") is taken literally, and a bare
+// upstream version ("26.3.27") prefers bosun's newest tested rebuild of that
+// same release — same source, newer Go toolchain — over the upstream build,
+// so a node pinned to an upstream release still receives toolchain fixes.
+func Resolve(core, version string) (Release, bool) {
+	if version == "" {
+		return Default(core)
+	}
+	if !strings.Contains(version, "-") {
+		for _, r := range Manifest {
+			if r.Core == core && r.Status == StatusTested && strings.HasPrefix(r.Version, version+"-r") {
+				return r, true
+			}
+		}
+	}
+	return Find(core, version)
 }
 
 // Tested returns the newest release marked tested for a core.

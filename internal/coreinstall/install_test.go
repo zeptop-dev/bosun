@@ -40,8 +40,9 @@ func TestManifestSanity(t *testing.T) {
 			}
 		}
 	}
-	if r, ok := Tested("xray"); !ok || r.Version != "26.3.27" {
-		t.Fatalf("tested xray should be 26.3.27, got %+v", r)
+	// 26.9.9 breaks REALITY clients; the default must stay on the 26.3.27 line.
+	if r, ok := Tested("xray"); !ok || r.Version != "26.3.27-r1" {
+		t.Fatalf("tested xray should be 26.3.27-r1, got %+v", r)
 	}
 }
 
@@ -178,5 +179,26 @@ func TestSumsURLAndFallback(t *testing.T) {
 	rel.Assets["testos/testarch"] = Asset{URL: base + "sing-box-1.0.1-testos-testarch", SumsURL: base + "SHA256SUMS", Archive: "raw"}
 	if _, err := inst.Install(context.Background(), rel); err == nil {
 		t.Fatal("expected failure for unlisted asset")
+	}
+}
+
+func TestResolvePrefersTestedRebuild(t *testing.T) {
+	cases := []struct{ core, pin, want string }{
+		{"xray", "", "26.3.27-r1"},
+		{"xray", "26.3.27", "26.3.27-r1"},    // pinned upstream release -> its rebuild
+		{"xray", "26.3.27-r1", "26.3.27-r1"}, // suffix is literal
+		{"xray", "26.9.9", "26.9.9"},         // no rebuild: the named (broken) release
+		{"singbox", "1.14.1", "1.14.1-r2"},
+		{"singbox", "1.14.0", "1.14.0-r2"}, // the tested rebuild, not the caution build
+		{"mita", "3.36.1", "3.36.1"},
+	}
+	for _, c := range cases {
+		r, ok := Resolve(c.core, c.pin)
+		if !ok || r.Version != c.want {
+			t.Errorf("Resolve(%s, %q) = %q, %v; want %q", c.core, c.pin, r.Version, ok, c.want)
+		}
+	}
+	if _, ok := Resolve("xray", "1.0.0"); ok {
+		t.Error("unknown version must not resolve")
 	}
 }

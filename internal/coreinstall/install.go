@@ -58,8 +58,9 @@ func (i *Installer) Installed(core, version string) bool {
 
 // Ensure returns the binary path for core at version, installing it if
 // needed. An empty version selects the newest tested release (or caution
-// release if none is tested). A release marked broken is only installed when
-// explicitly named, with a warning.
+// release if none is tested); a bare upstream version selects bosun's newest
+// tested rebuild of it when there is one (see Resolve). A release marked
+// broken is only installed when explicitly named, with a warning.
 func (i *Installer) Ensure(ctx context.Context, core, version string) (string, error) {
 	var rel Release
 	var ok bool
@@ -72,7 +73,7 @@ func (i *Installer) Ensure(ctx context.Context, core, version string) (string, e
 			i.Log.Warn("no tested release; using the newest caution release", "core", core, "version", rel.Version, "note", rel.Note)
 		}
 	} else {
-		rel, ok = Find(core, version)
+		rel, ok = Resolve(core, version)
 		if !ok {
 			return "", fmt.Errorf("coreinstall: %s %s is not in the manifest", core, version)
 		}
