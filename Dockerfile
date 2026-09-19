@@ -3,7 +3,7 @@
 # relay forwards need the real interfaces. Cores are downloaded into the
 # data volume on first start, so the image itself stays small.
 
-FROM --platform=$BUILDPLATFORM node:24-alpine AS web
+FROM --platform=$BUILDPLATFORM node:25-alpine AS web
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /src/web/ui
 COPY web/ui/package.json web/ui/pnpm-lock.yaml ./
