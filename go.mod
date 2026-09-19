@@ -9,7 +9,7 @@ require (
 	github.com/libdns/cloudflare v0.2.2
 	github.com/prometheus-community/pro-bing v0.9.1
 	github.com/shirou/gopsutil/v4 v4.26.8
-	go.uber.org/zap v1.27.1
+	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.57.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
