@@ -1,0 +1,41 @@
+# Rebuilds an upstream Xray-core release with the Go toolchain pinned in
+# go.mod (upstream's binaries trail Go security releases) for linux
+# amd64/arm64 and publishes it as a pre-release tagged xray-<version><suffix>.
+# Pre-release so it never becomes "latest" for the installer's version lookup.
+name: xray
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Xray-core version (e.g. 26.3.27)
+        required: true
+      suffix:
+        description: rebuild suffix (e.g. -r1)
+        required: true
+        default: "-r1"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with: { go-version-file: go.mod }
+      - name: resolve the tag's commit
+        run: |
+          sha=$(git ls-remote https://github.com/XTLS/Xray-core "refs/tags/v${{ inputs.version }}" "refs/tags/v${{ inputs.version }}^{}" | tail -1 | cut -c1-7)
+          test -n "$sha" && echo "XRAY_COMMIT=$sha" >> "$GITHUB_ENV"
+      - run: scripts/build-xray.sh "${{ inputs.version }}" linux amd64 dist
+        env: { SUFFIX: "${{ inputs.suffix }}" }
+      - run: scripts/build-xray.sh "${{ inputs.version }}" linux arm64 dist
+        env: { SUFFIX: "${{ inputs.suffix }}" }
+      - run: cd dist && sha256sum xray-* > SHA256SUMS && cat SHA256SUMS && ./xray-${{ inputs.version }}${{ inputs.suffix }}-linux-amd64 version
+      - env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release create "xray-${{ inputs.version }}${{ inputs.suffix }}" --prerelease \
+            --title "Xray-core ${{ inputs.version }}${{ inputs.suffix }} (bosun build)" \
+            --notes "Unmodified upstream Xray-core v${{ inputs.version }} (${XRAY_COMMIT}) built with $(go env GOVERSION) and upstream's release flags. Consumed by bosun's core installer." \
+            dist/xray-* dist/SHA256SUMS
