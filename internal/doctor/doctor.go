@@ -81,8 +81,11 @@ type Deps struct {
 	Host       spec.SystemStatus
 	// Managed mode: LastReport is when the panel last accepted a report,
 	// PushInterval the report cadence; Managed false = standalone (skip).
-	Managed      bool
-	LastReport   time.Time
+	Managed    bool
+	LastReport time.Time
+	// Started is when the agent came up: before its first report has been
+	// acknowledged there is nothing to judge yet.
+	Started      time.Time
 	LastError    string
 	PushInterval time.Duration
 	// Komari exporter state.
@@ -551,6 +554,8 @@ func checkPanel(_ context.Context, d *Deps) []Check {
 		iv = time.Minute
 	}
 	switch {
+	case d.LastReport.IsZero() && !d.Started.IsZero() && now().Sub(d.Started) < 3*iv:
+		c.Status, c.Detail = Skip, "just started"
 	case d.LastReport.IsZero():
 		c.Status, c.Detail = Warn, "no report accepted yet"
 	case now().Sub(d.LastReport) > 3*iv:

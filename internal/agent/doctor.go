@@ -60,7 +60,7 @@ func (a *Agent) Doctor(ctx context.Context) doctor.Report {
 	}
 	return doctor.Run(ctx, doctor.Deps{
 		Node: n, Users: users, Cores: cores, CoresKnown: true, Forwards: fwds, Certs: certs, Host: host,
-		Managed: managed, LastReport: lastReport, LastError: lastErr, PushInterval: a.driver.Intervals().Push,
+		Managed: managed, LastReport: lastReport, LastError: lastErr, PushInterval: a.driver.Intervals().Push, Started: a.started,
 		KomariEnabled: ks.Enabled, KomariError: ks.LastError, Assign: assign, Shaper: a.Status().Shaper,
 		RealmRunning: a.Realm.Running(), Guard: a.Status().Guard, Firewall: a.Status().Firewall,
 		Egress: a.Status().Egress, CoreUser: runas.Name(), CoreNetAdmin: runas.NetAdmin(), CoreUserError: runas.Error(), RejectedRules: a.Status().RejectedRules, NativeListen: nativeListen(a.reg),

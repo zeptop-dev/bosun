@@ -139,3 +139,19 @@ func TestRealityTargets(t *testing.T) {
 		t.Fatalf("limit off warning: %+v", c)
 	}
 }
+
+// A node that just came up has not had a report accepted yet, and that is
+// not a fault: warning about it would put a red mark on the panel after
+// every restart, until the next doctor run cleared it by itself.
+func TestPanelContactIsQuietRightAfterAStart(t *testing.T) {
+	now := time.Now()
+	base := Deps{Managed: true, PushInterval: time.Minute, Now: func() time.Time { return now }}
+	base.Started = now.Add(-5 * time.Second)
+	if c := find(Run(context.Background(), base), "panel"); c.Status != Skip {
+		t.Fatalf("just started: %+v", c)
+	}
+	base.Started = now.Add(-30 * time.Minute)
+	if c := find(Run(context.Background(), base), "panel"); c.Status != Warn {
+		t.Fatalf("up for half an hour with nothing accepted: %+v", c)
+	}
+}

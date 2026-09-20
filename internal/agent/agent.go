@@ -50,6 +50,10 @@ type Agent struct {
 	metrics *metrics.Registry
 	log     *slog.Logger
 
+	// started is when this process came up, so checks can tell "nothing
+	// has happened yet" from "something stopped happening".
+	started time.Time
+
 	node  *spec.Node
 	users []spec.User
 	// userIDs maps spec.User.Name (the stats key) to the panel user ID.
@@ -231,7 +235,7 @@ func (a *Agent) ForwardStats() []forward.Stats { return a.fwd.Snapshot() }
 
 // New builds an agent. metrics may be nil.
 func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metrics.Registry, log *slog.Logger) *Agent {
-	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), kick: make(chan struct{}, 1), reportNow: make(chan struct{}, 1), doctorNow: make(chan struct{}, 1), jobsDone: map[string]bool{}, jobsRunning: map[string]bool{}}
+	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), started: time.Now(), kick: make(chan struct{}, 1), reportNow: make(chan struct{}, 1), doctorNow: make(chan struct{}, 1), jobsDone: map[string]bool{}, jobsRunning: map[string]bool{}}
 	if mreg != nil {
 		a.registerMetrics()
 	}
