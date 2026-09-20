@@ -522,8 +522,16 @@ setup. bosun looks at the root qdisc before touching it:
   line's rate and the pacing its leaf qdisc was doing, and a
   lowest-priority filter pointing at it. Removing the limits removes
   bosun's classes and filters and gives the line class its leaf back;
-- anything else — no qdisc, `fq`, `fq_codel`, `mq`, `pfifo_fast`, or
-  bosun's own HTB — is replaced with bosun's, as before.
+- bosun's own HTB, left over from before a restart, is reused: HTB has no
+  qdisc-level change operation, so replacing it would fail and take the
+  whole apply down with it;
+- anything else — no qdisc, `fq`, `fq_codel`, `mq`, `pfifo_fast` — is
+  deleted and replaced with bosun's, as before.
+
+Either way the classes and filters that should no longer be there are
+found by reading what the kernel holds, not by what bosun remembers
+installing: a restart does not clear the kernel, and the agent's memory of
+it is gone.
 
 The node status and the doctor say which of the two happened
 (`nested_under`). Nesting is what makes "the line is capped at 500 Mbit and

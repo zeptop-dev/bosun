@@ -56,9 +56,6 @@ type Shaper struct {
 	mu      sync.Mutex
 	applied string
 	status  Status
-	// installed are the users whose classes exist right now, so stale ones
-	// can be removed one by one when the root qdisc is not ours to replace.
-	installed map[int64]bool
 	// lineLeaf is the qdisc a foreign line class had before bosun nested
 	// under it, put back when the limits go.
 	lineLeaf leafQdisc
@@ -159,20 +156,115 @@ func (s *Shaper) Apply(ctx context.Context, limits []Limit) error {
 	return err
 }
 
-// removeUser deletes one user's class and filter from an interface whose
-// root qdisc is not ours to throw away.
-func (s *Shaper) removeUser(ctx context.Context, dev string, userID int64) {
-	cls := "1:" + strconv.FormatInt(spec.SpeedClass(userID), 16)
-	mark := "0x" + strconv.FormatInt(spec.SpeedMark(userID), 16)
-	_, _ = s.run(ctx, "tc", "filter", "del", "dev", dev, "parent", "1:", "protocol", "all", "prio", "1", "handle", mark, "fw")
-	_, _ = s.run(ctx, "tc", "class", "del", "dev", dev, "classid", cls)
+// ensureRoot makes dev's root qdisc an HTB of ours, and leaves one that
+// already is alone: HTB has no qdisc-level change operation, so replacing
+// our own root fails outright ("Change operation not supported by specified
+// qdisc") — which is what every bosun restart with limits in place would
+// otherwise run into.
+func (s *Shaper) ensureRoot(ctx context.Context, dev string, root rootInfo) error {
+	if root.ours {
+		return nil
+	}
+	if root.kind != "" {
+		_, _ = s.run(ctx, "tc", "qdisc", "del", "dev", dev, "root")
+	}
+	if _, err := s.run(ctx, "tc", "qdisc", "replace", "dev", dev, "root", "handle", "1:", "htb", "default", "0"); err != nil {
+		return fmt.Errorf("shaper: %w", err)
+	}
+	return nil
+}
+
+// reconcile removes the classes, and the fw filters pointing at them, of
+// users who no longer have a limit. What the kernel holds is the truth:
+// bosun may have been restarted since the classes were installed, so its
+// own memory of them is not to be trusted.
+func (s *Shaper) reconcile(ctx context.Context, dev string, root rootInfo, want map[string]bool) {
+	out, err := s.run(ctx, "tc", "class", "show", "dev", dev)
+	if err != nil {
+		return
+	}
+	var stale []string
+	for _, cls := range htbChildren(string(out), root.parent) {
+		if want[cls] || cls == root.major+":"+catchAll {
+			continue
+		}
+		stale = append(stale, cls)
+	}
+	if len(stale) == 0 {
+		return
+	}
+	drop := make(map[string]bool, len(stale))
+	for _, cls := range stale {
+		drop[cls] = true
+	}
+	if out, err := s.run(ctx, "tc", "filter", "show", "dev", dev, "parent", root.major+":"); err == nil {
+		for _, f := range fwFilters(string(out)) {
+			if drop[f.flowid] {
+				_, _ = s.run(ctx, "tc", "filter", "del", "dev", dev, "parent", root.major+":", "protocol", "all", "prio", "1", "handle", f.handle, "fw")
+			}
+		}
+	}
+	for _, cls := range stale {
+		_, _ = s.run(ctx, "tc", "class", "del", "dev", dev, "classid", cls)
+	}
+}
+
+// htbChildren lists the HTB classes hanging directly off parent, which is
+// either a root qdisc ("1:") or a class ("1:10").
+func htbChildren(out, parent string) []string {
+	var ids []string
+	underRoot := strings.HasSuffix(parent, ":")
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 4 || f[0] != "class" || f[1] != "htb" {
+			continue
+		}
+		if underRoot {
+			if f[3] != "root" || !strings.HasPrefix(f[2], parent) {
+				continue
+			}
+		} else if f[3] != "parent" || len(f) < 5 || f[4] != parent {
+			continue
+		}
+		ids = append(ids, f[2])
+	}
+	return ids
+}
+
+// fwFilter is one "handle 0x10007 fw ... classid 1:8" line.
+type fwFilter struct{ handle, flowid string }
+
+func fwFilters(out string) []fwFilter {
+	var res []fwFilter
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 || f[0] != "filter" {
+			continue
+		}
+		var got fwFilter
+		fw := false
+		for i, w := range f {
+			switch {
+			case w == "fw":
+				fw = true
+			case w == "handle" && i+1 < len(f):
+				got.handle = f[i+1]
+			case (w == "classid" || w == "flowid") && i+1 < len(f):
+				got.flowid = f[i+1]
+			}
+		}
+		if fw && got.handle != "" && got.flowid != "" {
+			res = append(res, got)
+		}
+	}
+	return res
 }
 
 // removeCatchAll takes the catch-all class and its filter away again and
 // gives the line class back the qdisc it had before bosun nested under it.
 func (s *Shaper) removeCatchAll(ctx context.Context, dev string, root rootInfo) {
-	cls := "1:" + catchAll
-	_, _ = s.run(ctx, "tc", "filter", "del", "dev", dev, "parent", "1:", "protocol", "all", "prio", "900")
+	cls := root.major + ":" + catchAll
+	_, _ = s.run(ctx, "tc", "filter", "del", "dev", dev, "parent", root.major+":", "protocol", "all", "prio", "900")
 	_, _ = s.run(ctx, "tc", "class", "del", "dev", dev, "classid", cls)
 	s.mu.Lock()
 	leaf := s.lineLeaf
@@ -189,29 +281,6 @@ func (s *Shaper) removeCatchAll(ctx context.Context, dev string, root rootInfo) 
 		args = append(args, "maxrate", leaf.maxrate)
 	}
 	_, _ = s.run(ctx, "tc", args...)
-}
-
-func (s *Shaper) installedUsers() map[int64]bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make(map[int64]bool, len(s.installed))
-	for id := range s.installed {
-		out[id] = true
-	}
-	return out
-}
-
-func (s *Shaper) setInstalled(limits []Limit) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(limits) == 0 {
-		s.installed = nil
-		return
-	}
-	s.installed = make(map[int64]bool, len(limits))
-	for _, l := range limits {
-		s.installed[l.UserID] = true
-	}
 }
 
 func (s *Shaper) setNested(parent string) { s.mu.Lock(); s.status.NestedUnder = parent; s.mu.Unlock() }
@@ -240,9 +309,11 @@ const catchAll = "fffe"
 
 // rootInfo describes the egress interface's root qdisc.
 type rootInfo struct {
-	kind   string // "htb", "fq", "" (none), ...
-	ours   bool   // an HTB we installed: handle 1: with default 0
-	parent string // where per-user classes go: "1:" or a foreign line class
+	kind    string // "htb", "fq", "" (none), ...
+	ours    bool   // an HTB we installed: handle 1: with default 0
+	foreign bool   // someone else's HTB: move in under it, never replace it
+	major   string // the handle the classes live in: "1", or theirs
+	parent  string // where per-user classes go: "1:" or a foreign line class
 	// The foreign line class and the shaping it was doing, so the same
 	// shaping can be put on the catch-all and restored on the way out.
 	lineRate string
@@ -264,9 +335,10 @@ type leafQdisc struct {
 // sends unclassified traffic to a class instead, which is where the
 // per-user classes belong so the line cap still applies above them.
 func (s *Shaper) inspectRoot(ctx context.Context, dev string) rootInfo {
+	bare := rootInfo{major: "1", parent: "1:"}
 	out, err := s.run(ctx, "tc", "qdisc", "show", "dev", dev, "root")
 	if err != nil {
-		return rootInfo{parent: "1:"}
+		return bare
 	}
 	line := strings.TrimSpace(string(out))
 	if i := strings.IndexByte(line, '\n'); i >= 0 {
@@ -274,9 +346,10 @@ func (s *Shaper) inspectRoot(ctx context.Context, dev string) rootInfo {
 	}
 	f := strings.Fields(line)
 	if len(f) < 2 || f[0] != "qdisc" {
-		return rootInfo{parent: "1:"}
+		return bare
 	}
-	info := rootInfo{kind: f[1], parent: "1:"}
+	info := bare
+	info.kind = f[1]
 	if info.kind != "htb" {
 		return info
 	}
@@ -287,16 +360,22 @@ func (s *Shaper) inspectRoot(ctx context.Context, dev string) rootInfo {
 			break
 		}
 	}
+	handle := "1"
+	if len(f) > 2 {
+		if h := strings.TrimSuffix(f[2], ":"); h != "" {
+			handle = h
+		}
+	}
 	if def == "" || def == "0" {
-		info.ours = true
+		// Ours, as long as it is where we put it; an HTB of that shape
+		// under another handle is nobody's and gets replaced.
+		info.ours = handle == "1"
 		return info
 	}
 	// Someone else's HTB: hang under the class its unclassified traffic
 	// goes to, when that class exists.
-	handle := strings.TrimSuffix(f[2], ":")
-	if handle == "" {
-		handle = "1"
-	}
+	info.foreign = true
+	info.major = handle
 	cls := handle + ":" + def
 	classes, err := s.run(ctx, "tc", "class", "show", "dev", dev)
 	if err != nil || !strings.Contains(string(classes), " "+cls+" ") {
@@ -367,7 +446,7 @@ func leafOf(out, cls string) leafQdisc {
 // unmatched there. Without it HTB's direct queue would carry that traffic
 // past the line shaper entirely.
 func (s *Shaper) keepUnlimitedShaped(ctx context.Context, dev string, root rootInfo) error {
-	cls := "1:" + catchAll
+	cls := root.major + ":" + catchAll
 	if classes, err := s.run(ctx, "tc", "class", "show", "dev", dev); err == nil && strings.Contains(string(classes), " "+cls+" ") {
 		return nil // already there; leave its shaping alone
 	}
@@ -392,7 +471,7 @@ func (s *Shaper) keepUnlimitedShaped(ctx context.Context, dev string, root rootI
 	}
 	_, _ = s.run(ctx, leaf[0], leaf[1:]...)
 	// Lowest priority: the per-user filters (prio 1) are matched first.
-	_, err := s.run(ctx, "tc", "filter", "replace", "dev", dev, "parent", "1:", "protocol", "all", "prio", "900",
+	_, err := s.run(ctx, "tc", "filter", "replace", "dev", dev, "parent", root.major+":", "protocol", "all", "prio", "900",
 		"u32", "match", "u32", "0", "0", "flowid", cls)
 	return err
 }
@@ -437,54 +516,51 @@ func (s *Shaper) install(ctx context.Context, iface string, limits []Limit) erro
 	// to someone else's line shaper, and then the per-user classes go
 	// under it rather than over it.
 	root := s.inspectRoot(ctx, iface)
-	nested := ""
-	if !root.ours && root.kind == "htb" {
-		nested = root.parent
-		if strings.Contains(nested, ":") && !strings.HasSuffix(nested, ":") {
-			if root.leaf.kind != "" {
-				s.mu.Lock()
-				s.lineLeaf = root.leaf
-				s.mu.Unlock()
-			}
-			if err := s.keepUnlimitedShaped(ctx, iface, root); err != nil {
-				return err
-			}
+	if root.foreign && !strings.HasSuffix(root.parent, ":") {
+		if root.leaf.kind != "" {
+			s.mu.Lock()
+			s.lineLeaf = root.leaf
+			s.mu.Unlock()
+		}
+		if err := s.keepUnlimitedShaped(ctx, iface, root); err != nil {
+			return err
 		}
 	}
 	for _, dev := range []string{iface, ifbDev} {
-		parent := "1:"
-		if dev == iface && nested != "" {
-			parent = nested
-		} else if _, err := s.run(ctx, "tc", "qdisc", "replace", "dev", dev, "root", "handle", "1:", "htb", "default", "0"); err != nil {
-			return fmt.Errorf("shaper: %w", err)
+		r := root
+		if dev == ifbDev {
+			// Nobody else has a claim on the ifb device.
+			r = s.inspectRoot(ctx, dev)
+			r.foreign, r.major, r.parent = false, "1", "1:"
 		}
+		if !r.foreign {
+			if err := s.ensureRoot(ctx, dev, r); err != nil {
+				return err
+			}
+		}
+		want := make(map[string]bool, len(limits))
 		for _, l := range limits {
-			cls := "1:" + strconv.FormatInt(spec.SpeedClass(l.UserID), 16)
+			cls := r.major + ":" + strconv.FormatInt(spec.SpeedClass(l.UserID), 16)
+			want[cls] = true
 			rate := strconv.Itoa(l.Mbps) + "mbit"
-			if _, err := s.run(ctx, "tc", "class", "replace", "dev", dev, "parent", parent, "classid", cls, "htb", "rate", rate, "ceil", rate); err != nil {
+			if _, err := s.run(ctx, "tc", "class", "replace", "dev", dev, "parent", r.parent, "classid", cls, "htb", "rate", rate, "ceil", rate); err != nil {
 				return fmt.Errorf("shaper: %w", err)
 			}
 			_, _ = s.run(ctx, "tc", "qdisc", "replace", "dev", dev, "parent", cls, "fq_codel")
 			mark := "0x" + strconv.FormatInt(spec.SpeedMark(l.UserID), 16)
-			if _, err := s.run(ctx, "tc", "filter", "replace", "dev", dev, "parent", "1:", "protocol", "all", "prio", "1", "handle", mark, "fw", "flowid", cls); err != nil {
+			if _, err := s.run(ctx, "tc", "filter", "replace", "dev", dev, "parent", r.major+":", "protocol", "all", "prio", "1", "handle", mark, "fw", "flowid", cls); err != nil {
 				return fmt.Errorf("shaper: %w", err)
 			}
 		}
+		// A root we rebuilt came up empty, but one we keep — a line
+		// shaper's, or our own from before a restart — still carries the
+		// classes of users who no longer have a limit.
+		s.reconcile(ctx, dev, r, want)
 	}
-	// A root we replaced came up empty, but a root we moved in under keeps
-	// the classes of users who no longer have a limit: remove those.
-	if nested != "" {
-		want := make(map[int64]bool, len(limits))
-		for _, l := range limits {
-			want[l.UserID] = true
-		}
-		for id := range s.installedUsers() {
-			if !want[id] {
-				s.removeUser(ctx, iface, id)
-			}
-		}
+	nested := ""
+	if root.foreign {
+		nested = root.parent
 	}
-	s.setInstalled(limits)
 	s.setNested(nested)
 
 	// Ingress on the real interface: restore the connection mark onto the
@@ -505,16 +581,13 @@ func (s *Shaper) clear(ctx context.Context) error {
 	iface, err := s.iface(ctx)
 	if err == nil {
 		_, _ = s.run(ctx, "tc", "qdisc", "del", "dev", iface, "ingress")
-		if root := s.inspectRoot(ctx, iface); root.ours || root.kind != "htb" {
+		if root := s.inspectRoot(ctx, iface); !root.foreign {
 			_, _ = s.run(ctx, "tc", "qdisc", "del", "dev", iface, "root")
 		} else {
-			for id := range s.installedUsers() {
-				s.removeUser(ctx, iface, id)
-			}
+			s.reconcile(ctx, iface, root, nil)
 			s.removeCatchAll(ctx, iface, root)
 		}
 	}
-	s.setInstalled(nil)
 	s.setNested("")
 	_, _ = s.run(ctx, "ip", "link", "del", ifbDev)
 	_ = s.runStdin(ctx, "delete table inet "+nftTable+"\n", "nft", "-f", "-")
