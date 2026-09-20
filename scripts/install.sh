@@ -9,6 +9,15 @@
 # through sh the script never touches the disk.
 set -eu
 
+# have_tty says whether the script can actually reach a terminal. /dev/tty
+# exists and passes [ -r ] even under "ssh host 'curl … | sh'", where
+# opening it fails with ENXIO ("cannot create /dev/tty"), so the only
+# honest test is to open it — in a subshell, because a redirection that
+# fails on a special built-in ends the whole shell under POSIX sh.
+# Without a terminal, questions are skipped and anything still missing
+# has to come from a flag.
+have_tty() { ( exec 3>/dev/tty ) 2>/dev/null; }
+
 REPO="zeptop-dev/bosun"
 CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN="" ACTION=install KEEP_DATA=0 YES=0 PANEL_USER="" PANEL_PASS=""
 while [ $# -gt 0 ]; do
@@ -34,7 +43,7 @@ else echo "systemd or OpenRC is required" >&2; exit 1; fi
 
 if [ "$ACTION" = uninstall ]; then
   echo "This stops bosun and its cores and removes /usr/local/bin/bosun, /etc/bosun$( [ "$KEEP_DATA" = 1 ] || echo ' and /var/lib/bosun (cores, certificates, local state)')."
-  if [ -r /dev/tty ]; then printf 'Type yes to continue: ' >/dev/tty; read -r ans </dev/tty; [ "$ans" = yes ] || { echo "aborted"; exit 1; }; fi
+  if have_tty; then printf 'Type yes to continue: ' >/dev/tty; read -r ans </dev/tty; [ "$ans" = yes ] || { echo "aborted"; exit 1; }; fi
   if [ "$INIT" = systemd ]; then
     systemctl disable --now bosun 2>/dev/null || true
     rm -f /etc/systemd/system/bosun.service; systemctl daemon-reload
@@ -99,7 +108,7 @@ FIRST_INSTALL=0
 [ -f /etc/bosun/config.yaml ] || FIRST_INSTALL=1
 if [ "$FIRST_INSTALL" = 1 ] && [ -z "$CAPTAIN" ]; then
   # Standalone: choose the panel login and port. Piped or --yes: defaults.
-  if [ "$YES" = 0 ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
+  if [ "$YES" = 0 ] && have_tty; then
     echo "Standalone web panel setup (Enter keeps the default):"
     [ -n "$PANEL_USER" ] || { ask "  panel username [admin]: "; PANEL_USER="$ans"; }
     if [ -z "$PANEL_PASS" ]; then
