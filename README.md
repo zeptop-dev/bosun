@@ -503,6 +503,28 @@ route, a node with a default landing outbound ignores the option (traffic
 leaves through the landing), and speed-limited users keep their marking
 exit on sing-box and xray. mita has no per-inbound egress control.
 
+### Per-user speed limits, beside someone else's shaping
+
+A limit becomes an HTB class per user on the egress interface (upload) and
+another on an ifb device that mirrors ingress (download), both selected by
+the firewall mark the cores stamp on that user's traffic.
+
+The egress interface may already belong to something else — a VPS init
+script that paces the line below the provider's policer, a hand-written tc
+setup. bosun looks at the root qdisc before touching it:
+
+- an HTB it did not install (its own is the one with `default 0`) is left
+  alone, and the per-user classes hang **under** the class that qdisc sends
+  unclassified traffic to, so the line shaping still applies above them;
+  removing the limits then removes only bosun's classes and filters;
+- anything else — no qdisc, `fq`, `fq_codel`, `mq`, `pfifo_fast`, or
+  bosun's own HTB — is replaced with bosun's, as before.
+
+The node status and the doctor say which of the two happened
+(`nested_under`). Nesting is what makes "the line is capped at 500 Mbit and
+each user gets 50" work; before it, a limit silently wiped the line
+shaping and removing the last limit deleted the root qdisc with it.
+
 ### Audit rules
 
 The panel may push audit rules (`Node.AuditRules`): each is a route-rule
