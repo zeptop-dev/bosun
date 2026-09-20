@@ -439,6 +439,22 @@ refuses extra targets. The report carries per-hop health, RTT and
 connection counts (`targets` in each forward status; bosun ≥ 0.49), and an
 older agent ignores the extra fields and keeps using `target`.
 
+### Firewall (ufw / firewalld)
+
+With a firewall active, bosun opens what it listens on and closes it again
+when the inbound or forward goes away (`firewall_auto_open`, default on;
+state in `<data_dir>/firewall.json`, doctor check "Firewall auto-open").
+That covers every inbound port, every forward, the standalone panel's own
+port, and **80/tcp whenever something on the node gets its own certificate
+over HTTP-01** — an inbound with `auto_cert` that is not set to `dns`, or
+the decoy site. Without that last one the first issuance succeeds on a
+fresh machine and a renewal fails two months later.
+
+The sync happens when bosun applies state. **Turning the firewall on after
+bosun is already running leaves the ports closed until the next apply**, so
+restart bosun (`systemctl restart bosun`) after enabling ufw. SSH is never
+bosun's business: open it yourself.
+
 ### PROXY protocol (real client addresses behind a relay)
 
 A relay hides the client: the landing node sees the relay's address, so

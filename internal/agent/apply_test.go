@@ -164,3 +164,33 @@ func TestValidateNodeDropsUnrenderableRules(t *testing.T) {
 		t.Fatal("a valid node was copied for no reason")
 	}
 }
+
+// The node opens port 80 for itself exactly when something on it asks for
+// a certificate over HTTP-01: a firewall that blocks it lets the first
+// issuance work from a machine with no firewall yet and then fails a
+// renewal two months later.
+func TestNeedsHTTP01(t *testing.T) {
+	served := map[string]string{"in": "singbox", "decoyless": "xray"}
+	auto := func(method string) *spec.Inbound {
+		return &spec.Inbound{Tag: "in", TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "node.example.com", AutoCert: true, ACME: method}}
+	}
+	cases := []struct {
+		name string
+		node spec.Node
+		want bool
+	}{
+		{"no tls at all", spec.Node{Inbounds: []spec.Inbound{{Tag: "in"}}}, false},
+		{"auto_cert, method unset (http by default)", spec.Node{Inbounds: []spec.Inbound{*auto("")}}, true},
+		{"auto_cert over http", spec.Node{Inbounds: []spec.Inbound{*auto("http")}}, true},
+		{"auto_cert over dns", spec.Node{Inbounds: []spec.Inbound{*auto("dns")}}, false},
+		{"certificate from the panel, not ACME", spec.Node{Inbounds: []spec.Inbound{{Tag: "in", TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "node.example.com"}}}}, false},
+		{"inbound no core serves", spec.Node{Inbounds: []spec.Inbound{{Tag: "unserved", TLS: &spec.TLS{Mode: spec.TLSStandard, AutoCert: true}}}}, false},
+		{"decoy site over http", spec.Node{Decoy: &spec.Decoy{Domain: "decoy.example.com"}}, true},
+		{"decoy site over dns", spec.Node{Decoy: &spec.Decoy{Domain: "decoy.example.com", ACME: "dns"}}, false},
+	}
+	for _, c := range cases {
+		if got := needsHTTP01(&c.node, served); got != c.want {
+			t.Errorf("%s: needsHTTP01 = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

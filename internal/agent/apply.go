@@ -324,6 +324,23 @@ func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inb
 	return nil
 }
 
+// needsHTTP01 reports whether anything on this node asks for a certificate
+// over HTTP-01: a served inbound with auto_cert, or the decoy site.
+func needsHTTP01(node *spec.Node, byTag map[string]string) bool {
+	for _, ib := range node.Inbounds {
+		if _, served := byTag[ib.Tag]; !served {
+			continue
+		}
+		if t := ib.TLS; t != nil && t.Mode == spec.TLSStandard && t.AutoCert && t.ACME != certs.MethodDNS {
+			return true
+		}
+	}
+	if d := node.Decoy; d != nil && d.Domain != "" && d.ACME != certs.MethodDNS {
+		return true
+	}
+	return false
+}
+
 // applyKernelHelpers runs after the cores: the strict-ingress rules for
 // mita inbounds bound to a line address (only for mita builds that cannot
 // bind one themselves), and the firewall openings for every listener. Failures are logged and shown by the doctor, never
@@ -387,6 +404,13 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 			}
 		}
 		ports = append(ports, a.ExtraPorts...)
+		// A certificate the node gets itself uses HTTP-01 unless it was
+		// told to use DNS-01, and that challenge needs port 80 reachable
+		// from the internet — at every renewal too, two months after
+		// anyone last thought about the firewall.
+		if needsHTTP01(node, byTag) {
+			ports = append(ports, firewall.Port{Proto: "tcp", Port: 80})
+		}
 		if err := a.Firewall.Apply(ctx, ports); err != nil {
 			a.log.Warn("firewall auto-open", "err", err)
 		}
