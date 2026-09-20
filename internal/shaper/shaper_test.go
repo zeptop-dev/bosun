@@ -257,3 +257,19 @@ func TestClearLeavesAForeignRootQdiscAlone(t *testing.T) {
 		t.Fatalf("the fq root was removed: %+v", got)
 	}
 }
+
+// The line class's pacing comes back even when the process that copied it
+// onto the catch-all is gone: the catch-all's own qdisc is that copy.
+func TestRestoresLinePacingAfterARestart(t *testing.T) {
+	k := newTC()
+	k.lineShaper("eth0", "100Mbit")
+	if err := k.shaper().Apply(context.Background(), []Limit{{UserID: 7, Mbps: 50}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.shaper().Apply(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := k.qdiscs["eth0"]["1:10"]; !strings.Contains(got, " fq ") || !strings.Contains(got, "maxrate 100Mbit") {
+		t.Fatalf("the line class did not get its pacing back: %q", got)
+	}
+}

@@ -268,11 +268,21 @@ func fwFilters(out string) []fwFilter {
 // gives the line class back the qdisc it had before bosun nested under it.
 func (s *Shaper) removeCatchAll(ctx context.Context, dev string, root rootInfo) {
 	cls := root.major + ":" + catchAll
-	_, _ = s.run(ctx, "tc", "filter", "del", "dev", dev, "parent", root.major+":", "protocol", "all", "prio", "900")
-	_, _ = s.run(ctx, "tc", "class", "del", "dev", dev, "classid", cls)
 	s.mu.Lock()
 	leaf := s.lineLeaf
 	s.mu.Unlock()
+	if leaf.kind == "" {
+		// Restarted since the nesting: the catch-all's own qdisc is the
+		// copy of the line's that was made back then, so read it off
+		// there. Its handle is the catch-all's, not the line's — let the
+		// kernel pick a new one.
+		if out, err := s.run(ctx, "tc", "qdisc", "show", "dev", dev); err == nil {
+			leaf = leafOf(string(out), cls)
+			leaf.handle = ""
+		}
+	}
+	_, _ = s.run(ctx, "tc", "filter", "del", "dev", dev, "parent", root.major+":", "protocol", "all", "prio", "900")
+	_, _ = s.run(ctx, "tc", "class", "del", "dev", dev, "classid", cls)
 	if leaf.kind == "" || root.parent == "" || strings.HasSuffix(root.parent, ":") {
 		return
 	}
