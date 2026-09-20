@@ -220,3 +220,40 @@ func TestRestartKeepsTheIFBRoot(t *testing.T) {
 		t.Fatalf("the ifb root was thrown away and rebuilt:\n%s", k.since(n))
 	}
 }
+
+// A restart with no limits left to apply still has to clean up: the empty
+// apply is the first one this process makes, and matching the zero value
+// of what it last applied is not the same as knowing the kernel is clean.
+func TestFirstEmptyApplyAfterARestartStillClears(t *testing.T) {
+	k := newTC()
+	k.lineShaper("eth0", "500Mbit")
+	if err := k.shaper().Apply(context.Background(), []Limit{{UserID: 7, Mbps: 50}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.shaper().Apply(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := k.classes["eth0"]["1:8"]; ok {
+		t.Fatal("a class from before the restart stayed")
+	}
+	if _, ok := k.classes["eth0"]["1:fffe"]; ok {
+		t.Fatal("the catch-all from before the restart stayed")
+	}
+	if _, ok := k.classes["eth0"]["1:10"]; !ok {
+		t.Fatal("the line class went with it")
+	}
+}
+
+// Clearing throws away a root qdisc of ours, and only ours: an init
+// script's fq (pacing the line for BBR) is not bosun's to remove, and
+// bosun never put anything under it either.
+func TestClearLeavesAForeignRootQdiscAlone(t *testing.T) {
+	k := newTC()
+	k.roots["eth0"] = simRoot{kind: "fq", handle: "8001:"}
+	if err := k.shaper().Apply(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := k.roots["eth0"]; got.kind != "fq" {
+		t.Fatalf("the fq root was removed: %+v", got)
+	}
+}

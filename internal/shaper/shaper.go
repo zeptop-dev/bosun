@@ -55,6 +55,7 @@ type Shaper struct {
 
 	mu      sync.Mutex
 	applied string
+	synced  bool // the kernel has been brought in line at least once
 	status  Status
 	// lineLeaf is the qdisc a foreign line class had before bosun nested
 	// under it, put back when the limits go.
@@ -123,7 +124,10 @@ func (s *Shaper) Apply(ctx context.Context, limits []Limit) error {
 		fmt.Fprintf(&key, "%d=%d;", l.UserID, l.Mbps)
 	}
 	s.mu.Lock()
-	if key.String() == s.applied {
+	// synced, not just a matching key: the first apply after a restart has
+	// to run even when it is the empty one, or classes this process never
+	// installed stay in the kernel forever.
+	if s.synced && key.String() == s.applied {
 		s.mu.Unlock()
 		return nil
 	}
@@ -291,7 +295,7 @@ func (s *Shaper) setStatus(st Status) {
 	s.status = st
 	s.mu.Unlock()
 }
-func (s *Shaper) setApplied(k string) { s.mu.Lock(); s.applied = k; s.mu.Unlock() }
+func (s *Shaper) setApplied(k string) { s.mu.Lock(); s.applied, s.synced = k, true; s.mu.Unlock() }
 
 func errText(err error) string {
 	if err == nil {
@@ -581,9 +585,14 @@ func (s *Shaper) clear(ctx context.Context) error {
 	iface, err := s.iface(ctx)
 	if err == nil {
 		_, _ = s.run(ctx, "tc", "qdisc", "del", "dev", iface, "ingress")
-		if root := s.inspectRoot(ctx, iface); !root.foreign {
+		// Only a root qdisc of our own is thrown away. Someone else's HTB
+		// gives its classes back; any other root (an init script's fq
+		// pacing the line for BBR, say) is none of our business, and we
+		// never put classes under it.
+		switch root := s.inspectRoot(ctx, iface); {
+		case root.ours:
 			_, _ = s.run(ctx, "tc", "qdisc", "del", "dev", iface, "root")
-		} else {
+		case root.foreign:
 			s.reconcile(ctx, iface, root, nil)
 			s.removeCatchAll(ctx, iface, root)
 		}
