@@ -59,6 +59,9 @@ type Shaper struct {
 	// installed are the users whose classes exist right now, so stale ones
 	// can be removed one by one when the root qdisc is not ours to replace.
 	installed map[int64]bool
+	// lineLeaf is the qdisc a foreign line class had before bosun nested
+	// under it, put back when the limits go.
+	lineLeaf leafQdisc
 }
 
 func (s *Shaper) run(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -165,6 +168,29 @@ func (s *Shaper) removeUser(ctx context.Context, dev string, userID int64) {
 	_, _ = s.run(ctx, "tc", "class", "del", "dev", dev, "classid", cls)
 }
 
+// removeCatchAll takes the catch-all class and its filter away again and
+// gives the line class back the qdisc it had before bosun nested under it.
+func (s *Shaper) removeCatchAll(ctx context.Context, dev string, root rootInfo) {
+	cls := "1:" + catchAll
+	_, _ = s.run(ctx, "tc", "filter", "del", "dev", dev, "parent", "1:", "protocol", "all", "prio", "900")
+	_, _ = s.run(ctx, "tc", "class", "del", "dev", dev, "classid", cls)
+	s.mu.Lock()
+	leaf := s.lineLeaf
+	s.mu.Unlock()
+	if leaf.kind == "" || root.parent == "" || strings.HasSuffix(root.parent, ":") {
+		return
+	}
+	args := []string{"qdisc", "replace", "dev", dev, "parent", root.parent}
+	if leaf.handle != "" {
+		args = append(args, "handle", leaf.handle)
+	}
+	args = append(args, leaf.kind)
+	if leaf.kind == "fq" && leaf.maxrate != "" {
+		args = append(args, "maxrate", leaf.maxrate)
+	}
+	_, _ = s.run(ctx, "tc", args...)
+}
+
 func (s *Shaper) installedUsers() map[int64]bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -205,11 +231,31 @@ func errText(err error) string {
 	return err.Error()
 }
 
+// catchAll is the leaf class that takes the traffic of everyone without a
+// limit when bosun moves in under a line shaper. HTB drops unclassified
+// traffic into its direct queue — unshaped, past the line cap — as soon as
+// the class the root's "default" points at stops being a leaf, which is
+// exactly what happens when the per-user classes hang under it.
+const catchAll = "fffe"
+
 // rootInfo describes the egress interface's root qdisc.
 type rootInfo struct {
 	kind   string // "htb", "fq", "" (none), ...
 	ours   bool   // an HTB we installed: handle 1: with default 0
 	parent string // where per-user classes go: "1:" or a foreign line class
+	// The foreign line class and the shaping it was doing, so the same
+	// shaping can be put on the catch-all and restored on the way out.
+	lineRate string
+	lineCeil string
+	leaf     leafQdisc
+}
+
+// leafQdisc is the qdisc a foreign line class had before bosun nested
+// under it (HTB removes it once the class has children).
+type leafQdisc struct {
+	kind    string // "fq", "fq_codel", ...
+	handle  string // "100:"
+	maxrate string // fq only
 }
 
 // inspectRoot reads the root qdisc so the shaper can decide whether to take
@@ -252,14 +298,103 @@ func (s *Shaper) inspectRoot(ctx context.Context, dev string) rootInfo {
 		handle = "1"
 	}
 	cls := handle + ":" + def
-	if classes, err := s.run(ctx, "tc", "class", "show", "dev", dev); err == nil {
-		if strings.Contains(string(classes), " "+cls+" ") {
-			info.parent = cls
-			return info
-		}
+	classes, err := s.run(ctx, "tc", "class", "show", "dev", dev)
+	if err != nil || !strings.Contains(string(classes), " "+cls+" ") {
+		info.parent = handle + ":"
+		return info
 	}
-	info.parent = handle + ":"
+	info.parent = cls
+	info.lineRate, info.lineCeil = classRates(string(classes), cls)
+	if out, err := s.run(ctx, "tc", "qdisc", "show", "dev", dev); err == nil {
+		info.leaf = leafOf(string(out), cls)
+	}
 	return info
+}
+
+// classRates reads a class's rate and ceil out of "tc class show".
+func classRates(out, cls string) (rate, ceil string) {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 || f[0] != "class" || f[2] != cls {
+			continue
+		}
+		for i, w := range f {
+			if i+1 >= len(f) {
+				break
+			}
+			switch w {
+			case "rate":
+				rate = f[i+1]
+			case "ceil":
+				ceil = f[i+1]
+			}
+		}
+		return rate, ceil
+	}
+	return "", ""
+}
+
+// leafOf reads the qdisc hanging under a class out of "tc qdisc show".
+func leafOf(out, cls string) leafQdisc {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 5 || f[0] != "qdisc" {
+			continue
+		}
+		var parent string
+		for i, w := range f {
+			if w == "parent" && i+1 < len(f) {
+				parent = f[i+1]
+			}
+		}
+		if parent != cls {
+			continue
+		}
+		l := leafQdisc{kind: f[1], handle: f[2]}
+		for i, w := range f {
+			if w == "maxrate" && i+1 < len(f) {
+				l.maxrate = f[i+1]
+			}
+		}
+		return l
+	}
+	return leafQdisc{}
+}
+
+// keepUnlimitedShaped gives the traffic of users without a limit a leaf
+// class of its own under the line class, with the shaping the line class
+// itself was doing, and a lowest-priority filter that sends everything
+// unmatched there. Without it HTB's direct queue would carry that traffic
+// past the line shaper entirely.
+func (s *Shaper) keepUnlimitedShaped(ctx context.Context, dev string, root rootInfo) error {
+	cls := "1:" + catchAll
+	if classes, err := s.run(ctx, "tc", "class", "show", "dev", dev); err == nil && strings.Contains(string(classes), " "+cls+" ") {
+		return nil // already there; leave its shaping alone
+	}
+	rate, ceil := root.lineRate, root.lineCeil
+	if rate == "" {
+		rate = "1gbit"
+	}
+	if ceil == "" {
+		ceil = rate
+	}
+	if _, err := s.run(ctx, "tc", "class", "replace", "dev", dev, "parent", root.parent, "classid", cls, "htb", "rate", rate, "ceil", ceil); err != nil {
+		return fmt.Errorf("shaper: catch-all class: %w", err)
+	}
+	leaf := []string{"tc", "qdisc", "replace", "dev", dev, "parent", cls, "handle", catchAll + ":"}
+	switch {
+	case root.leaf.kind == "fq" && root.leaf.maxrate != "":
+		leaf = append(leaf, "fq", "maxrate", root.leaf.maxrate)
+	case root.leaf.kind != "":
+		leaf = append(leaf, root.leaf.kind)
+	default:
+		leaf = append(leaf, "fq_codel")
+	}
+	_, _ = s.run(ctx, leaf[0], leaf[1:]...)
+	// Lowest priority: the per-user filters (prio 1) are matched first.
+	_, err := s.run(ctx, "tc", "filter", "replace", "dev", dev, "parent", "1:", "protocol", "all", "prio", "900",
+		"u32", "match", "u32", "0", "0", "flowid", cls)
+	return err
 }
 
 // iface is the interface the default route leaves through.
@@ -305,6 +440,16 @@ func (s *Shaper) install(ctx context.Context, iface string, limits []Limit) erro
 	nested := ""
 	if !root.ours && root.kind == "htb" {
 		nested = root.parent
+		if strings.Contains(nested, ":") && !strings.HasSuffix(nested, ":") {
+			if root.leaf.kind != "" {
+				s.mu.Lock()
+				s.lineLeaf = root.leaf
+				s.mu.Unlock()
+			}
+			if err := s.keepUnlimitedShaped(ctx, iface, root); err != nil {
+				return err
+			}
+		}
 	}
 	for _, dev := range []string{iface, ifbDev} {
 		parent := "1:"
@@ -366,6 +511,7 @@ func (s *Shaper) clear(ctx context.Context) error {
 			for id := range s.installedUsers() {
 				s.removeUser(ctx, iface, id)
 			}
+			s.removeCatchAll(ctx, iface, root)
 		}
 	}
 	s.setInstalled(nil)

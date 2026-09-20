@@ -150,3 +150,41 @@ func TestTakesOverItsOwnOrAnUnmanagedRoot(t *testing.T) {
 		}
 	}
 }
+
+// Nesting turns the line class into an inner class, and HTB then shoves
+// everything unclassified into its direct queue, unshaped and past the
+// line cap. The shaper has to give that traffic a leaf of its own with
+// the shaping the line class was doing, and hand the leaf back on the way
+// out.
+func TestNestingKeepsUnlimitedTrafficShaped(t *testing.T) {
+	root := "qdisc htb 1: root refcnt 2 r2q 10 default 0x10\nqdisc fq 100: parent 1:10 limit 10000p maxrate 100Mbit\n"
+	classes := "class htb 1:10 root leaf 100: prio 0 rate 100Mbit ceil 100Mbit burst 1600b\n"
+	s, cmds := fakeTC(t, root, classes)
+	if err := s.Apply(context.Background(), []Limit{{UserID: 7, Mbps: 50}}); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*cmds, "\n")
+	for _, want := range []string{
+		"tc class replace dev eth0 parent 1:10 classid 1:fffe htb rate 100Mbit ceil 100Mbit", // same cap as the line
+		"tc qdisc replace dev eth0 parent 1:fffe handle fffe: fq maxrate 100Mbit",            // same pacing
+		"tc filter replace dev eth0 parent 1: protocol all prio 900 u32 match u32 0 0 flowid 1:fffe",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %q in\n%s", want, joined)
+		}
+	}
+	n := len(*cmds)
+	if err := s.Apply(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	tail := strings.Join((*cmds)[n:], "\n")
+	for _, want := range []string{
+		"tc filter del dev eth0 parent 1: protocol all prio 900",
+		"tc class del dev eth0 classid 1:fffe",
+		"tc qdisc replace dev eth0 parent 1:10 handle 100: fq maxrate 100Mbit", // the line class gets its leaf back
+	} {
+		if !strings.Contains(tail, want) {
+			t.Fatalf("clear should undo the catch-all, missing %q in\n%s", want, tail)
+		}
+	}
+}

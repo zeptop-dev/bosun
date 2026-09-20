@@ -515,8 +515,13 @@ setup. bosun looks at the root qdisc before touching it:
 
 - an HTB it did not install (its own is the one with `default 0`) is left
   alone, and the per-user classes hang **under** the class that qdisc sends
-  unclassified traffic to, so the line shaping still applies above them;
-  removing the limits then removes only bosun's classes and filters;
+  unclassified traffic to, so the line shaping still applies above them.
+  That class becomes an inner class in the process, and HTB sends what no
+  filter matches to its direct queue — unshaped — so everyone without a
+  limit gets a leaf class of their own next to the per-user ones, with the
+  line's rate and the pacing its leaf qdisc was doing, and a
+  lowest-priority filter pointing at it. Removing the limits removes
+  bosun's classes and filters and gives the line class its leaf back;
 - anything else — no qdisc, `fq`, `fq_codel`, `mq`, `pfifo_fast`, or
   bosun's own HTB — is replaced with bosun's, as before.
 
