@@ -18,5 +18,10 @@ depend() {
 }
 
 start_pre() {
-	checkpath -d -m 0750 /var/lib/bosun
+	# 0755, not 0750: the cores run as an unprivileged account
+	# (cores.user) and have to traverse this directory to reach their
+	# binary under cores/ and their own work dir. At 0750 every core
+	# fails to start with "fork/exec …: permission denied". The
+	# secrets in here carry their own 0600.
+	checkpath -d -m 0755 /var/lib/bosun
 }
