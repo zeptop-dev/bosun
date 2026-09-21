@@ -30,6 +30,14 @@ jobs:
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
       - run: make linux VERSION="${GITHUB_REF_NAME}"
+      # Nodes run on Alpine too, and a binary linked against the builder's
+      # glibc does not start on musl at all ("no such file or directory").
+      - name: binaries are static
+        run: |
+          for f in bin/bosun-linux-*; do
+            file "$f"
+            file "$f" | grep -q 'statically linked' || { echo "$f is dynamically linked"; exit 1; }
+          done
       - run: cd bin && sha256sum bosun-linux-* > SHA256SUMS && cat SHA256SUMS
       - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'

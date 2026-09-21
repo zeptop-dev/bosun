@@ -10,9 +10,12 @@ web:
 build: web
 	go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(BIN) ./cmd/bosun
 
+# CGO_ENABLED=0, or the amd64 build (the one that is not a cross-compile on
+# an amd64 runner) links against the builder's glibc and will not start on
+# Alpine or any other musl distribution.
 linux:
-	GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/bosun-linux-amd64 ./cmd/bosun
-	GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/bosun-linux-arm64 ./cmd/bosun
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/bosun-linux-amd64 ./cmd/bosun
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/bosun-linux-arm64 ./cmd/bosun
 
 test:
 	go test ./...
