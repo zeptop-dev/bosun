@@ -55,7 +55,8 @@ type Shaper struct {
 
 	mu      sync.Mutex
 	applied string
-	synced  bool // the kernel has been brought in line at least once
+	synced  bool    // the kernel has been brought in line at least once
+	last    []Limit // what the kernel is supposed to hold, for Resync
 	status  Status
 	// lineLeaf is the qdisc a foreign line class had before bosun nested
 	// under it, put back when the limits go.
@@ -143,6 +144,9 @@ func (s *Shaper) Apply(ctx context.Context, limits []Limit) error {
 		err := s.clear(ctx)
 		s.setStatus(Status{Supported: true, Users: 0, Error: errText(err)})
 		if err == nil {
+			s.mu.Lock()
+			s.last = nil
+			s.mu.Unlock()
 			s.setApplied(key.String())
 		}
 		return err
@@ -155,10 +159,80 @@ func (s *Shaper) Apply(ctx context.Context, limits []Limit) error {
 	err = s.install(ctx, iface, limits)
 	s.setStatus(Status{Supported: true, Interface: iface, Users: len(limits), Error: errText(err)})
 	if err == nil {
+		s.mu.Lock()
+		s.last = append(s.last[:0], limits...)
+		s.mu.Unlock()
 		s.setApplied(key.String())
 	}
 	return err
 }
+
+// Resync puts the limits back when something outside bosun has taken them
+// away. Tools that shape the line for their own reasons (tcpfit's
+// `tcpfit-qdisc.sh`, a hand-run tc script) start by deleting the root
+// qdisc, which takes bosun's classes with it — and since the desired
+// limits have not changed, nothing would otherwise make bosun notice.
+// Cheap: one `tc class show` unless something really is missing.
+func (s *Shaper) Resync(ctx context.Context) error {
+	s.mu.Lock()
+	limits := append([]Limit(nil), s.last...)
+	synced := s.synced
+	s.mu.Unlock()
+	if !synced || len(limits) == 0 || !s.Supported() {
+		return nil
+	}
+	iface, err := s.iface(ctx)
+	if err != nil {
+		return err
+	}
+	if s.classesPresent(ctx, iface, limits) {
+		return nil
+	}
+	s.lineLeafForget()
+	err = s.install(ctx, iface, limits)
+	s.setStatus(Status{Supported: true, Interface: iface, Users: len(limits), Error: errText(err)})
+	return err
+}
+
+// classesPresent reports whether every limited user still has a class on
+// the interface. The ifb device is checked through its own existence: it
+// goes away as a whole, not class by class.
+func (s *Shaper) classesPresent(ctx context.Context, iface string, limits []Limit) bool {
+	if _, err := s.run(ctx, "ip", "link", "show", ifbDev); err != nil {
+		return false
+	}
+	for _, dev := range []string{iface, ifbDev} {
+		out, err := s.run(ctx, "tc", "class", "show", "dev", dev)
+		if err != nil {
+			return false
+		}
+		have := map[string]bool{}
+		for _, line := range strings.Split(string(out), "\n") {
+			if f := strings.Fields(line); len(f) > 2 && f[0] == "class" {
+				have[classMinor(f[2])] = true
+			}
+		}
+		for _, l := range limits {
+			if !have[strconv.FormatInt(spec.SpeedClass(l.UserID), 16)] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// classMinor is the part of a classid after the colon: the major belongs
+// to whoever owns the root qdisc and may have changed under us.
+func classMinor(id string) string {
+	if i := strings.IndexByte(id, ':'); i >= 0 {
+		return id[i+1:]
+	}
+	return id
+}
+
+// lineLeafForget drops the remembered line qdisc: whoever wiped the root
+// rebuilt it, so what was recorded before no longer describes it.
+func (s *Shaper) lineLeafForget() { s.mu.Lock(); s.lineLeaf = leafQdisc{}; s.mu.Unlock() }
 
 // ensureRoot makes dev's root qdisc an HTB of ours, and leaves one that
 // already is alone: HTB has no qdisc-level change operation, so replacing
@@ -286,15 +360,7 @@ func (s *Shaper) removeCatchAll(ctx context.Context, dev string, root rootInfo) 
 	if leaf.kind == "" || root.parent == "" || strings.HasSuffix(root.parent, ":") {
 		return
 	}
-	args := []string{"qdisc", "replace", "dev", dev, "parent", root.parent}
-	if leaf.handle != "" {
-		args = append(args, "handle", leaf.handle)
-	}
-	args = append(args, leaf.kind)
-	if leaf.kind == "fq" && leaf.maxrate != "" {
-		args = append(args, "maxrate", leaf.maxrate)
-	}
-	_, _ = s.run(ctx, "tc", args...)
+	_ = s.installLeaf(ctx, dev, root.parent, leaf.handle, leaf)
 }
 
 func (s *Shaper) setNested(parent string) { s.mu.Lock(); s.status.NestedUnder = parent; s.mu.Unlock() }
@@ -338,10 +404,26 @@ type rootInfo struct {
 // leafQdisc is the qdisc a foreign line class had before bosun nested
 // under it (HTB removes it once the class has children).
 type leafQdisc struct {
-	kind    string // "fq", "fq_codel", ...
-	handle  string // "100:"
-	maxrate string // fq only
+	kind   string   // "fq", "fq_codel", ...
+	handle string   // "100:"
+	params []string // its settings, ready to hand back to tc
 }
+
+// leafSettings are the qdisc settings worth copying onto the catch-all,
+// mapped to the unit suffix "tc qdisc show" prints but "tc qdisc add"
+// will not parse back (a packet count prints as "40960p", a byte count as
+// "3028b", and tc's own parsers reject both). Settings whose printed form
+// round-trips unchanged map to "". Anything not listed — fq's bands,
+// priomap and weights, which are lists — is left at its default.
+var leafSettings = map[string]string{
+	"limit": "p", "flow_limit": "p", "quantum": "b", "initial_quantum": "b",
+	"maxrate": "", "buckets": "", "orphan_mask": "", "low_rate_threshold": "",
+	"refill_delay": "", "timer_slack": "", "horizon": "", "ce_threshold": "",
+	"flows": "", "target": "", "interval": "", "memory_limit": "", "drop_batch": "",
+}
+
+// leafFlags are the valueless settings, printed as a bare word.
+var leafFlags = map[string]bool{"ecn": true, "noecn": true, "horizon_drop": true, "no_horizon_drop": true}
 
 // inspectRoot reads the root qdisc so the shaper can decide whether to take
 // the interface over or move in under what is already there. Ours is the
@@ -443,15 +525,64 @@ func leafOf(out, cls string) leafQdisc {
 		if parent != cls {
 			continue
 		}
-		l := leafQdisc{kind: f[1], handle: f[2]}
-		for i, w := range f {
-			if w == "maxrate" && i+1 < len(f) {
-				l.maxrate = f[i+1]
-			}
-		}
-		return l
+		return leafQdisc{kind: f[1], handle: f[2], params: leafParams(f)}
 	}
 	return leafQdisc{}
+}
+
+// leafParams picks the settings of a qdisc out of its "tc qdisc show"
+// line, in the form tc will take back.
+func leafParams(f []string) []string {
+	var out []string
+	for i := 0; i < len(f); i++ {
+		w := f[i]
+		if leafFlags[w] {
+			out = append(out, w)
+			continue
+		}
+		suffix, ok := leafSettings[w]
+		if !ok || i+1 >= len(f) {
+			continue
+		}
+		v := f[i+1]
+		i++
+		if suffix != "" {
+			v = strings.TrimSuffix(v, suffix)
+		}
+		out = append(out, w, v)
+	}
+	return out
+}
+
+// installLeaf puts a copy of a line qdisc somewhere. tc prints settings
+// its own parsers will not read back, and the set differs by kernel and
+// tc version, so a refused copy falls back to the bare qdisc rather than
+// leaving the traffic with no leaf at all.
+func (s *Shaper) installLeaf(ctx context.Context, dev, parent, handle string, leaf leafQdisc) error {
+	head := []string{"qdisc", "replace", "dev", dev, "parent", parent}
+	if handle != "" {
+		head = append(head, "handle", handle)
+	}
+	kind := leaf.kind
+	if kind == "" {
+		kind = "fq_codel"
+	}
+	tails := [][]string{}
+	if len(leaf.params) > 0 {
+		tails = append(tails, append([]string{kind}, leaf.params...))
+	}
+	tails = append(tails, []string{kind})
+	if kind != "fq_codel" {
+		tails = append(tails, []string{"fq_codel"})
+	}
+	var err error
+	for _, tail := range tails {
+		args := append(append([]string{}, head...), tail...)
+		if _, err = s.run(ctx, "tc", args...); err == nil {
+			return nil
+		}
+	}
+	return err
 }
 
 // keepUnlimitedShaped gives the traffic of users without a limit a leaf
@@ -474,16 +605,7 @@ func (s *Shaper) keepUnlimitedShaped(ctx context.Context, dev string, root rootI
 	if _, err := s.run(ctx, "tc", "class", "replace", "dev", dev, "parent", root.parent, "classid", cls, "htb", "rate", rate, "ceil", ceil); err != nil {
 		return fmt.Errorf("shaper: catch-all class: %w", err)
 	}
-	leaf := []string{"tc", "qdisc", "replace", "dev", dev, "parent", cls, "handle", catchAll + ":"}
-	switch {
-	case root.leaf.kind == "fq" && root.leaf.maxrate != "":
-		leaf = append(leaf, "fq", "maxrate", root.leaf.maxrate)
-	case root.leaf.kind != "":
-		leaf = append(leaf, root.leaf.kind)
-	default:
-		leaf = append(leaf, "fq_codel")
-	}
-	_, _ = s.run(ctx, leaf[0], leaf[1:]...)
+	_ = s.installLeaf(ctx, dev, cls, catchAll+":", root.leaf)
 	// Lowest priority: the per-user filters (prio 1) are matched first.
 	_, err := s.run(ctx, "tc", "filter", "replace", "dev", dev, "parent", root.major+":", "protocol", "all", "prio", "900",
 		"u32", "match", "u32", "0", "0", "flowid", cls)

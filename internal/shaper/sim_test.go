@@ -18,6 +18,7 @@ type tcSim struct {
 	qdiscs  map[string]map[string]string // dev -> parent -> qdisc line
 	classes map[string]map[string]simClass
 	filters map[string]map[string]string // dev -> "prio/handle" -> filter line
+	links   map[string]bool              // devices "ip link add" created
 }
 
 type simRoot struct{ kind, handle, def string }
@@ -30,6 +31,7 @@ func newTC() *tcSim {
 		qdiscs:  map[string]map[string]string{},
 		classes: map[string]map[string]simClass{},
 		filters: map[string]map[string]string{},
+		links:   map[string]bool{},
 	}
 }
 
@@ -90,8 +92,18 @@ func (k *tcSim) run(_ context.Context, name string, args ...string) ([]byte, err
 		if len(args) > 2 && args[2] == "get" {
 			return []byte("1.1.1.1 via 203.0.113.1 dev eth0 src 203.0.113.30 uid 0"), nil
 		}
-		if len(args) > 2 && args[0] == "link" && args[1] == "del" {
-			k.wipe(args[2])
+		if len(args) > 2 && args[0] == "link" {
+			switch args[1] {
+			case "add":
+				k.links[args[2]] = true
+			case "del":
+				delete(k.links, args[2])
+				k.wipe(args[2])
+			case "show":
+				if !k.links[args[2]] {
+					return []byte(`Device "` + args[2] + `" does not exist.`), errors.New("exit status 1")
+				}
+			}
 		}
 		return nil, nil
 	case "tc":
@@ -240,6 +252,10 @@ func sortedValues(m map[string]string) []string {
 // unclassified traffic goes to a line class with an fq leaf pacing it.
 func (k *tcSim) lineShaper(dev, rate string) {
 	ctx := context.Background()
+	// The same order tcpfit's qdisc unit uses, including the del: an HTB
+	// root cannot be replaced in place, and re-running it is how an
+	// outside shaper takes the interface back.
+	_, _ = k.run(ctx, "tc", "qdisc", "del", "dev", dev, "root")
 	_, _ = k.run(ctx, "tc", "qdisc", "replace", "dev", dev, "root", "handle", "1:", "htb", "default", "10")
 	_, _ = k.run(ctx, "tc", "class", "replace", "dev", dev, "parent", "1:", "classid", "1:10", "htb", "rate", rate, "ceil", rate)
 	_, _ = k.run(ctx, "tc", "qdisc", "replace", "dev", dev, "parent", "1:10", "handle", "100:", "fq", "maxrate", rate)

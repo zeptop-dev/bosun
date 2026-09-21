@@ -533,6 +533,16 @@ found by reading what the kernel holds, not by what bosun remembers
 installing: a restart does not clear the kernel, and the agent's memory of
 it is gone.
 
+A line shaper that re-applies itself takes bosun's classes with it — most
+of them start by deleting the root qdisc, and the desired limits have not
+changed, so nothing would otherwise make bosun look. Every self-check
+(ten minutes, and shortly after each apply) therefore lists the classes
+and puts the limits back if they are missing. So running such a tool
+under a live bosun is safe in both orders; the limits are back within one
+self-check. Tested against [tcpfit](https://github.com/Kylin010/tcpfit),
+whose `tcpfit shape` installs exactly this shape (`htb default 10` → class
+`1:10` → `fq … maxrate`).
+
 The node status and the doctor say which of the two happened
 (`nested_under`). Nesting is what makes "the line is capped at 500 Mbit and
 each user gets 50" work; before it, a limit silently wiped the line

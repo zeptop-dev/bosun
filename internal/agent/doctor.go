@@ -82,6 +82,16 @@ func (a *Agent) LastDoctor() *doctor.Report {
 // runDoctor is the periodic run; the result rides on the next report when
 // it changed, and at least every 30 minutes.
 func (a *Agent) runDoctor(ctx context.Context) {
+	// Before judging the node, put back anything outside bosun has taken
+	// away since the last look. A line shaper that re-applies itself
+	// (tcpfit's qdisc unit, a hand-run tc script) deletes the root qdisc
+	// and bosun's speed-limit classes with it, and the desired limits have
+	// not changed, so nothing else would notice.
+	if a.Shaper != nil {
+		if err := a.Shaper.Resync(ctx); err != nil {
+			a.log.Warn("speed limit shaper resync", "err", err)
+		}
+	}
 	rep := a.Doctor(ctx)
 	a.alertOnNewFailures(rep)
 	a.statusMu.Lock()

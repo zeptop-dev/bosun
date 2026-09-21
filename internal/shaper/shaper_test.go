@@ -2,6 +2,7 @@ package shaper
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -271,5 +272,151 @@ func TestRestoresLinePacingAfterARestart(t *testing.T) {
 	}
 	if got := k.qdiscs["eth0"]["1:10"]; !strings.Contains(got, " fq ") || !strings.Contains(got, "maxrate 100Mbit") {
 		t.Fatalf("the line class did not get its pacing back: %q", got)
+	}
+}
+
+// A line shaper that re-applies itself (tcpfit's qdisc unit, or the same
+// script run by hand) deletes the root qdisc and takes bosun's classes
+// with it. The desired limits have not changed, so nothing else would
+// notice: Resync is what puts them back.
+func TestResyncPutsTheLimitsBackAfterAnOutsideShaperWipesThem(t *testing.T) {
+	k := newTC()
+	k.lineShaper("eth0", "500Mbit")
+	s := k.shaper()
+	limits := []Limit{{UserID: 7, Mbps: 50}, {UserID: 9, Mbps: 20}}
+	if err := s.Apply(context.Background(), limits); err != nil {
+		t.Fatal(err)
+	}
+	// Someone re-runs their shaper. Same limits, so an Apply would do
+	// nothing at all.
+	k.lineShaper("eth0", "500Mbit")
+	if _, ok := k.classes["eth0"]["1:8"]; ok {
+		t.Fatal("the test did not actually wipe the classes")
+	}
+	n := len(k.cmds)
+	if err := s.Apply(context.Background(), limits); err != nil || len(k.cmds) != n {
+		t.Fatal("unchanged limits are still a no-op; Resync is the way back")
+	}
+	if err := s.Resync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, cls := range []string{"1:8", "1:a", "1:fffe"} {
+		if _, ok := k.classes["eth0"][cls]; !ok {
+			t.Fatalf("%s did not come back:\n%s", cls, k.since(n))
+		}
+	}
+	if got := k.classes["eth0"]["1:8"].parent; got != "1:10" {
+		t.Fatalf("it should have nested under the new line class, got %q", got)
+	}
+	if k.roots["eth0"].def != "10" {
+		t.Fatalf("it took their root over: %+v", k.roots["eth0"])
+	}
+}
+
+// Nothing missing, nothing done: the check is one listing per device and
+// must not churn the kernel on every self-check.
+func TestResyncIsQuietWhenNothingIsMissing(t *testing.T) {
+	k := newTC()
+	s := k.shaper()
+	if err := s.Apply(context.Background(), []Limit{{UserID: 7, Mbps: 50}}); err != nil {
+		t.Fatal(err)
+	}
+	n := len(k.cmds)
+	if err := s.Resync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range k.cmds[n:] {
+		if strings.Contains(c, "replace") || strings.Contains(c, " del ") || strings.Contains(c, "link add") {
+			t.Fatalf("resync changed the kernel with nothing missing:\n%s", k.since(n))
+		}
+	}
+	// And with no limits at all there is nothing to check.
+	if err := s.Apply(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	n = len(k.cmds)
+	if err := s.Resync(context.Background()); err != nil || len(k.cmds) != n {
+		t.Fatalf("resync ran with no limits: %v\n%s", err, k.since(n))
+	}
+}
+
+// The ifb device disappearing counts as missing too.
+func TestResyncNoticesTheIFBDeviceIsGone(t *testing.T) {
+	k := newTC()
+	s := k.shaper()
+	if err := s.Apply(context.Background(), []Limit{{UserID: 7, Mbps: 50}}); err != nil {
+		t.Fatal(err)
+	}
+	delete(k.links, ifbDev)
+	k.wipe(ifbDev)
+	if err := s.Resync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !k.links[ifbDev] {
+		t.Fatal("the ifb device was not put back")
+	}
+	if _, ok := k.classes[ifbDev]["1:8"]; !ok {
+		t.Fatal("the download side did not come back")
+	}
+}
+
+// tc prints a qdisc's settings in a form its own parsers will not all
+// read back: a packet count as "40960p", a byte count as "3028b". Those
+// have to be handed back without the unit, and the settings tc has no
+// option for (fq's bands/priomap/weights) left out.
+func TestCopiesTheLineQdiscSettings(t *testing.T) {
+	fq := "qdisc fq 100: parent 1:10 limit 40960p flow_limit 8192p buckets 1024 orphan_mask 1023 " +
+		"bands 3 priomap 1 2 2 2 1 2 0 0 weights 589824 196608 65536 quantum 3028b initial_quantum 15140b " +
+		"maxrate 100Mbit low_rate_threshold 550Kbit refill_delay 40ms timer_slack 10us horizon 10s horizon_drop"
+	got := leafOf(fq, "1:10")
+	if got.kind != "fq" || got.handle != "100:" {
+		t.Fatalf("kind/handle: %+v", got)
+	}
+	joined := strings.Join(got.params, " ")
+	for _, want := range []string{
+		"limit 40960", "flow_limit 8192", "quantum 3028", "initial_quantum 15140",
+		"maxrate 100Mbit", "low_rate_threshold 550Kbit", "refill_delay 40ms",
+		"timer_slack 10us", "horizon 10s", "horizon_drop", "buckets 1024", "orphan_mask 1023",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in %q", want, joined)
+		}
+	}
+	for _, unwanted := range []string{"40960p", "8192p", "3028b", "15140b", "bands", "priomap", "weights", "parent"} {
+		if strings.Contains(joined, unwanted) {
+			t.Errorf("should not be copied: %q in %q", unwanted, joined)
+		}
+	}
+
+	codel := "qdisc fq_codel 8005: parent 1:10 limit 10240p flows 1024 quantum 1514 target 5ms interval 100ms memory_limit 32Mb ecn drop_batch 64"
+	joined = strings.Join(leafOf(codel, "1:10").params, " ")
+	for _, want := range []string{"limit 10240", "flows 1024", "quantum 1514", "target 5ms", "interval 100ms", "memory_limit 32Mb", "ecn", "drop_batch 64"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in %q", want, joined)
+		}
+	}
+}
+
+// A setting this tc prints but refuses to take back must not leave the
+// catch-all with no leaf at all.
+func TestALeafCopyThatIsRefusedFallsBack(t *testing.T) {
+	k := newTC()
+	k.lineShaper("eth0", "100Mbit")
+	s := k.shaper()
+	refuse := k.run
+	s.Run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == "tc" && len(args) > 1 && args[0] == "qdisc" && has(args, "fq") && has(args, "maxrate") {
+			k.cmds = append(k.cmds, name+" "+strings.Join(args, " "))
+			return []byte("Illegal \"maxrate\""), errors.New("exit status 1")
+		}
+		return refuse(ctx, name, args...)
+	}
+	if err := s.Apply(context.Background(), []Limit{{UserID: 7, Mbps: 50}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := k.qdiscs["eth0"]["1:fffe"]; got == "" {
+		t.Fatalf("the catch-all was left without a leaf:\n%s", k.all())
+	} else if !strings.Contains(got, " fq ") {
+		t.Fatalf("expected a bare fq after the retry, got %q", got)
 	}
 }
