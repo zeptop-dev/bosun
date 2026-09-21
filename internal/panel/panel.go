@@ -42,6 +42,12 @@ type KomariSource interface {
 	Komari() *spec.Komari
 }
 
+// DStatusSource is implemented by drivers that carry a DStatus exporter
+// configuration for this node.
+type DStatusSource interface {
+	DStatus() *spec.DStatus
+}
+
 // ProbeSource is implemented by drivers that decide the probe configuration
 // without receiving beats (the local store): results stay on the node.
 type ProbeSource interface {

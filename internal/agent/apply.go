@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/zeptop-dev/bosun/internal/dstatus"
+	"net"
+	"strconv"
 	"strings"
 
 	"github.com/zeptop-dev/bosun/internal/egressguard"
@@ -411,6 +414,11 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 		if needsHTTP01(node, byTag) {
 			ports = append(ports, firewall.Port{Proto: "tcp", Port: 80})
 		}
+		// The DStatus endpoint is scraped by the panel, so unlike Komari
+		// it needs its port reachable.
+		if p := dstatusPort(a.dstatus.Status()); p > 0 {
+			ports = append(ports, firewall.Port{Proto: "tcp", Port: p})
+		}
 		if err := a.Firewall.Apply(ctx, ports); err != nil {
 			a.log.Warn("firewall auto-open", "err", err)
 		}
@@ -516,4 +524,24 @@ func validateNode(node *spec.Node, log *slog.Logger, report func([]string)) *spe
 	cp := *node
 	cp.Routes, cp.AuditRules = routes, rules
 	return &cp
+}
+
+// dstatusPort is the port the neko-status endpoint listens on, or 0 when
+// it is off, failed, or bound to loopback only (nothing to open then).
+func dstatusPort(st dstatus.Status) int {
+	if !st.Enabled || st.LastError != "" || st.Listen == "" {
+		return 0
+	}
+	host, port, err := net.SplitHostPort(st.Listen)
+	if err != nil {
+		return 0
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return 0
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil {
+		return 0
+	}
+	return n
 }

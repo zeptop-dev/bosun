@@ -16,6 +16,7 @@ import (
 
 	"github.com/zeptop-dev/bosun/internal/egressguard"
 
+	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"github.com/zeptop-dev/bosun/internal/firewall"
 	"github.com/zeptop-dev/bosun/internal/ingressguard"
 	"github.com/zeptop-dev/bosun/internal/shaper"
@@ -95,6 +96,8 @@ type Deps struct {
 	Assign map[string]string
 	// Shaper is the speed-limit state (nil = no limits configured).
 	Shaper *shaper.Status
+	// DStatus is the neko-status endpoint's state, nil when never set up.
+	DStatus *dstatus.Status
 	// RealmRunning is whether the realm relay process is up (rules with
 	// the realm backend depend on it).
 	RealmRunning bool
@@ -136,7 +139,7 @@ func Run(ctx context.Context, d Deps) Report {
 	rep := Report{At: now(), Checks: []Check{}}
 	checks := []func(context.Context, *Deps) []Check{
 		checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
-		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen, checkIsolation, checkRules,
+		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkDStatus, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen, checkIsolation, checkRules,
 	}
 	for _, fn := range checks {
 		cctx, cancel := context.WithTimeout(ctx, perCheck)
@@ -584,6 +587,38 @@ func checkKomari(_ context.Context, d *Deps) []Check {
 		c.Status = OK
 	}
 	return []Check{c}
+}
+
+// checkDStatus reports on the neko-status endpoint a DStatus panel
+// scrapes. It is a listener, so "configured but never read" is worth
+// saying: that is usually a firewall or a wrong address in the panel.
+func checkDStatus(_ context.Context, d *Deps) []Check {
+	c := Check{ID: "dstatus", Name: "DStatus endpoint"}
+	now := time.Now
+	if d.Now != nil {
+		now = d.Now
+	}
+	switch {
+	case d.DStatus == nil || !d.DStatus.Enabled:
+		c.Status, c.Detail = Skip, "off"
+	case d.DStatus.LastError != "":
+		c.Status, c.Detail = Fail, d.DStatus.LastError
+	case d.DStatus.LastScrape.IsZero():
+		c.Status, c.Detail = Warn, "listening on "+d.DStatus.Listen+", never scraped yet"+deniedNote(d.DStatus.Denied)
+	case now().Sub(d.DStatus.LastScrape) > 10*time.Minute:
+		c.Status, c.Detail = Warn, "last scraped "+now().Sub(d.DStatus.LastScrape).Truncate(time.Second).String()+" ago"+deniedNote(d.DStatus.Denied)
+	default:
+		c.Status, c.Detail = OK, "listening on "+d.DStatus.Listen+", last scraped "+now().Sub(d.DStatus.LastScrape).Truncate(time.Second).String()+" ago"
+	}
+	return []Check{c}
+}
+
+// deniedNote names the likeliest cause when scrapes are being turned away.
+func deniedNote(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return "; " + strconv.Itoa(n) + " scrape(s) refused for a wrong key"
 }
 
 func checkTime(ctx context.Context, d *Deps) []Check {

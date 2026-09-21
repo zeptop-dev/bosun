@@ -68,6 +68,7 @@ internal/warp/        Cloudflare WARP registration and WireGuard outbound
 internal/shaper/      per-user bandwidth limits with nft connmark + tc
 internal/probe/       latency checks for the panel's status page (carrier probe points, icmp/tcp/http/download tasks), attached to every beat
 internal/komari/      reports the node to a Komari server as an agent
+internal/dstatus/     answers a DStatus panel's scrapes as a neko-status agent
 internal/doctor/      read-only self-check (listeners, certs, ports, firewall, disk, panel, clock)
 internal/backup/      standalone backup archive and restore
 internal/telegram/    Bot API client for the standalone panel (doctor alerts, /status)
@@ -189,6 +190,30 @@ ping tasks (icmp/tcp/http) through its own probe runner. Only the `ping`
 capability is advertised: no terminal, file or exec access. Captain can push
 the same setting to every managed node (`state.komari`). A deleted client on
 the Komari side makes the node re-register automatically.
+
+## DStatus endpoint
+
+The other direction: a [DStatus](https://github.com/fev125/dstatus) panel
+scrapes its agents rather than being reported to, so bosun can stand in for
+its `neko-status` agent instead of running one beside it. With the setting
+on, the node serves `GET /stat` on the configured address (default
+`:9999`) and answers — with the host sample in neko-status' shape, wrapped
+as `{"success":true,"data":{…}}` — only when the request carries the key in
+a `key` header; anything else gets a 403 and is counted. That one path is
+the entire surface: no terminal, files or exec, and the endpoint refuses to
+start at all without a key rather than exposing the host to whoever finds
+the port.
+
+Because it is scraped, the port has to be reachable: the firewall
+auto-open opens it while the endpoint is enabled (unless it is bound to
+loopback), and the doctor's "DStatus endpoint" check warns when the
+listener is up but has never been read, or when scrapes are being refused
+for a wrong key. Captain can push the setting to every managed node
+(`state.dstatus`); in standalone mode it lives in the local store.
+
+Per-core CPU percentages and per-interface counters come back empty —
+bosun does not measure them, and an empty list reads better in the panel
+than invented numbers.
 
 ## Certificates
 

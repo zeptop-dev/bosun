@@ -669,6 +669,20 @@ type Komari struct {
 	Interval int    `json:"interval,omitempty"` // report seconds, default 3
 }
 
+// DStatus makes the node answer a DStatus panel's scrapes as a
+// neko-status agent: the panel fetches "GET /stat" with a "key" header and
+// gets this host's sample back in neko-status' shape. Unlike Komari this
+// is a pull, so the node needs a port the panel can reach — the firewall
+// auto-open opens it while this is enabled.
+type DStatus struct {
+	Enabled bool   `json:"enabled"`
+	Listen  string `json:"listen,omitempty"` // host:port, "" = :9999
+	Key     string `json:"key,omitempty"`    // the secret the panel sends
+}
+
+// DStatusListen is where the neko-status agent listens by default.
+const DStatusListen = ":9999"
+
 // Carrier is one always-on TCP-connect latency target, named after the
 // network it represents (CT/CU/CM by default).
 type Carrier struct {

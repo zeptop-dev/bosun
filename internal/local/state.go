@@ -56,7 +56,8 @@ type State struct {
 	// Probe is the standalone monitoring configuration.
 	Probe ProbeSettings `json:"probe"`
 	// Komari reports this node to a Komari server as an agent.
-	Komari spec.Komari `json:"komari"`
+	Komari  spec.Komari  `json:"komari"`
+	DStatus spec.DStatus `json:"dstatus"`
 	// Overrides are per-core JSON objects merged into the rendered config.
 	Overrides map[string]string `json:"overrides,omitempty"`
 	// SubTemplates are the operator's subscription documents by format

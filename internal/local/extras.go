@@ -455,3 +455,14 @@ func (s *Store) Komari() *spec.Komari {
 	k := s.st.Komari
 	return &k
 }
+
+// DStatus implements panel.DStatusSource.
+func (s *Store) DStatus() *spec.DStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.st.DStatus.Enabled {
+		return nil
+	}
+	d := s.st.DStatus
+	return &d
+}

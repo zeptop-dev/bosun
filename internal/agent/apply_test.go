@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"log/slog"
 	"testing"
 
@@ -191,6 +192,26 @@ func TestNeedsHTTP01(t *testing.T) {
 	for _, c := range cases {
 		if got := needsHTTP01(&c.node, served); got != c.want {
 			t.Errorf("%s: needsHTTP01 = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// The endpoint is scraped from outside, so its port has to be opened —
+// but not when it is off, failed, or bound to loopback.
+func TestDStatusPortIsOpenedOnlyWhenReachable(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		st   dstatus.Status
+		want int
+	}{
+		{"off", dstatus.Status{}, 0},
+		{"listening", dstatus.Status{Enabled: true, Listen: "[::]:9999"}, 9999},
+		{"bound to one address", dstatus.Status{Enabled: true, Listen: "198.51.100.20:9100"}, 9100},
+		{"loopback only", dstatus.Status{Enabled: true, Listen: "127.0.0.1:9999"}, 0},
+		{"could not listen", dstatus.Status{Enabled: true, Listen: ":9999", LastError: "in use"}, 0},
+	} {
+		if got := dstatusPort(tc.st); got != tc.want {
+			t.Errorf("%s: got %d, want %d", tc.name, got, tc.want)
 		}
 	}
 }

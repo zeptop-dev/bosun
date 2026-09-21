@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/dstatus"
+
 	"github.com/zeptop-dev/bosun/internal/runas"
 
 	"github.com/zeptop-dev/bosun/internal/doctor"
@@ -61,7 +63,7 @@ func (a *Agent) Doctor(ctx context.Context) doctor.Report {
 	return doctor.Run(ctx, doctor.Deps{
 		Node: n, Users: users, Cores: cores, CoresKnown: true, Forwards: fwds, Certs: certs, Host: host,
 		Managed: managed, LastReport: lastReport, LastError: lastErr, PushInterval: a.driver.Intervals().Push, Started: a.started,
-		KomariEnabled: ks.Enabled, KomariError: ks.LastError, Assign: assign, Shaper: a.Status().Shaper,
+		KomariEnabled: ks.Enabled, KomariError: ks.LastError, DStatus: dstatusPtr(a.dstatus.Status()), Assign: assign, Shaper: a.Status().Shaper,
 		RealmRunning: a.Realm.Running(), Guard: a.Status().Guard, Firewall: a.Status().Firewall,
 		Egress: a.Status().Egress, CoreUser: runas.Name(), CoreNetAdmin: runas.NetAdmin(), CoreUserError: runas.Error(), RejectedRules: a.Status().RejectedRules, NativeListen: nativeListen(a.reg),
 		Skipped: a.Status().Skipped,
@@ -134,4 +136,13 @@ func (a *Agent) alertOnNewFailures(rep doctor.Report) {
 	case len(prev) > 0 && len(now) == 0:
 		a.Alert("✅ bosun doctor: all checks pass again")
 	}
+}
+
+// dstatusPtr hands the doctor a pointer only when the endpoint was ever
+// configured, so "off" and "never set up" read the same.
+func dstatusPtr(s dstatus.Status) *dstatus.Status {
+	if !s.Enabled {
+		return nil
+	}
+	return &s
 }

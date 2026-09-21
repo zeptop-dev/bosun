@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -170,5 +171,33 @@ func TestShaperUploadOnlyWarns(t *testing.T) {
 	d.Shaper = &shaper.Status{Supported: true, Users: 3, Interface: "eth0"}
 	if c := find(Run(context.Background(), d), "shaper"); c.Status != OK {
 		t.Fatalf("both directions: %+v", c)
+	}
+}
+
+// The DStatus endpoint is scraped, not pushed, so "up but nobody has ever
+// read it" is the interesting state — that is a firewall or a wrong
+// address in the panel, and a refused-key count says which.
+func TestDStatusCheck(t *testing.T) {
+	now := time.Now()
+	at := func(d Deps) Check {
+		d.Now = func() time.Time { return now }
+		return find(Run(context.Background(), d), "dstatus")
+	}
+
+	if c := at(Deps{}); c.Status != Skip {
+		t.Fatalf("off: %+v", c)
+	}
+	if c := at(Deps{DStatus: &dstatus.Status{Enabled: true, Listen: ":9999", LastError: "bind: address already in use"}}); c.Status != Fail {
+		t.Fatalf("cannot listen: %+v", c)
+	}
+	c := at(Deps{DStatus: &dstatus.Status{Enabled: true, Listen: ":9999", Denied: 3}})
+	if c.Status != Warn || !strings.Contains(c.Detail, "never scraped") || !strings.Contains(c.Detail, "wrong key") {
+		t.Fatalf("never scraped with refusals: %+v", c)
+	}
+	if c := at(Deps{DStatus: &dstatus.Status{Enabled: true, Listen: ":9999", LastScrape: now.Add(-30 * time.Minute)}}); c.Status != Warn {
+		t.Fatalf("stale: %+v", c)
+	}
+	if c := at(Deps{DStatus: &dstatus.Status{Enabled: true, Listen: ":9999", LastScrape: now.Add(-5 * time.Second)}}); c.Status != OK {
+		t.Fatalf("healthy: %+v", c)
 	}
 }

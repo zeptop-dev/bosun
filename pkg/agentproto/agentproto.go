@@ -44,6 +44,8 @@ type State struct {
 	Probe *spec.Probe `json:"probe,omitempty"`
 	// Komari asks the node to also report to a Komari server.
 	Komari *spec.Komari `json:"komari,omitempty"`
+	// DStatus asks the node to answer a DStatus panel's scrapes.
+	DStatus *spec.DStatus `json:"dstatus,omitempty"`
 	// Jobs are one-off tasks the node should run once; results ride on a
 	// later Report and the panel then drops the job from the state.
 	Jobs []Job `json:"jobs,omitempty"`
