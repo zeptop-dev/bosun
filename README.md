@@ -544,7 +544,17 @@ whose `tcpfit shape` installs exactly this shape (`htb default 10` → class
 `1:10` → `fq … maxrate`).
 
 The node status and the doctor say which of the two happened
-(`nested_under`). Nesting is what makes "the line is capped at 500 Mbit and
+(`nested_under`).
+
+**Upload-only nodes.** Limiting the download direction means mirroring
+ingress onto an ifb device, which needs the `act_mirred` and `act_connmark`
+tc actions. A container cannot load a module its host has not, so on such a
+node (a privileged LXC on a NAT VPS, typically) `tc filter add … action
+mirred` fails with "Failed to load TC action module". bosun keeps the
+upload classes, which do work, reports `download_error` in the shaper
+status, and the doctor's "Per-user speed limits" check warns with
+"upload only" instead of failing. The apply counts as done, so the rule set
+is not rebuilt on every state change. Nesting is what makes "the line is capped at 500 Mbit and
 each user gets 50" work; before it, a limit silently wiped the line
 shaping and removing the last limit deleted the root qdisc with it.
 

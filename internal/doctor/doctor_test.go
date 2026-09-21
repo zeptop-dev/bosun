@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/shaper"
+
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
@@ -153,5 +155,20 @@ func TestPanelContactIsQuietRightAfterAStart(t *testing.T) {
 	base.Started = now.Add(-30 * time.Minute)
 	if c := find(Run(context.Background(), base), "panel"); c.Status != Warn {
 		t.Fatalf("up for half an hour with nothing accepted: %+v", c)
+	}
+}
+
+// Shaping only the upload direction is a warning that names the missing
+// half, not a green light and not a failure.
+func TestShaperUploadOnlyWarns(t *testing.T) {
+	d := Deps{Shaper: &shaper.Status{Supported: true, Users: 3, Interface: "eth0",
+		DownloadError: "the kernel will not mirror ingress onto ifb-bosun, so only the upload direction is limited: exit status 1"}}
+	c := find(Run(context.Background(), d), "shaper")
+	if c.Status != Warn || !strings.Contains(c.Detail, "upload only") {
+		t.Fatalf("upload-only: %+v", c)
+	}
+	d.Shaper = &shaper.Status{Supported: true, Users: 3, Interface: "eth0"}
+	if c := find(Run(context.Background(), d), "shaper"); c.Status != OK {
+		t.Fatalf("both directions: %+v", c)
 	}
 }

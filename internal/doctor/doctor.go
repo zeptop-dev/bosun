@@ -625,6 +625,11 @@ func checkShaper(_ context.Context, d *Deps) []Check {
 		c.Status, c.Detail = Warn, "limits are configured but this host cannot shape (needs Linux with nft and tc); users run unlimited"
 	case d.Shaper.Error != "":
 		c.Status, c.Detail = Fail, d.Shaper.Error
+	case d.Shaper.DownloadError != "":
+		// Upload is limited, download is not: worth a warning, not a
+		// failure, and the operator needs to know which half is missing.
+		c.Status = Warn
+		c.Detail = fmt.Sprintf("%d users shaped on %s, upload only — %s", d.Shaper.Users, d.Shaper.Interface, d.Shaper.DownloadError)
 	default:
 		c.Status, c.Detail = OK, fmt.Sprintf("%d users shaped on %s", d.Shaper.Users, d.Shaper.Interface)
 	}

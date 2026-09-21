@@ -39,6 +39,12 @@ type Status struct {
 	// (a VPS init script capping the line, say) and the per-user classes
 	// hang under their class instead of replacing their root qdisc.
 	NestedUnder string `json:"nested_under,omitempty"`
+	// DownloadError says why only the upload direction is shaped. Mirroring
+	// ingress onto the ifb device needs the act_mirred and act_connmark tc
+	// actions, and a container cannot load a module its host has not: on
+	// such a node the upload limit is real and the download limit is not,
+	// which is worth saying rather than failing the whole apply.
+	DownloadError string `json:"download_error,omitempty"`
 }
 
 const (
@@ -55,9 +61,11 @@ type Shaper struct {
 
 	mu      sync.Mutex
 	applied string
-	synced  bool    // the kernel has been brought in line at least once
-	last    []Limit // what the kernel is supposed to hold, for Resync
-	status  Status
+	synced  bool // the kernel has been brought in line at least once
+	// downloadErr is set when ingress mirroring is impossible on this host.
+	downloadErr string
+	last        []Limit // what the kernel is supposed to hold, for Resync
+	status      Status
 	// lineLeaf is the qdisc a foreign line class had before bosun nested
 	// under it, put back when the limits go.
 	lineLeaf leafQdisc
@@ -365,9 +373,14 @@ func (s *Shaper) removeCatchAll(ctx context.Context, dev string, root rootInfo) 
 
 func (s *Shaper) setNested(parent string) { s.mu.Lock(); s.status.NestedUnder = parent; s.mu.Unlock() }
 
+func (s *Shaper) setDownloadError(e string) { s.mu.Lock(); s.downloadErr = e; s.mu.Unlock() }
+
 func (s *Shaper) setStatus(st Status) {
 	s.mu.Lock()
 	st.NestedUnder = s.status.NestedUnder
+	if st.Users > 0 && st.Error == "" {
+		st.DownloadError = s.downloadErr
+	}
 	s.status = st
 	s.mu.Unlock()
 }
@@ -705,8 +718,15 @@ func (s *Shaper) install(ctx context.Context, iface string, limits []Limit) erro
 	_, _ = s.run(ctx, "tc", "filter", "del", "dev", iface, "ingress")
 	if _, err := s.run(ctx, "tc", "filter", "add", "dev", iface, "ingress", "protocol", "all", "prio", "1", "matchall",
 		"action", "connmark", "action", "mirred", "egress", "redirect", "dev", ifbDev); err != nil {
-		return fmt.Errorf("shaper: ingress redirect: %w", err)
+		// Half a limit is not a failed apply. The upload classes are
+		// installed and doing their job; the kernel simply will not mirror
+		// ingress here (a container whose host has no act_mirred or
+		// act_connmark). Say so and leave it at that, instead of reporting
+		// the whole thing broken and rebuilding it on every apply.
+		s.setDownloadError("the kernel will not mirror ingress onto " + ifbDev + ", so only the upload direction is limited: " + errText(err))
+		return nil
 	}
+	s.setDownloadError("")
 	return nil
 }
 

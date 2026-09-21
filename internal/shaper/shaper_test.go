@@ -420,3 +420,47 @@ func TestALeafCopyThatIsRefusedFallsBack(t *testing.T) {
 		t.Fatalf("expected a bare fq after the retry, got %q", got)
 	}
 }
+
+// A container whose host has no act_mirred/act_connmark cannot mirror
+// ingress onto the ifb device, so only the upload direction can be
+// limited. That is a limitation to report, not a failed apply: the upload
+// classes are installed and working, and calling the whole thing broken
+// would also rebuild it on every apply forever.
+func TestUploadOnlyWhenIngressCannotBeMirrored(t *testing.T) {
+	k := newTC()
+	s := k.shaper()
+	inner := k.run
+	s.Run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == "tc" && has(args, "ingress") && has(args, "mirred") {
+			k.cmds = append(k.cmds, name+" "+strings.Join(args, " "))
+			return []byte("Error: Failed to load TC action module."), errors.New("exit status 1")
+		}
+		return inner(ctx, name, args...)
+	}
+	if err := s.Apply(context.Background(), []Limit{{UserID: 7, Mbps: 50}}); err != nil {
+		t.Fatalf("an apply that shapes the upload direction is not a failure: %v", err)
+	}
+	st := s.Status()
+	if st.Error != "" {
+		t.Fatalf("status should not carry an error: %+v", st)
+	}
+	if !strings.Contains(st.DownloadError, "upload") {
+		t.Fatalf("status should say the download direction is missing: %+v", st)
+	}
+	if _, ok := k.classes["eth0"]["1:8"]; !ok {
+		t.Fatal("the upload class was not installed")
+	}
+	// Applying the same limits again must now be a no-op, not a rebuild.
+	n := len(k.cmds)
+	if err := s.Apply(context.Background(), []Limit{{UserID: 7, Mbps: 50}}); err != nil || len(k.cmds) != n {
+		t.Fatalf("unchanged limits rebuilt the shaper: %v\n%s", err, k.since(n))
+	}
+	// And when the host gains the modules, the next change clears it.
+	s.Run = inner
+	if err := s.Apply(context.Background(), []Limit{{UserID: 7, Mbps: 80}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Status().DownloadError; got != "" {
+		t.Fatalf("the warning should be gone once ingress works: %q", got)
+	}
+}
