@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"log/slog"
 	"testing"
 
@@ -197,21 +196,26 @@ func TestNeedsHTTP01(t *testing.T) {
 }
 
 // The endpoint is scraped from outside, so its port has to be opened —
-// but not when it is off, failed, or bound to loopback.
+// but not when it is off, bound to loopback, or nonsense. The firewall is
+// synced from the desired config, not the running exporter, because the
+// two are set up on different paths and the exporter is still off when
+// the setting first arrives.
 func TestDStatusPortIsOpenedOnlyWhenReachable(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		st   dstatus.Status
-		want int
+		listen string
+		want   int
 	}{
-		{"off", dstatus.Status{}, 0},
-		{"listening", dstatus.Status{Enabled: true, Listen: "[::]:9999"}, 9999},
-		{"bound to one address", dstatus.Status{Enabled: true, Listen: "198.51.100.20:9100"}, 9100},
-		{"loopback only", dstatus.Status{Enabled: true, Listen: "127.0.0.1:9999"}, 0},
-		{"could not listen", dstatus.Status{Enabled: true, Listen: ":9999", LastError: "in use"}, 0},
+		{"", 9999},
+		{":9999", 9999},
+		{"[::]:9999", 9999},
+		{"198.51.100.20:9100", 9100},
+		{"127.0.0.1:9999", 0},
+		{"[::1]:9999", 0},
+		{"9999", 0},
+		{":0", 0},
 	} {
-		if got := dstatusPort(tc.st); got != tc.want {
-			t.Errorf("%s: got %d, want %d", tc.name, got, tc.want)
+		if got := dstatusPortOf(tc.listen); got != tc.want {
+			t.Errorf("%q: got %d, want %d", tc.listen, got, tc.want)
 		}
 	}
 }

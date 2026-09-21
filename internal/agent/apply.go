@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"net"
 	"strconv"
 	"strings"
@@ -416,7 +415,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 		}
 		// The DStatus endpoint is scraped by the panel, so unlike Komari
 		// it needs its port reachable.
-		if p := dstatusPort(a.dstatus.Status()); p > 0 {
+		if p := a.dstatusPort(); p > 0 {
 			ports = append(ports, firewall.Port{Proto: "tcp", Port: p})
 		}
 		if err := a.Firewall.Apply(ctx, ports); err != nil {
@@ -526,13 +525,30 @@ func validateNode(node *spec.Node, log *slog.Logger, report func([]string)) *spe
 	return &cp
 }
 
-// dstatusPort is the port the neko-status endpoint listens on, or 0 when
-// it is off, failed, or bound to loopback only (nothing to open then).
-func dstatusPort(st dstatus.Status) int {
-	if !st.Enabled || st.LastError != "" || st.Listen == "" {
+// dstatusPort is the port the DStatus endpoint will listen on, or 0 when
+// there is nothing to open. It reads the *desired* config rather than the
+// running exporter: the firewall is synced here during an apply while the
+// endpoint is (re)configured on its own path, so the exporter can still
+// say "off" for a setting that arrived in this very state.
+func (a *Agent) dstatusPort() int {
+	ds, ok := a.driver.(panel.DStatusSource)
+	if !ok {
 		return 0
 	}
-	host, port, err := net.SplitHostPort(st.Listen)
+	cfg := ds.DStatus()
+	if cfg == nil || !cfg.Enabled {
+		return 0
+	}
+	return dstatusPortOf(cfg.Listen)
+}
+
+// dstatusPortOf reads a listen address, and answers 0 for one bound to
+// loopback: nothing outside could reach it, so nothing needs opening.
+func dstatusPortOf(listen string) int {
+	if listen == "" {
+		listen = spec.DStatusListen
+	}
+	host, port, err := net.SplitHostPort(listen)
 	if err != nil {
 		return 0
 	}
@@ -540,7 +556,7 @@ func dstatusPort(st dstatus.Status) int {
 		return 0
 	}
 	n, err := strconv.Atoi(port)
-	if err != nil {
+	if err != nil || n < 1 || n > 65535 {
 		return 0
 	}
 	return n
