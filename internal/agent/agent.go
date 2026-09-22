@@ -363,6 +363,13 @@ func (a *Agent) Run(ctx context.Context) error {
 				if err := a.apply(ctx); err != nil {
 					a.log.Error("apply failed", "err", err)
 				}
+				// The exporters (Komari, DStatus) are configured from the
+				// driver's state on their own path; bring them in line
+				// before the self-check runs, or the doctor judges a
+				// state that is about to change and says so for the next
+				// ten minutes.
+				reconfigureBeat()
+				a.scheduleDoctor()
 			}
 		case <-beat.C:
 			if beater != nil {
@@ -387,6 +394,9 @@ func (a *Agent) Run(ctx context.Context) error {
 				if err := a.applyForwards(ctx); err != nil {
 					a.log.Error("forwards", "err", err)
 				}
+				// Same reason as in the kick branch: exporters first, then
+				// the self-check that reports on them.
+				reconfigureBeat()
 				a.scheduleDoctor()
 			}
 			a.runJobs(ctx)
