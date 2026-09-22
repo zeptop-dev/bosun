@@ -201,3 +201,25 @@ func TestDStatusCheck(t *testing.T) {
 		t.Fatalf("healthy: %+v", c)
 	}
 }
+
+// Active mode is judged by whether the panel accepts the reports, and a
+// refusal after earlier acceptance is a warning that carries the reason.
+func TestDStatusActiveCheck(t *testing.T) {
+	now := time.Now()
+	at := func(st dstatus.Status) Check {
+		return find(Run(context.Background(), Deps{DStatus: &st, Now: func() time.Time { return now }}), "dstatus")
+	}
+	if c := at(dstatus.Status{Enabled: true, Mode: "active", Server: "https://p.example.com", Interval: 3}); c.Status != Warn || !strings.Contains(c.Detail, "no report accepted") {
+		t.Fatalf("nothing accepted yet: %+v", c)
+	}
+	if c := at(dstatus.Status{Enabled: true, Mode: "active", Server: "https://p.example.com", Interval: 3, LastError: "the panel URL must start with http:// or https://"}); c.Status != Fail {
+		t.Fatalf("cannot start: %+v", c)
+	}
+	if c := at(dstatus.Status{Enabled: true, Mode: "active", Server: "https://p.example.com", Interval: 3, Reports: 9, LastReport: now.Add(-2 * time.Second)}); c.Status != OK {
+		t.Fatalf("healthy: %+v", c)
+	}
+	c := at(dstatus.Status{Enabled: true, Mode: "active", Server: "https://p.example.com", Interval: 3, Reports: 9, LastReport: now.Add(-5 * time.Minute), LastError: "panel refused the report: API 密钥无效"})
+	if c.Status != Warn || !strings.Contains(c.Detail, "密钥") {
+		t.Fatalf("stale with a reason: %+v", c)
+	}
+}

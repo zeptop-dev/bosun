@@ -191,25 +191,36 @@ capability is advertised: no terminal, file or exec access. Captain can push
 the same setting to every managed node (`state.komari`). A deleted client on
 the Komari side makes the node re-register automatically.
 
-## DStatus endpoint
+## DStatus
 
-The other direction: a [DStatus](https://github.com/fev125/dstatus) panel
-scrapes its agents rather than being reported to, so bosun can stand in for
-its `neko-status` agent instead of running one beside it. With the setting
-on, the node serves `GET /stat` on the configured address (default
-`:9999`) and answers — with the host sample in neko-status' shape, wrapped
-as `{"success":true,"data":{…}}` — only when the request carries the key in
-a `key` header; anything else gets a 403 and is counted. That one path is
-the entire surface: no terminal, files or exec, and the endpoint refuses to
-start at all without a key rather than exposing the host to whoever finds
-the port.
+A [DStatus](https://github.com/fev125/dstatus) panel — the open-source one
+or the official build at dstatus.sh, which share the wire protocol — gets
+this node without its own `neko-status`/`dstatus-agent` on the box. Both
+of the panel's 通讯模式 are covered:
 
-Because it is scraped, the port has to be reachable: the firewall
-auto-open opens it while the endpoint is enabled (unless it is bound to
-loopback), and the doctor's "DStatus endpoint" check warns when the
-listener is up but has never been read, or when scrapes are being refused
-for a wrong key. Captain can push the setting to every managed node
-(`state.dstatus`); in standalone mode it lives in the local store.
+- **passive (被动, the default)**: the node serves `GET /stat` on the
+  configured address (default `:9999`) and answers — the host sample in
+  neko-status' shape, wrapped as `{"success":true,"data":{…}}` — only when
+  the request carries the 通讯密钥 in a `key` header; anything else gets a
+  403 and is counted. The panel's optional `/ping` and `/tcping`
+  capability probes get a 404, which only greys out its "network quality"
+  feature. Because it is scraped, the port has to be reachable: the
+  firewall auto-open opens it while enabled (unless bound to loopback).
+- **active (主动)**: the node posts `{"sid","data"}` to the panel's
+  `/stats/update` (the path the open-source panel serves and the official
+  one aliases as `/api/report`) every `interval` seconds with the same
+  `key` header, and does not listen at all — for hosts the panel cannot
+  reach. It needs the panel URL and this node's server id (SID) from the
+  panel, and the server switched to 主动 there. The panel's task channel
+  (remote scripts, diagnostics) is deliberately not implemented.
+
+Either way that is the entire surface: no terminal, files or exec, and no
+listener at all without a key. The doctor's "DStatus" check warns when a
+passive endpoint is up but has never been read (a firewall, or the wrong
+address in the panel), when scrapes are refused for a wrong key, and in
+active mode when the panel stops accepting reports — with the panel's own
+reason. Captain pushes the setting to every managed node (`state.dstatus`,
+the SID per node); standalone keeps it in the local store (Probe page).
 
 Per-core CPU percentages and per-interface counters come back empty —
 bosun does not measure them, and an empty list reads better in the panel

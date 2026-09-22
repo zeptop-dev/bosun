@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -130,5 +133,163 @@ func listenAddr(t *testing.T, e *Exporter) string {
 	if e.bound == "" {
 		t.Fatal("no bound address")
 	}
+	return e.bound
+}
+
+// officialPanel is what the official DStatus server does with a report,
+// read out of its /stats/update handler: the key must arrive in a "key"
+// header, the body is {sid, data}, and validateReportData wants a
+// hostname, a numeric cpu.multi, mem.virtual.used and the four net
+// counters. It answers 200 either way, with success 1 or 0.
+func officialPanel(t *testing.T, key, sid string, hits *int32) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/stats/update" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		refuse := func(msg string) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": 0, "data": msg, "success": 0})
+		}
+		if r.Header.Get("key") != key {
+			refuse("API 密钥无效")
+			return
+		}
+		var body struct {
+			SID  string         `json:"sid"`
+			Data map[string]any `json:"data"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil || body.SID != sid || body.Data == nil {
+			refuse("无效的上报数据")
+			return
+		}
+		d := body.Data
+		host, _ := d["host"].(map[string]any)
+		if _, ok := d["hostname"].(string); !ok {
+			if _, ok := host["hostname"].(string); !ok {
+				refuse("缺少 hostname")
+				return
+			}
+		}
+		if _, ok := d["cpu"].(map[string]any)["multi"].(float64); !ok {
+			refuse("cpu.multi")
+			return
+		}
+		if _, ok := d["mem"].(map[string]any)["virtual"].(map[string]any)["used"].(float64); !ok {
+			refuse("mem.virtual.used")
+			return
+		}
+		net := d["net"].(map[string]any)
+		for _, k := range []string{"delta", "total"} {
+			m, _ := net[k].(map[string]any)
+			if _, ok := m["in"].(float64); !ok {
+				refuse("net." + k)
+				return
+			}
+			if _, ok := m["out"].(float64); !ok {
+				refuse("net." + k)
+				return
+			}
+		}
+		atomic.AddInt32(hits, 1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": 1, "data": "update success", "success": 1})
+	}))
+}
+
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	for i := 0; i < 100; i++ {
+		if cond() {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for " + what)
+}
+
+// Active mode posts what the official panel's validator accepts, with the
+// key in the header, and listens on nothing.
+func TestActiveModeReportsWhatTheOfficialPanelAccepts(t *testing.T) {
+	var hits int32
+	panel := officialPanel(t, "s3cret", "42", &hits)
+	defer panel.Close()
+	e := &Exporter{Sampler: fakeSampler{sample()}}
+	e.Configure(&spec.DStatus{Enabled: true, Mode: spec.DStatusActive, Server: panel.URL + "/", SID: "42", Key: "s3cret", Interval: 1})
+	defer e.Stop()
+	waitFor(t, "a report", func() bool { return atomic.LoadInt32(&hits) > 0 })
+	st := e.Status()
+	if st.Mode != "active" || st.LastError != "" || st.Reports == 0 || st.LastReport.IsZero() {
+		t.Fatalf("status %+v", st)
+	}
+	if st.Listen != "" || listenAddrOrEmpty(e) != "" {
+		t.Fatalf("active mode must not listen: %+v", st)
+	}
+	// Reports keep coming on the interval.
+	n := atomic.LoadInt32(&hits)
+	waitFor(t, "another report", func() bool { return atomic.LoadInt32(&hits) > n })
+}
+
+// The panel's refusal — a wrong key, here — is surfaced with its reason,
+// and stops counting as accepted.
+func TestActiveModeSurfacesThePanelsRefusal(t *testing.T) {
+	var hits int32
+	panel := officialPanel(t, "right", "42", &hits)
+	defer panel.Close()
+	e := &Exporter{Sampler: fakeSampler{sample()}}
+	e.Configure(&spec.DStatus{Enabled: true, Mode: spec.DStatusActive, Server: panel.URL, SID: "42", Key: "wrong", Interval: 1})
+	defer e.Stop()
+	waitFor(t, "a refusal", func() bool { return e.Status().LastError != "" })
+	st := e.Status()
+	if !strings.Contains(st.LastError, "refused") || !strings.Contains(st.LastError, "密钥") || st.Reports != 0 {
+		t.Fatalf("status %+v", st)
+	}
+	if atomic.LoadInt32(&hits) != 0 {
+		t.Fatal("the panel should not have accepted anything")
+	}
+}
+
+// Active mode without a panel URL or a SID cannot work and says so.
+func TestActiveModeNeedsServerAndSID(t *testing.T) {
+	e := &Exporter{Sampler: fakeSampler{sample()}}
+	for _, cfg := range []spec.DStatus{
+		{Enabled: true, Mode: spec.DStatusActive, Key: "k", SID: "42"},
+		{Enabled: true, Mode: spec.DStatusActive, Key: "k", Server: "http://panel.example.com"},
+		{Enabled: true, Mode: spec.DStatusActive, Key: "k", Server: "panel.example.com", SID: "42"},
+	} {
+		e.Configure(&cfg)
+		if st := e.Status(); st.LastError == "" || st.Reports != 0 {
+			t.Fatalf("%+v: %+v", cfg, st)
+		}
+	}
+	e.Configure(nil)
+	if st := e.Status(); st.Enabled {
+		t.Fatalf("disabled: %+v", st)
+	}
+}
+
+// refused reads both panels' answers.
+func TestRefusedReadsBothPanelsAnswers(t *testing.T) {
+	for _, tc := range []struct {
+		raw     string
+		refused bool
+	}{
+		{`{"status":1,"data":"update success","success":1}`, false}, // official, accepted
+		{`{"status":0,"data":"API 密钥无效","success":0}`, true},        // official, refused
+		{`{"status":1,"data":"update success"}`, false},             // open-source
+		{`{"status":0,"data":"no"}`, true},
+		{`{"success":true}`, false},
+		{`{"success":false,"msg":"nope"}`, true},
+		{`not json`, false},
+	} {
+		if _, got := refused([]byte(tc.raw)); got != tc.refused {
+			t.Errorf("%s: refused=%v", tc.raw, got)
+		}
+	}
+}
+
+func listenAddrOrEmpty(e *Exporter) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.bound
 }

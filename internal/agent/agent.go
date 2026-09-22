@@ -299,7 +299,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	defer a.komari.Stop()
 	defer a.dstatus.Stop()
 	a.komari.CredFile, a.komari.Sampler, a.komari.Prober, a.komari.Log, a.komari.Version = filepath.Join(a.cfg.DataDir, "komari.json"), &a.sampler, &a.probes, a.log, a.Version
-	a.dstatus.Sampler, a.dstatus.Log = &a.sampler, a.log
+	a.dstatus.Sampler, a.dstatus.Log, a.dstatus.Version = &a.sampler, a.log, a.Version
 	ks, _ := a.driver.(panel.KomariSource)
 	ds, _ := a.driver.(panel.DStatusSource)
 	beatEvery := time.Duration(0)

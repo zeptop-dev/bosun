@@ -37,6 +37,8 @@ func (s *Server) extraRoutes() {
 
 	m.HandleFunc("GET /api/komari", auth(s.getKomari))
 	m.HandleFunc("PUT /api/komari", auth(s.local(s.putKomari)))
+	m.HandleFunc("GET /api/dstatus", auth(s.getDStatus))
+	m.HandleFunc("PUT /api/dstatus", auth(s.local(s.putDStatus)))
 	m.HandleFunc("GET /api/probe", auth(s.getProbe))
 	m.HandleFunc("PUT /api/probe", auth(s.local(s.putProbe)))
 }
@@ -257,6 +259,28 @@ func (s *Server) putKomari(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	storeErr(w, s.d.Store.SetKomari(k))
+}
+
+// ---- dstatus ---------------------------------------------------------------
+
+func (s *Server) getDStatus(w http.ResponseWriter, r *http.Request) {
+	d := s.d.Store.DStatusSettings()
+	hasKey := d.Key != ""
+	d.Key = ""
+	var st any
+	if a := s.currentAgent(); a != nil {
+		st = a.DStatusStatus()
+	}
+	ok(w, map[string]any{"settings": d, "has_key": hasKey, "status": st})
+}
+
+func (s *Server) putDStatus(w http.ResponseWriter, r *http.Request) {
+	var d spec.DStatus
+	if err := decode(r, &d); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	storeErr(w, s.d.Store.SetDStatus(d))
 }
 
 func (s *Server) getOverrides(w http.ResponseWriter, r *http.Request) { ok(w, s.d.Store.Overrides()) }

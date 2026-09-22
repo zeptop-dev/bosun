@@ -676,9 +676,24 @@ type Komari struct {
 // auto-open opens it while this is enabled.
 type DStatus struct {
 	Enabled bool   `json:"enabled"`
-	Listen  string `json:"listen,omitempty"` // host:port, "" = :9999
-	Key     string `json:"key,omitempty"`    // the secret the panel sends
+	Listen  string `json:"listen,omitempty"` // passive: host:port, "" = :9999
+	Key     string `json:"key,omitempty"`    // the 通讯密钥 both modes carry in the "key" header
+	// Mode picks the direction (bosun >= 0.53). "" or "passive": the node
+	// listens and the panel scrapes it. "active": the node posts its
+	// sample to the panel every Interval seconds instead — for hosts the
+	// panel cannot reach (NAT, containers) — and does not listen at all,
+	// the way DStatus' own agent behaves in that mode.
+	Mode     string `json:"mode,omitempty"`
+	Server   string `json:"server,omitempty"`   // active: the panel's base URL
+	SID      string `json:"sid,omitempty"`      // active: this node's server id in the panel
+	Interval int    `json:"interval,omitempty"` // active: report seconds, default 3
 }
+
+// DStatusActive is the Mode value for reporting instead of listening.
+const DStatusActive = "active"
+
+// Active reports whether the node pushes rather than listens.
+func (d DStatus) Active() bool { return d.Mode == DStatusActive }
 
 // DStatusListen is where the neko-status agent listens by default.
 const DStatusListen = ":9999"

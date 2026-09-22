@@ -593,24 +593,48 @@ func checkKomari(_ context.Context, d *Deps) []Check {
 // scrapes. It is a listener, so "configured but never read" is worth
 // saying: that is usually a firewall or a wrong address in the panel.
 func checkDStatus(_ context.Context, d *Deps) []Check {
-	c := Check{ID: "dstatus", Name: "DStatus endpoint"}
+	c := Check{ID: "dstatus", Name: "DStatus"}
 	now := time.Now
 	if d.Now != nil {
 		now = d.Now
 	}
+	st := d.DStatus
 	switch {
-	case d.DStatus == nil || !d.DStatus.Enabled:
+	case st == nil || !st.Enabled:
 		c.Status, c.Detail = Skip, "off"
-	case d.DStatus.LastError != "":
-		c.Status, c.Detail = Fail, d.DStatus.LastError
-	case d.DStatus.LastScrape.IsZero():
-		c.Status, c.Detail = Warn, "listening on "+d.DStatus.Listen+", never scraped yet"+deniedNote(d.DStatus.Denied)
-	case now().Sub(d.DStatus.LastScrape) > 10*time.Minute:
-		c.Status, c.Detail = Warn, "last scraped "+now().Sub(d.DStatus.LastScrape).Truncate(time.Second).String()+" ago"+deniedNote(d.DStatus.Denied)
+	case st.LastError != "" && (st.Mode != "active" || st.Reports == 0):
+		c.Status, c.Detail = Fail, st.LastError
+	case st.Mode == "active":
+		// Reporting: the panel's acceptance is the only thing that says it
+		// works, and a report that stops being accepted is worth a warning
+		// with the panel's own reason.
+		stale := time.Duration(max(st.Interval, 1)) * time.Second * 3
+		if stale < 30*time.Second {
+			stale = 30 * time.Second
+		}
+		switch {
+		case st.LastReport.IsZero():
+			c.Status, c.Detail = Warn, "reporting to "+st.Server+", no report accepted yet"+errNote(st.LastError)
+		case now().Sub(st.LastReport) > stale:
+			c.Status, c.Detail = Warn, "reporting to "+st.Server+", last accepted "+now().Sub(st.LastReport).Truncate(time.Second).String()+" ago"+errNote(st.LastError)
+		default:
+			c.Status, c.Detail = OK, "reporting to "+st.Server+", last accepted "+now().Sub(st.LastReport).Truncate(time.Second).String()+" ago"
+		}
+	case st.LastScrape.IsZero():
+		c.Status, c.Detail = Warn, "listening on "+st.Listen+", never scraped yet"+deniedNote(st.Denied)
+	case now().Sub(st.LastScrape) > 10*time.Minute:
+		c.Status, c.Detail = Warn, "last scraped "+now().Sub(st.LastScrape).Truncate(time.Second).String()+" ago"+deniedNote(st.Denied)
 	default:
-		c.Status, c.Detail = OK, "listening on "+d.DStatus.Listen+", last scraped "+now().Sub(d.DStatus.LastScrape).Truncate(time.Second).String()+" ago"
+		c.Status, c.Detail = OK, "listening on "+st.Listen+", last scraped "+now().Sub(st.LastScrape).Truncate(time.Second).String()+" ago"
 	}
 	return []Check{c}
+}
+
+func errNote(e string) string {
+	if e == "" {
+		return ""
+	}
+	return "; " + e
 }
 
 // deniedNote names the likeliest cause when scrapes are being turned away.

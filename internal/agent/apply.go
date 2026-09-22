@@ -526,25 +526,24 @@ func validateNode(node *spec.Node, log *slog.Logger, report func([]string)) *spe
 }
 
 // dstatusPort is the port the DStatus endpoint will listen on, or 0 when
-// there is nothing to open. It reads the *desired* config rather than the
-// running exporter: the firewall is synced here during an apply while the
-// endpoint is (re)configured on its own path, so the exporter can still
-// say "off" for a setting that arrived in this very state.
+// there is nothing to open: off, active mode (the node dials out and does
+// not listen), or bound to loopback. It reads the *desired* config rather
+// than the running exporter: the firewall is synced here during an apply
+// while the endpoint is (re)configured on its own path, so the exporter
+// can still say "off" for a setting that arrived in this very state.
 func (a *Agent) dstatusPort() int {
 	ds, ok := a.driver.(panel.DStatusSource)
 	if !ok {
 		return 0
 	}
-	cfg := ds.DStatus()
-	if cfg == nil || !cfg.Enabled {
-		return 0
-	}
-	return dstatusPortOf(cfg.Listen)
+	return dstatusPortFor(ds.DStatus())
 }
 
-// dstatusPortOf reads a listen address, and answers 0 for one bound to
-// loopback: nothing outside could reach it, so nothing needs opening.
-func dstatusPortOf(listen string) int {
+func dstatusPortFor(cfg *spec.DStatus) int {
+	if cfg == nil || !cfg.Enabled || cfg.Active() {
+		return 0
+	}
+	listen := cfg.Listen
 	if listen == "" {
 		listen = spec.DStatusListen
 	}
