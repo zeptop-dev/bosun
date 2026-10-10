@@ -1020,6 +1020,11 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		fail(w, code, err)
 		return
 	}
+	if selfupdate.InContainer() {
+		s.d.Log.Info("Docker image upgrade queued", "version", ver)
+		ok(w, map[string]any{"installed": ver, "queued": true, "restarting": false})
+		return
+	}
 	s.d.Log.Warn("bosun updated; restarting", "version", ver)
 	ok(w, map[string]any{"installed": ver, "restarting": true})
 	selfupdate.Restart(500 * time.Millisecond)

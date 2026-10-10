@@ -54,6 +54,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/telegram"
 	"github.com/zeptop-dev/bosun/internal/ui"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
+	"github.com/zeptop-dev/bosun/pkg/hostupdate"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 )
 
@@ -64,7 +65,7 @@ func newUpdater(minVersion string) *selfupdate.Client {
 }
 
 // upgradeHook applies a panel-requested release and restarts. In a container
-// it only logs: the image has to be pulled by the operator.
+// it delegates to the optional host updater; the agent keeps serving until replacement.
 func upgradeHook(log *slog.Logger, upd *selfupdate.Client) func(string) {
 	return func(v string) {
 		if v == version {
@@ -75,6 +76,10 @@ func upgradeHook(log *slog.Logger, upd *selfupdate.Client) func(string) {
 		got, err := upd.Apply(ctx, v)
 		if err != nil {
 			log.Error("panel-requested upgrade failed", "version", v, "err", err)
+			return
+		}
+		if selfupdate.InContainer() {
+			log.Info("Docker image upgrade queued on panel request", "version", got)
 			return
 		}
 		log.Warn("upgraded on panel request; restarting", "from", version, "to", got)
@@ -101,6 +106,30 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "installer-check-layout":
+		if len(os.Args) != 3 {
+			err = fmt.Errorf("config path required")
+		} else {
+			err = hostupdate.CheckLayoutFile("bosun", os.Args[2])
+		}
+	case "installer-check-upgrade":
+		if len(os.Args) != 3 || !hostupdate.NewerRelease(version, os.Args[2]) {
+			err = fmt.Errorf("target is not a newer release")
+		}
+	case "installer-version":
+		fmt.Println("1")
+	case "uninstall":
+		err = hostupdate.Uninstall("bosun", os.Args[2:], removal.CleanNetwork)
+	case "docker-updater":
+		err = hostupdate.CLI("bosun", os.Args[2:])
+	case "healthcheck":
+		fs := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
+		expected := fs.String("version", "", "expected running version")
+		dataDir := fs.String("data-dir", "/var/lib/bosun", "application data directory")
+		err = fs.Parse(os.Args[2:])
+		if err == nil {
+			err = hostupdate.Healthcheck("bosun", *expected, *dataDir)
+		}
 	case "internal-node-removal":
 		if len(os.Args) != 3 {
 			err = errors.New("removal plan is required")
@@ -142,6 +171,11 @@ func usage() {
   bosun doctor [-c config.yaml]                  read-only health checks (listeners, certs, disk, firewall); exit 1 on failure
   bosun backup create [-c config.yaml] [-o FILE]  archive the standalone configuration (default: bosun-backup-<date>.tar.gz)
   bosun backup restore [-c config.yaml] [--force] FILE   replace it from an archive (service must be stopped)
+  bosun docker-updater setup [--dir /opt/bosun]   enable Docker web upgrades on the host
+  bosun docker-updater status                       show persisted host upgrade status
+  bosun docker-updater upgrade --version vX.Y.Z      request a stable image upgrade
+  bosun uninstall --yes [--keep-data]                remove an installer-managed host deployment
+  bosun healthcheck [--version vX.Y.Z]               check the running application
   bosun version`)
 }
 
@@ -431,6 +465,9 @@ func cmdRun(args []string) error {
 		ag.EgressProtectedPorts = controlPorts(cfg)
 		ag.Firewall, ag.ExtraPorts = fw, extraPorts
 		current.ag = ag
+		if err := hostupdate.Readiness(ctx, "bosun", version, cfg.DataDir, nil); err != nil {
+			return err
+		}
 		return ag.Run(ctx)
 	}
 
@@ -503,6 +540,9 @@ func cmdRun(args []string) error {
 	}()
 	defer srv.Close()
 	log.Info("web panel", "listen", cfg.Web.Listen, "tls", panelTLS, "domain", settings.PanelDomain)
+	if err := hostupdate.Readiness(ctx, "bosun", version, cfg.DataDir, func() error { return hostupdate.Listening(cfg.Web.Listen) }); err != nil {
+		return err
+	}
 	return sup.run(ctx)
 }
 

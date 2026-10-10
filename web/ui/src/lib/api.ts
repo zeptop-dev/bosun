@@ -80,6 +80,7 @@ export interface UpdateInfo {
   current: string; latest: string; has_update: boolean; release_build: boolean; in_container: boolean
   notes?: string; published_at?: string; url?: string; checked_at: string; cached: boolean; warning?: string
   has_backup: boolean; backup_version?: string
+  host_update?: { available: boolean; job?: { id: string; target: string; previous?: string; phase: string; error?: string; updated_at: string } }
 }
 export interface LogEntry { time: string; level: string; msg: string; attrs?: string }
 

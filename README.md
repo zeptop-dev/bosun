@@ -46,15 +46,15 @@ core. Captain keeps availability unknown for older or offline nodes.
 
 ## Uninstalling or leaving Captain
 
-The installer already provides an uninstall command (there is no public binary
-`bosun uninstall` subcommand):
+The installer and `bosun uninstall --yes` remove installer-managed binary or Docker deployments:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/install.sh | sh -s -- uninstall
+curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/install.sh | sh -s -- uninstall --yes
 ```
 
-Append `--keep-data` to retain `/var/lib/bosun` (local state, cores and
-certificates); the service, executable and `/etc/bosun` are still removed.
+Append `--keep-data` to retain configuration, data and backups. Default uninstall
+also removes service drop-ins, Docker resources and bosun-owned network rules.
+See [upgrade and removal](docs/LIFECYCLE.md) for scope and shared-resource handling.
 
 Starting with v0.55.0, Captain's node deletion dialog can also request a switch
 to standalone mode or an uninstall. This requires a new Captain with the removal
@@ -152,14 +152,16 @@ curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/ins
 
 "Add node" in Captain prints this ready to paste as
 `curl -fsSL https://<captain>/api/agent/install.sh?pair=CODE | sh`, and a Docker
-one-liner: `docker run -d --network host -v bosun-data:/var/lib/bosun
--e BOSUN_CAPTAIN=https://<captain> -e BOSUN_PAIR=CODE zeptop/bosun:latest`
-(the two variables select the Captain driver without editing the config; the
-code is only used until the token is stored). The pair code is used once. Either way the
-installer verifies the binary against the release checksums, writes
-`/etc/bosun/config.yaml`, and starts the `bosun` service; cores are downloaded on
-first start. Re-run without arguments to upgrade; `... | sh -s -- uninstall`
-removes everything again (`--keep-data` keeps `/var/lib/bosun`). Piped through
+installer command with `--mode docker --web-upgrade`. This creates a Compose
+installation and registers its host updater for future panel-requested upgrades.
+For manual Docker-run deployments, `BOSUN_CAPTAIN` and `BOSUN_PAIR` still select the
+Captain driver; the pair code is only used until its token is stored.
+The pair code is used once. The native installer verifies release checksums,
+writes `/etc/bosun/config.yaml`, and starts the `bosun` service. Docker mode
+creates a Compose deployment under `/opt/bosun` with persistent storage.
+Cores are downloaded on first start. Use `... | sh -s -- upgrade` to upgrade without changing settings;
+`... | sh -s -- uninstall --yes` removes the installation and data.
+`--keep-data` retains configuration and data. Piped through
 `sh` the script itself never lands on disk.
 
 ### Docker Compose
@@ -186,7 +188,7 @@ Day-to-day:
 
 ```sh
 docker compose logs -f bosun
-docker compose pull && docker compose up -d   # upgrade; the panel shows this command when a release is out
+docker compose pull && docker compose up -d   # manual deployment without the optional host updater
 ```
 
 ## Online devices
@@ -404,9 +406,12 @@ one at a time or all at once: the request rides on the next report and the node
 applies it the same way. Captain can also roll a node back (a `rollback` job):
 bosun puts `bosun.backup` back, reports the version and restarts.
 
-Inside Docker the binary is part of the image, so the panel only shows the
-`docker compose pull && docker compose up -d` command instead. `bosun` also logs
-a notice every six hours when a newer release exists.
+Docker deployments can use the optional host updater for the same web and
+Captain-managed upgrade controls. Install with `--mode docker --web-upgrade`, or
+run the installer `upgrade` action once for an existing Compose installation.
+The host pulls and replaces the image; the web process never receives the Docker
+socket. See [lifecycle operations](docs/LIFECYCLE.md) for backup and failure handling.
+`bosun` also logs a notice every six hours when a newer release exists.
 
 ## Console navigation
 

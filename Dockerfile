@@ -24,11 +24,11 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata
-# Tells the self-updater to point at `docker compose pull` instead of
-# replacing the binary inside the image.
+# Docker upgrades use the optional host updater over its dedicated Unix socket.
 ENV IN_CONTAINER=1
 COPY --from=build /out/bosun /usr/local/bin/bosun
 COPY deploy/docker-config.yaml /etc/bosun/config.yaml
 VOLUME /var/lib/bosun
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["bosun", "healthcheck"]
 ENTRYPOINT ["bosun"]
 CMD ["run", "-c", "/etc/bosun/config.yaml"]

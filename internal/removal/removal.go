@@ -561,3 +561,11 @@ func waitListening(ctx context.Context, addr string) error {
 		}
 	}
 }
+
+// CleanNetwork is used by the host installer after the service/container stops.
+// It uses persisted ownership records and leaves unrelated host rules intact.
+func CleanNetwork(ctx context.Context, data string) error {
+	paths := standardPaths()
+	paths.data = data
+	return cleanNetwork(ctx, paths)
+}

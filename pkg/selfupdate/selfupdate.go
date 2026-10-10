@@ -3,9 +3,8 @@
 // Both projects publish "<binary>-<os>-<arch>" assets plus a SHA256SUMS file
 // on every tag, so one implementation serves both.
 //
-// Inside a container the binary lives in the image: replacing it would be
-// undone by the next `docker compose up`, so Apply refuses there and the UI
-// tells the operator to pull the new image instead.
+// Docker installations delegate to an optional host updater over a narrow
+// Unix socket. Without it, operators must replace the image on the host.
 package selfupdate
 
 import (
@@ -25,6 +24,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zeptop-dev/bosun/pkg/hostupdate"
 )
 
 // ErrInContainer is returned by Apply when the process runs inside Docker.
@@ -70,19 +71,20 @@ type Client struct {
 
 // Info is the result of a check.
 type Info struct {
-	Current       string    `json:"current"`
-	Latest        string    `json:"latest"`
-	HasUpdate     bool      `json:"has_update"`
-	ReleaseBuild  bool      `json:"release_build"` // false for "dev" builds: no updates offered
-	InContainer   bool      `json:"in_container"`
-	Notes         string    `json:"notes,omitempty"`
-	PublishedAt   time.Time `json:"published_at,omitempty"`
-	URL           string    `json:"url,omitempty"`
-	CheckedAt     time.Time `json:"checked_at"`
-	Cached        bool      `json:"cached"`
-	Warning       string    `json:"warning,omitempty"`
-	HasBackup     bool      `json:"has_backup"`
-	BackupVersion string    `json:"backup_version,omitempty"`
+	Current       string             `json:"current"`
+	Latest        string             `json:"latest"`
+	HasUpdate     bool               `json:"has_update"`
+	ReleaseBuild  bool               `json:"release_build"` // false for "dev" builds: no updates offered
+	InContainer   bool               `json:"in_container"`
+	Notes         string             `json:"notes,omitempty"`
+	PublishedAt   time.Time          `json:"published_at,omitempty"`
+	URL           string             `json:"url,omitempty"`
+	CheckedAt     time.Time          `json:"checked_at"`
+	Cached        bool               `json:"cached"`
+	Warning       string             `json:"warning,omitempty"`
+	HasBackup     bool               `json:"has_backup"`
+	BackupVersion string             `json:"backup_version,omitempty"`
+	HostUpdate    *hostupdate.Status `json:"host_update,omitempty"`
 }
 
 type release struct {
@@ -189,6 +191,12 @@ func (c *Client) Check(ctx context.Context, force bool) Info {
 // decorate adds the runtime facts that are not worth caching.
 func (c *Client) decorate(info Info) Info {
 	info.InContainer = InContainer()
+	if info.InContainer {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		status := hostupdate.Check(ctx, c.Binary)
+		cancel()
+		info.HostUpdate = &status
+	}
 	if exe, err := c.exePath(); err == nil {
 		if st, err := os.Stat(exe + ".backup"); err == nil && st.Mode().IsRegular() {
 			info.HasBackup = true
@@ -233,9 +241,10 @@ func (c *Client) latest(ctx context.Context) (*release, error) {
 // Apply downloads the given release (or the latest when version is empty),
 // verifies it against SHA256SUMS and swaps the running binary. The caller
 // restarts the process afterwards. The previous binary is kept next to the
-// new one as <exe>.backup for Rollback.
+// new one as <exe>.backup for Rollback. In Docker this queues a host job and
+// returns its target; the caller must not restart the application itself.
 func (c *Client) Apply(ctx context.Context, version string) (applied string, err error) {
-	if InContainer() {
+	if InContainer() && !hostupdate.Check(ctx, c.Binary).Available {
 		return "", ErrInContainer
 	}
 	if !c.ReleaseBuild() {
@@ -274,6 +283,10 @@ func (c *Client) Apply(ctx context.Context, version string) (applied string, err
 	}
 	if c.MinVersion != "" && Newer(c.MinVersion, rel.TagName) {
 		return "", fmt.Errorf("%s is below the minimum allowed version %s", rel.TagName, c.MinVersion)
+	}
+	if InContainer() {
+		_, err := hostupdate.Request(ctx, c.Binary, rel.TagName)
+		return rel.TagName, err
 	}
 	assetName := fmt.Sprintf("%s-%s-%s", c.Binary, runtime.GOOS, runtime.GOARCH)
 	var assetURL, sumsURL string

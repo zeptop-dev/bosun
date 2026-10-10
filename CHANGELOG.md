@@ -6,6 +6,9 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.65.0** (2026-10-10) — Add optional host-managed Docker web upgrades through a dedicated Unix socket, with fixed official image sources, stopped-data backups, persisted progress and verification of the running application's target version. Keep Docker daemon access outside the web process.
+  - Add explicit installer `upgrade` and `enable-web-upgrade` commands, preserve deployment configuration during upgrades, and complete host-side uninstall of installer-managed binary/Compose deployments. Default uninstall removes application configuration/data/backups; `--keep-data` remains available. Preserve unrelated containers, shared volumes/networks and system packages; report incomplete cleanup instead of ignoring errors.
+
 - **v0.64.3** (2026-10-09) — Preserve collected traffic before configuration reloads, disabling cores, package switches and graceful shutdown. Keep unsent checkpoints separate from immutable reports awaiting acknowledgement; retry without double billing in Captain and standalone mode, and attribute counters to the users actually applied to the running core.
   - Fix native inbound/outbound totals for official sing-box and Extended, including SSH: send the statistics filter in each implementation's supported protobuf field so reading user counters does not reset other categories.
   - Ship `KillMode=mixed` in the systemd unit so bosun can collect its children before they stop. Existing installations need the unit update described in `docs/CORE_MANAGEMENT.md`; binary self-update alone does not update service units. Add real Extended reload/shutdown accounting regression to CI and release checks.
