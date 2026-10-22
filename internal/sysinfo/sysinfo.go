@@ -140,9 +140,13 @@ func (p *Sampler) cachedHostInfo(ctx context.Context, now time.Time, collect fun
 		if retry {
 			p.infoRetryAt = now.Add(retryInterval)
 		}
-	} else if p.info != nil {
+	} else {
 		// A failed retry must not replace useful cached facts or turn the
 		// optional detector into a command executed for every probe beat.
+		// Cache even the first partial result so initial failures are bounded.
+		if p.info == nil {
+			p.info = info
+		}
 		p.infoRetryAt = now.Add(retryInterval)
 		return p.info
 	}

@@ -59,6 +59,30 @@ func TestHostInfoFailedRefreshKeepsFactsAndThrottlesRetry(t *testing.T) {
 	}
 }
 
+func TestHostInfoInitialFailureIsThrottledAndRecovers(t *testing.T) {
+	var sampler Sampler
+	now := time.Unix(100, 0)
+	attempts := 0
+	collect := func(context.Context) (*spec.HostInfo, bool) {
+		attempts++
+		if attempts == 1 {
+			return &spec.HostInfo{CPUCores: 8}, true
+		}
+		return &spec.HostInfo{CPUCores: 8, BootTime: 1, VirtualizationRole: "guest"}, false
+	}
+	first := sampler.cachedHostInfo(context.Background(), now, collect)
+	if got := sampler.cachedHostInfo(context.Background(), now.Add(time.Minute), collect); got != first || attempts != 1 {
+		t.Fatal("initial host info failure invoked the optional detector again before its deadline")
+	}
+	second := sampler.cachedHostInfo(context.Background(), now.Add(5*time.Minute), collect)
+	if attempts != 2 || second == first || second.BootTime != 1 || second.VirtualizationRole != "guest" {
+		t.Fatal("initial host info failure did not recover after its deadline")
+	}
+	if first.BootTime != 0 || first.VirtualizationRole != "" {
+		t.Fatal("recovery changed the partial facts held by an earlier report")
+	}
+}
+
 func TestCPUTopologyRetryConditions(t *testing.T) {
 	for _, tc := range []struct {
 		name string
