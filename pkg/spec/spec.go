@@ -649,13 +649,16 @@ type SystemStatus struct {
 
 // HostInfo is what does not change between reboots.
 type HostInfo struct {
-	CPUModel string `json:"cpu_model,omitempty"`
-	CPUCores int    `json:"cpu_cores,omitempty"`
-	OS       string `json:"os,omitempty"` // "Ubuntu 24.04"
-	Kernel   string `json:"kernel,omitempty"`
-	Arch     string `json:"arch,omitempty"`
-	Virt     string `json:"virt,omitempty"` // kvm, lxc, docker, ...
-	BootTime uint64 `json:"boot_time,omitempty"`
+	CPUModel           string `json:"cpu_model,omitempty"`
+	CPUCores           int    `json:"cpu_cores,omitempty"`           // logical CPUs; retained for compatibility
+	CPUPhysicalCores   int    `json:"cpu_physical_cores,omitempty"`  // cores with online threads, only for verified non-guests
+	CPUSockets         int    `json:"cpu_sockets,omitempty"`         // packages with online threads, only for verified non-guests
+	VirtualizationRole string `json:"virtualization_role,omitempty"` // guest (including containers), host, none; omitted when unknown
+	OS                 string `json:"os,omitempty"`                  // "Ubuntu 24.04"
+	Kernel             string `json:"kernel,omitempty"`
+	Arch               string `json:"arch,omitempty"`
+	Virt               string `json:"virt,omitempty"` // kvm, lxc, docker, ...
+	BootTime           uint64 `json:"boot_time,omitempty"`
 }
 
 // PingResult is the latest measurement of one probe target.
