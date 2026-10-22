@@ -77,6 +77,13 @@ func applyCPUTopology(info *spec.HostInfo, root string) {
 	}
 }
 
+func cpuTopologyIncomplete(info *spec.HostInfo) bool {
+	if info.VirtualizationRole == "guest" {
+		return false
+	}
+	return info.VirtualizationRole == "" || info.CPUPhysicalCores <= 0 || info.CPUSockets <= 0
+}
+
 // readCPUTopology counts complete, consistent online CPU groups. It does not
 // infer SMT from a model name or divide logical CPUs by an assumed thread count.
 // IDs may be sparse and repeat across packages. The sibling sets independently

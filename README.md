@@ -237,7 +237,10 @@ its explicit `none` result, before physical counts are exposed. A hypervisor
 module alone does not prove bare metal because VMs can run nested hypervisors.
 Missing tools, failed detection and incomplete topology leave physical counts
 unknown; no packages are installed. This is OS-reported topology, not hardware
-attestation. Old agents and panels continue to use the logical CPU count.
+attestation. Unknown virtualization or incomplete non-guest topology is retried
+at most once every five minutes, so a temporary failure does not remain unknown
+until restart. Old agents and panels continue to use the logical CPU count.
+In containers this is the OS-visible CPU count, not a cgroup CPU-time quota.
 
 In standalone Probe settings, set exact interface include/exclude lists for
 host traffic totals. Empty includes use the default loopback/Docker/veth/bridge
