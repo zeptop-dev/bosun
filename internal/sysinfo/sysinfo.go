@@ -125,10 +125,12 @@ func (p *Sampler) hostInfo(ctx context.Context) *spec.HostInfo {
 		return p.info
 	}
 	info := &spec.HostInfo{Arch: runtime.GOARCH}
+	var virtualizationRole string
 	if hi, err := host.InfoWithContext(ctx); err == nil {
 		info.OS = strings.TrimSpace(hi.Platform + " " + hi.PlatformVersion)
 		info.Kernel = hi.KernelVersion
 		info.Virt = hi.VirtualizationSystem
+		virtualizationRole = hi.VirtualizationRole
 		info.BootTime = hi.BootTime
 		if hi.KernelArch != "" {
 			info.Arch = hi.KernelArch
@@ -139,6 +141,11 @@ func (p *Sampler) hostInfo(ctx context.Context) *spec.HostInfo {
 	}
 	if n, err := cpu.CountsWithContext(ctx, true); err == nil {
 		info.CPUCores = n
+	}
+	if runtime.GOOS == "linux" {
+		collectCPUTopology(ctx, info, virtualizationRole)
+	} else if virtualizationRole == "guest" {
+		info.VirtualizationRole = "guest"
 	}
 	if info.BootTime > 0 && info.CPUCores > 0 {
 		p.info = info

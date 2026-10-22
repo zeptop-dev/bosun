@@ -224,6 +224,21 @@ rate samples are null, displayed as **—**; measured zero is still zero.
 Sampling is serialized and cached for one second across reports, UI and
 external exporters; no second monitoring agent is required.
 
+Host facts keep `cpu_cores` as the logical CPU count for compatibility. Linux
+agents additionally report `cpu_physical_cores` and `cpu_sockets` when online
+CPU topology is complete and consistent in sysfs and virtualization detection
+finds no guest environment. Counts cover cores/packages with online threads;
+they do not assume two threads per core or include fully offline processors.
+`virtualization_role` is `guest` (including containers), `host`, or `none`
+(detection found neither a VM nor a container); omitted means unknown.
+The existing gopsutil guest result takes precedence. For other results the
+optional `systemd-detect-virt` command must complete successfully, including
+its explicit `none` result, before physical counts are exposed. A hypervisor
+module alone does not prove bare metal because VMs can run nested hypervisors.
+Missing tools, failed detection and incomplete topology leave physical counts
+unknown; no packages are installed. This is OS-reported topology, not hardware
+attestation. Old agents and panels continue to use the logical CPU count.
+
 In standalone Probe settings, set exact interface include/exclude lists for
 host traffic totals. Empty includes use the default loopback/Docker/veth/bridge
 filter, and explicit exclusions win. Captain controls this per managed node.
