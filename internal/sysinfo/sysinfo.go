@@ -34,19 +34,20 @@ func Snapshot(ctx context.Context) spec.SystemStatus { return snapshots.Sample(c
 // Calls are serialized and a one-second cache bounds collection work when the
 // panel, reports and external monitoring all ask for the same host sample.
 type Sampler struct {
-	gpu        gpuSampler
-	epoch      string
-	sequence   uint64
-	mu         sync.Mutex
-	sampleMu   sync.Mutex
-	options    spec.ResourceOptions
-	cached     spec.SystemStatus
-	sampled    time.Time
-	previous   rawResources
-	info       *spec.HostInfo
-	ipCheckAt  time.Time
-	ipv4, ipv6 bool
-	Dial       func(ctx context.Context, network, addr string) error
+	gpu         gpuSampler
+	epoch       string
+	sequence    uint64
+	mu          sync.Mutex
+	sampleMu    sync.Mutex
+	options     spec.ResourceOptions
+	cached      spec.SystemStatus
+	sampled     time.Time
+	previous    rawResources
+	info        *spec.HostInfo
+	infoRetryAt time.Time
+	ipCheckAt   time.Time
+	ipv4, ipv6  bool
+	Dial        func(ctx context.Context, network, addr string) error
 }
 
 func (p *Sampler) Configure(options *spec.ResourceOptions) {
@@ -119,11 +120,36 @@ func (p *Sampler) Sample(ctx context.Context) spec.SystemStatus {
 }
 
 func (p *Sampler) hostInfo(ctx context.Context) *spec.HostInfo {
+	return p.cachedHostInfo(ctx, time.Now(), collectHostInfo)
+}
+
+// Host facts are immutable once published in a snapshot. Failed optional
+// topology collection is retried at most once per five minutes, and a refresh
+// replaces the pointer instead of changing facts held by an earlier report.
+func (p *Sampler) cachedHostInfo(ctx context.Context, now time.Time, collect func(context.Context) (*spec.HostInfo, bool)) *spec.HostInfo {
+	const retryInterval = 5 * time.Minute
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.info != nil {
+	if p.info != nil && (p.infoRetryAt.IsZero() || now.Before(p.infoRetryAt)) {
 		return p.info
 	}
+	info, retry := collect(ctx)
+	if info.BootTime > 0 && info.CPUCores > 0 {
+		p.info = info
+		p.infoRetryAt = time.Time{}
+		if retry {
+			p.infoRetryAt = now.Add(retryInterval)
+		}
+	} else if p.info != nil {
+		// A failed retry must not replace useful cached facts or turn the
+		// optional detector into a command executed for every probe beat.
+		p.infoRetryAt = now.Add(retryInterval)
+		return p.info
+	}
+	return info
+}
+
+func collectHostInfo(ctx context.Context) (*spec.HostInfo, bool) {
 	info := &spec.HostInfo{Arch: runtime.GOARCH}
 	var virtualizationRole string
 	if hi, err := host.InfoWithContext(ctx); err == nil {
@@ -147,10 +173,7 @@ func (p *Sampler) hostInfo(ctx context.Context) *spec.HostInfo {
 	} else if virtualizationRole == "guest" {
 		info.VirtualizationRole = "guest"
 	}
-	if info.BootTime > 0 && info.CPUCores > 0 {
-		p.info = info
-	}
-	return info
+	return info, runtime.GOOS == "linux" && cpuTopologyIncomplete(info)
 }
 
 // reachability dials well-known v4/v6 endpoints every ten minutes.
