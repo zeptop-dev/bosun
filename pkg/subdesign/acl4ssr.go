@@ -135,7 +135,7 @@ func aclRuleURL(s string) (string, error) {
 		return "", fmt.Errorf("only official ACL4SSR rule-list URLs are supported")
 	}
 	suffix := strings.TrimPrefix(s, acl)
-	if suffix == "" || strings.ContainsAny(suffix, "?#%\\,` \t\r\n{}") || path.Clean(suffix) != suffix || strings.HasPrefix(suffix, "/") || strings.HasPrefix(suffix, "../") || !strings.HasSuffix(suffix, ".list") {
+	if configurationControl(suffix) || suffix == "" || strings.ContainsAny(suffix, "?#%\\,` \t\r\n{}") || path.Clean(suffix) != suffix || strings.HasPrefix(suffix, "/") || strings.HasPrefix(suffix, "../") || !strings.HasSuffix(suffix, ".list") {
 		return "", fmt.Errorf("invalid ACL4SSR rule-list path")
 	}
 	return s, nil

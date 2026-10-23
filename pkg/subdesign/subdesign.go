@@ -306,7 +306,7 @@ func (d *Design) clash(format string) string {
 	b.WriteString("rules:\n")
 	for _, r := range d.Rules {
 		if r.Set == GeoIPCN {
-			fmt.Fprintf(&b, "  - GEOIP,CN,%s\n", r.Policy)
+			fmt.Fprintf(&b, "  - %s\n", yq("GEOIP,CN,"+r.Policy))
 			continue
 		}
 		rs, _ := d.ruleSet(r.Set)
@@ -316,7 +316,7 @@ func (d *Design) clash(format string) string {
 			fmt.Fprintf(&b, "  - %s\n", yq("RULE-SET,"+r.Set+","+r.Policy))
 		}
 	}
-	fmt.Fprintf(&b, "  - MATCH,%s\n", d.Final)
+	fmt.Fprintf(&b, "  - %s\n", yq("MATCH,"+d.Final))
 	return b.String()
 }
 
