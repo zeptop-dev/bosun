@@ -8,7 +8,6 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -48,27 +47,6 @@ func collectResources(ctx context.Context, boot uint64) rawResources {
 		}
 	}
 	r.disks, _ = disk.IOCountersWithContext(ctx)
-	if parts, err := disk.PartitionsWithContext(ctx, false); err == nil {
-		r.filesystems = []spec.FilesystemResource{}
-		seen := map[string]bool{}
-		// Container roots can be omitted by the platform's physical-disk filter.
-		parts = append(parts, disk.PartitionStat{Mountpoint: "/"})
-		for _, part := range parts {
-			if seen[part.Mountpoint] || remoteFS(part.Fstype) {
-				continue
-			}
-			seen[part.Mountpoint] = true
-			f := spec.FilesystemResource{Mount: part.Mountpoint, Device: part.Device, Type: part.Fstype}
-			if usage, err := disk.UsageWithContext(ctx, part.Mountpoint); err == nil {
-				f.Total, f.Used = &usage.Total, &usage.Used
-				if usage.InodesTotal > 0 {
-					f.InodesTotal, f.InodesUsed = &usage.InodesTotal, &usage.InodesUsed
-				}
-			}
-			r.filesystems = append(r.filesystems, f)
-		}
-		sort.Slice(r.filesystems, func(i, j int) bool { return r.filesystems[i].Mount < r.filesystems[j].Mount })
-	}
 	pids := subprocess.ActiveProcesses()
 	pids[int32(os.Getpid())] = "bosun"
 	r.processes = make(map[int32]processSample, len(pids))
@@ -87,10 +65,6 @@ func collectResources(ctx context.Context, boot uint64) rawResources {
 		r.processes[pid] = item
 	}
 	return r
-}
-
-func remoteFS(fs string) bool {
-	return strings.HasPrefix(fs, "nfs") || fs == "cifs" || fs == "smbfs" || strings.HasPrefix(fs, "fuse") || fs == "autofs"
 }
 
 func rate(current, previous uint64, secs float64) *float64 {

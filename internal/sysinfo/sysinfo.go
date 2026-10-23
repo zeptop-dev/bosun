@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
-	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -35,6 +34,7 @@ func Snapshot(ctx context.Context) spec.SystemStatus { return snapshots.Sample(c
 // panel, reports and external monitoring all ask for the same host sample.
 type Sampler struct {
 	gpu         gpuSampler
+	filesystems filesystemSampler
 	epoch       string
 	sequence    uint64
 	mu          sync.Mutex
@@ -87,10 +87,6 @@ func (p *Sampler) Sample(ctx context.Context) spec.SystemStatus {
 		s.SwapTotal, s.SwapUsed = sw.Total, sw.Used
 		s.Valid.Swap = true
 	}
-	if du, err := disk.UsageWithContext(ctx, "/"); err == nil {
-		s.DiskTotal, s.DiskUsed = du.Total, du.Used
-		s.Valid.Disk = true
-	}
 	if l, err := load.AvgWithContext(ctx); err == nil {
 		s.Load1, s.Load5, s.Load15 = l.Load1, l.Load5, l.Load15
 		s.Valid.Load = true
@@ -106,6 +102,17 @@ func (p *Sampler) Sample(ctx context.Context) spec.SystemStatus {
 	}
 	s.Info = p.hostInfo(ctx)
 	raw := collectResources(ctx, s.Info.BootTime)
+	raw.filesystems = p.filesystems.snapshot(time.Now())
+	// Async samples copied above must not appear newer than their enclosing
+	// snapshot merely because the other resource collectors took longer.
+	raw.at = time.Now()
+	for _, fs := range raw.filesystems {
+		if fs.Mount == "/" && fs.Total != nil && fs.Used != nil {
+			s.DiskTotal, s.DiskUsed = *fs.Total, *fs.Used
+			s.Valid.Disk = true
+			break
+		}
+	}
 	s.Resources, s.CPUPercent, s.NetUp, s.NetDown, s.NetTotalUp, s.NetTotalDown, s.Valid.CPU, s.Valid.Network = reduceResources(raw, p.previous, options)
 	if p.epoch == "" {
 		p.epoch = rand.Text()
