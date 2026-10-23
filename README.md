@@ -247,8 +247,33 @@ host traffic totals. Empty includes use the default loopback/Docker/veth/bridge
 filter, and explicit exclusions win. Captain controls this per managed node.
 The corresponding standalone YAML is `probe.resources.include_interfaces`
 and `probe.resources.exclude_interfaces` (lists). Selection only affects
-monitoring totals, never proxy-user billing. Remote filesystems are skipped
-to keep unavailable mounts from blocking reports. Device capacities and disk
+monitoring totals, never proxy-user billing.
+
+Filesystem capacity is collected independently in the background every 15
+seconds, with mount discovery once per minute. Linux uses the collector's own
+mount namespace, includes local mounted filesystems (including RAID/LVM-backed
+filesystems, Btrfs subvolumes and ZFS datasets) and explicitly supports
+`fuse.mergerfs`. Other FUSE and remote filesystems remain excluded; the root
+filesystem retains compatibility even in containers. Repeated bind mounts are
+deduplicated when their filesystem identity is known. Shared pools/subvolumes
+are never summed into a machine capacity: the legacy disk summary still means
+the root filesystem only.
+
+Root capacity has its own worker slot and at most three other filesystem reads
+run concurrently. A stuck syscall keeps its slot until it actually returns,
+even after the three-second deadline, so unavailable mounts neither block
+heartbeats nor spawn unbounded retries. The first readings are briefly unknown;
+failures, timeouts and samples older than 90 seconds have null counters.
+`filesystems[].sampled_at` is the last successful read time in Unix milliseconds,
+not the enclosing heartbeat time. Consumers must preserve that clock when
+displaying or storing repeated cached samples.
+
+Each filesystem also has an opaque `id`. A Linux mergerfs mount has `pool: true`;
+`member_mounts` is included only when the documented read-only
+`user.mergerfs.branches` xattr on `<mount>/.mergerfs` completely matches currently
+mounted filesystem roots. Subdirectory branches, missing mounts and unavailable
+xattrs leave membership unknown; names and equal capacities are not evidence.
+Only mountpoints discovered locally are queried. Device capacities and disk
 I/O are shown separately because partitions and virtual devices can overlap.
 Only supervised processes are inspected, without command-line enumeration.
 Detailed resources are private to management pages, not Captain's public page.
