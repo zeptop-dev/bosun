@@ -266,6 +266,12 @@ type User struct {
 	Password       string `json:"password,omitempty"`
 	SpeedLimitMbps int    `json:"speed_limit_mbps,omitempty"` // 0 = unlimited
 	DeviceLimit    int    `json:"device_limit,omitempty"`     // 0 = unlimited
+	// WireGuardPeers adds independently revocable device identities on WG
+	// inbounds. They share this user's accounting identity and speed limit.
+	WireGuardPeers []WireGuardPeer `json:"wireguard_peers,omitempty"`
+	// WireGuardLegacyDisabled withdraws the old per-user WG identity. The
+	// default keeps existing subscriptions working alongside registered devices.
+	WireGuardLegacyDisabled bool `json:"wireguard_legacy_disabled,omitempty"`
 	// QuotaBytes and QuotaDays describe the user's traffic allowance as a
 	// rolling window, for cores that enforce quotas themselves (mita). The
 	// panel still does its own accounting; this is a second lock that holds

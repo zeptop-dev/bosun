@@ -14,17 +14,20 @@ type CoreCapabilities struct {
 	CoreOnlyPrivateAccess  bool                             `json:"core_only_private_access,omitempty"`
 	PrivateAccessReadiness *PrivateAccessReadiness          `json:"private_access_readiness,omitempty"`
 	WireGuardReverse       bool                             `json:"wireguard_reverse,omitempty"`
-	PrivateAccess          bool                             `json:"private_access,omitempty"`
-	VLESSReverse           bool                             `json:"vless_reverse,omitempty"`
-	Protocols              []Protocol                       `json:"protocols"`
-	Transports             []string                         `json:"transports,omitempty"`
-	Shadowsocks2022        bool                             `json:"shadowsocks2022,omitempty"`
-	HotUserReload          bool                             `json:"hot_user_reload,omitempty"`
-	Fallbacks              bool                             `json:"fallbacks,omitempty"`
-	ProxyProtocol          bool                             `json:"proxy_protocol,omitempty"`
-	SnellMultiUser         bool                             `json:"snell_multi_user,omitempty"`
-	SnellObfsTLS           bool                             `json:"snell_obfs_tls,omitempty"`
-	ShadowTLS              bool                             `json:"shadow_tls,omitempty"`
+	// WireGuardDevices requires a binary that binds WG source addresses to
+	// users for accounting. Runtime adapters report this from the actual binary.
+	WireGuardDevices bool       `json:"wireguard_devices,omitempty"`
+	PrivateAccess    bool       `json:"private_access,omitempty"`
+	VLESSReverse     bool       `json:"vless_reverse,omitempty"`
+	Protocols        []Protocol `json:"protocols"`
+	Transports       []string   `json:"transports,omitempty"`
+	Shadowsocks2022  bool       `json:"shadowsocks2022,omitempty"`
+	HotUserReload    bool       `json:"hot_user_reload,omitempty"`
+	Fallbacks        bool       `json:"fallbacks,omitempty"`
+	ProxyProtocol    bool       `json:"proxy_protocol,omitempty"`
+	SnellMultiUser   bool       `json:"snell_multi_user,omitempty"`
+	SnellObfsTLS     bool       `json:"snell_obfs_tls,omitempty"`
+	ShadowTLS        bool       `json:"shadow_tls,omitempty"`
 	// MieruWildcardOnly marks embedded versions without listen IP support.
 	MieruWildcardOnly bool `json:"mieru_wildcard_only,omitempty"`
 }
