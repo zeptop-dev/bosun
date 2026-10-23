@@ -33,6 +33,59 @@ A failed statistics read or journal save defers ordinary changes; private-access
 
 The real Extended regression runs with `BOSUN_EXTENDED_TEST_BINARY=/path/to/sing-box go test -race ./internal/agent -run '^TestRealExtendedTrafficCheckpointAndAggregates$' -v`. It uses local SSH/echo traffic to check immediate reload/shutdown, lost-response replay, identities and native user/inbound/outbound counters. CI downloads the reviewed package with `BOSUN_TEST_DOWNLOAD_CORES=1` for this test; it does not use WARP credentials or alter host firewall rules.
 
+## Xray WireGuard device accounting and compatibility
+
+Registered WireGuard device identities require bosun 0.77 and an Xray binary
+reporting the `wireguard_devices` capability. The adapter reads the executable's
+version; upstream 26.6.27 introduced WireGuard source-address attribution to
+users. The older 26.3.27 core ignores peer email and cannot provide native
+WireGuard user accounting or user-routing marks. Its existing legacy clients
+remain supported, while new device fields require an explicit core upgrade.
+Each registered device has an independent key and address but shares the
+parent account's `NAME|INBOUND` statistics and shaping mark. A peer change
+restarts Xray; retained clients may take a WireGuard handshake retry interval
+to reconnect. The version threshold identifies a capability, not a blanket
+recommendation to select every newer Xray release; use the reviewed catalog.
+
+New Xray versions also apply a [final destination policy in freedom
+outbounds](https://github.com/XTLS/Xray-core/blob/v26.7.28/proxy/freedom/freedom.go).
+bosun states its existing permissions explicitly: private destinations stay
+blocked unless the node's global policy or that inbound's private grant
+allows them. Per-inbound grants retain their address, protocol, port and
+socket-mark scopes; other direct/shaping outbounds do not inherit them.
+Managed VLESS Reverse permits public destinations while keeping its existing
+private-destination restrictions. An explicit operator `finalRules` policy
+is preserved. The removed `ipsBlocked` setting is rejected on capable modern
+cores so an upgrade cannot silently drop an explicit restriction.
+
+Core-owned DNS queries under a scoped private policy use a separate reserved
+`private-dns` outbound. This preserves the existing resolver/upstream access
+without granting subscribers that access. The existing non-root nft policy,
+resolver exceptions and configured upstream exceptions still govern those
+DNS sockets; the renderer creates no new firewall permissions. Real listeners
+cannot impersonate the internal DNS tag. System-resolver queries and core
+API listeners do not use freedom outbounds.
+
+Xray 26.7.11 and later also removed unencrypted VMess/SS modes and disallow
+unencrypted public VLESS/Trojan outbounds. bosun rejects incompatible rendered
+configurations, including reverse connections and custom legacy-shaped
+outbounds, before the running core is stopped. Configure TLS/REALITY or keep
+the previous core for those paths. It never changes a requested VMess
+`none`/`zero` mode into `auto` silently. The candidate binary's own config
+check remains mandatory after bosun's preflight checks.
+
+The opt-in tests use only local sockets and temporary configurations:
+
+```sh
+BOSUN_XRAY_WG_TEST_BINARY=/path/to/xray go test ./internal/core/xray -run 'TestWireGuardDevicesLiveXray|TestFreedomFinalRules.*LiveXray' -count=1
+BOSUN_XRAY_TEST_BINARY=/path/to/xray go test ./internal/core/xray -run '^TestReverseLiveXray$' -count=1
+```
+
+They cover concurrent device clients, shared account/separate inbound
+counters, revocation, private destination permission changes, internal DNS
+isolation and reverse connectivity. Linux tc enforcement additionally needs
+the dedicated privileged, isolated-network shaping test.
+
 ## sing-box Extended
 
 `singbox-extended` is a separate distribution and adapter instance. The official `singbox` instance remains available, with a separate statistics port (9101 versus 9105). Optional YAML boot configuration:

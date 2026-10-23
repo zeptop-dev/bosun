@@ -53,6 +53,13 @@ func TestFreedomFinalRulesPreserveGlobalPermissions(t *testing.T) {
 	if !reflect.DeepEqual(got, []m{{"action": "block"}}) {
 		t.Fatal("operator-authored restrictive finalRules were replaced")
 	}
+	settings := m{"FinalRules": []m{{"action": "block"}}}
+	if err := applyFreedomFinalRules(m{"outbounds": []m{{"protocol": "freedom", "settings": settings}}}, &spec.Node{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, added := settings["finalRules"]; added {
+		t.Fatal("case-insensitive upstream field was shadowed by a generated policy")
+	}
 }
 
 func TestFreedomFinalRulesPrivateScopesRemainSeparate(t *testing.T) {
@@ -64,6 +71,9 @@ func TestFreedomFinalRulesPrivateScopesRemainSeparate(t *testing.T) {
 	policies := renderedFinalRules(t, node, users)
 	var privateClones int
 	for tag, rules := range policies {
+		if tag == "private-dns" {
+			continue // core-owned DNS uses its existing upstream firewall policy
+		}
 		encoded, _ := json.Marshal(rules)
 		if !strings.HasPrefix(tag, "private-") {
 			if strings.Contains(string(encoded), "10.10.0.2/32") {
@@ -90,9 +100,43 @@ func TestFreedomFinalRulesPrivateScopesRemainSeparate(t *testing.T) {
 		t.Fatal("reverse public exit is missing explicit private deny/public allow")
 	}
 	for tag, rules := range policies {
-		if strings.HasPrefix(tag, "private-") && (rules[1]["network"] != "udp" || rules[1]["port"] != "53-53") {
+		if tag != "private-dns" && strings.HasPrefix(tag, "private-") && (rules[1]["network"] != "udp" || rules[1]["port"] != "53-53") {
 			t.Fatal("reverse private grant widened beyond its own scope")
 		}
+	}
+}
+
+func TestFreedomFinalRulesPrivateDNSCannotBeBorrowed(t *testing.T) {
+	node := &spec.Node{DNS: []string{"10.10.0.2"}, Inbounds: []spec.Inbound{{Tag: "allowed", Protocol: spec.VLESS, Port: 12345, PrivateAccess: &spec.PrivateAccess{Mode: "internal"}}}}
+	data, _, err := render(node, node.Inbounds, nil, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg m
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	var dnsRoutes int
+	for _, rule := range configObjects(cfg["routing"].(map[string]any)["rules"]) {
+		if rule["outboundTag"] == "private-dns" {
+			dnsRoutes++
+			if !reflect.DeepEqual(rule["inboundTag"], []any{"bosun-private-dns"}) {
+				t.Fatal("subscriber route can borrow the internal DNS path")
+			}
+		}
+	}
+	if dnsRoutes != 1 {
+		t.Fatal("internal DNS did not retain its independent route")
+	}
+	policies := renderedFinalRules(t, node, nil)
+	if len(policies["direct"]) != 2 || !reflect.DeepEqual(policies["private-dns"], []m{{"action": "allow"}}) {
+		t.Fatal("DNS upstream and subscriber destination policies were combined")
+	}
+	// The core-specific slice cannot introduce an inbound impersonating DNS,
+	// even if it differs from the full node envelope checked by the agent.
+	fakeDNS := append(append([]spec.Inbound{}, node.Inbounds...), spec.Inbound{Tag: "bosun-private-dns", Protocol: spec.VLESS, Port: 12346})
+	if _, _, err := render(node, fakeDNS, nil, renderOptions{}); err == nil {
+		t.Fatal("reserved internal DNS tag accepted as an actual listener")
 	}
 }
 
@@ -100,12 +144,14 @@ func TestModernXrayRejectsIncompatibleSecurityModes(t *testing.T) {
 	strict := renderOptions{ModernConfig: true, StrictOutboundSecurity: true}
 	for _, outbound := range []m{
 		{"protocol": "vless", "settings": m{"address": "edge.example.com", "encryption": "none"}},
+		{"protocol": "vless", "settings": m{"address": "edge.example.com", "encryption": "none"}, "streamSettings": m{"security": "NONE"}},
 		{"protocol": "vless", "settings": m{"vnext": []m{{"address": "edge.example.com", "users": []m{{"encryption": "none"}}}}}},
 		{"protocol": "trojan", "settings": m{"servers": []m{{"address": "edge.example.com"}}}},
 		{"protocol": "trojan", "settings": m{"address": "edge.example.com"}},
 		{"protocol": "vmess", "settings": m{"vnext": []m{{"users": []m{{"security": "NONE"}}}}}},
 		{"protocol": "shadowsocks", "settings": m{"servers": []m{{"method": "plain"}}}},
 		{"protocol": "freedom", "settings": m{"ipsBlocked": []string{"10.0.0.0/8"}}},
+		{"protocol": "freedom", "settings": m{"IPSBLOCKED": []string{"10.0.0.0/8"}}},
 	} {
 		cfg := m{"outbounds": []m{outbound}}
 		if err := validateXrayConfigCompatibility(cfg, strict); err == nil {

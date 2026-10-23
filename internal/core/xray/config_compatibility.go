@@ -17,8 +17,10 @@ func validateXrayConfigCompatibility(cfg m, opt renderOptions) error {
 		settings, _ := out["settings"].(map[string]any)
 		protocol, _ := out["protocol"].(string)
 		if opt.ModernConfig && (protocol == "freedom" || protocol == "direct") {
-			if _, present := settings["ipsBlocked"]; present {
-				return fmt.Errorf("xray: selected core removed freedom ipsBlocked; migrate the explicit policy to finalRules before switching cores")
+			for key := range settings {
+				if strings.EqualFold(key, "ipsBlocked") {
+					return fmt.Errorf("xray: selected core removed freedom ipsBlocked; migrate the explicit policy to finalRules before switching cores")
+				}
 			}
 		}
 		if !opt.StrictOutboundSecurity {
@@ -31,7 +33,8 @@ func validateXrayConfigCompatibility(cfg m, opt renderOptions) error {
 			continue
 		}
 		stream, _ := out["streamSettings"].(map[string]any)
-		if security, _ := stream["security"].(string); security != "" && security != "none" {
+		security, _ := stream["security"].(string)
+		if security = strings.ToLower(security); security != "" && security != "none" {
 			continue // the core's own config check validates TLS/REALITY details
 		}
 		receivers := configObjects(settings["vnext"])

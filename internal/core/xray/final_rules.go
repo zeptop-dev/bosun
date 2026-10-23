@@ -14,6 +14,9 @@ import (
 // explicitly instead of relying on that version-dependent default. Old Xray
 // ignores finalRules and continues to use the existing routing/nft checks.
 func applyFreedomFinalRules(cfg m, node *spec.Node, users []spec.User) error {
+	if err := separatePrivateDNS(cfg, node); err != nil {
+		return err
+	}
 	grants, err := node.PrivateGrants(users)
 	if err != nil {
 		return err
@@ -36,7 +39,11 @@ func applyFreedomFinalRules(cfg m, node *spec.Node, users []spec.User) error {
 			settings = m{}
 			raw["settings"] = settings
 		}
-		if _, explicit := settings["finalRules"]; explicit {
+		explicit := false
+		for key := range settings {
+			explicit = explicit || strings.EqualFold(key, "finalRules")
+		}
+		if explicit {
 			continue // operator-authored policies are not widened or replaced
 		}
 		var rules []any
@@ -75,6 +82,41 @@ func applyFreedomFinalRules(cfg m, node *spec.Node, users []spec.User) error {
 		// Only addresses outside the denies above reach this rule, unless the
 		// operator explicitly enabled the existing global private exemption.
 		settings["finalRules"] = append(rules, m{"action": "allow"})
+	}
+	return nil
+}
+
+// PrivateRoutes already separates the core's own DNS from subscriber routes.
+// Preserve that exception on its own socket path: applying the subscriber
+// finalRules to it would break private resolvers authorized by egress guard.
+// This does not add firewall exceptions or routes for subscriber destinations.
+func separatePrivateDNS(cfg m, node *spec.Node) error {
+	if !node.HasPrivateAccess() {
+		return nil
+	}
+	dns, _ := cfg["dns"].(map[string]any)
+	if dns["tag"] != "bosun-private-dns" {
+		return nil
+	}
+	for _, inbound := range configObjects(cfg["inbounds"]) {
+		if inbound["tag"] == "bosun-private-dns" {
+			return fmt.Errorf("xray: bosun-private-dns is reserved for internal DNS queries")
+		}
+	}
+	for _, outbound := range configObjects(cfg["outbounds"]) {
+		if outbound["tag"] == "private-dns" {
+			return fmt.Errorf("xray: private-dns is reserved for internal DNS queries")
+		}
+	}
+	routing, _ := cfg["routing"].(map[string]any)
+	for _, rule := range configObjects(routing["rules"]) {
+		tags, _ := rule["inboundTag"].([]string)
+		if len(tags) == 1 && tags[0] == "bosun-private-dns" && rule["outboundTag"] == "direct" {
+			rule["outboundTag"] = "private-dns"
+			outbounds, _ := cfg["outbounds"].([]any)
+			cfg["outbounds"] = append(outbounds, m{"tag": "private-dns", "protocol": "freedom", "settings": m{"finalRules": []m{{"action": "allow"}}}})
+			return nil
+		}
 	}
 	return nil
 }
