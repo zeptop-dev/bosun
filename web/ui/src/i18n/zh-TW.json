@@ -763,7 +763,7 @@
     "processHint": "CPU 100% 表示占滿一個邏輯核心。RSS 為常駐記憶體；僅顯示 bosun 及其管理的處理程序。",
     "includeInterfaces": "包含介面",
     "excludeInterfaces": "排除介面",
-    "selectionHint": "填寫完整介面名稱。包含清單留空時自動過濾回環、Docker 和橋接介面；排除清單優先。新選取的介面從下次取樣開始累計。"
+    "selectionHint": "填寫完整介面名稱。包含清單留空時自動排除回環、Docker、橋接及 bosun 反向 WireGuard、整形介面，避免同一流量在多層重複彙總。明確包含可覆蓋預設規則，排除清單優先。新選取的介面從下次取樣開始累計。"
   },
   "networkQuality": {
     "title": "網路品質",

@@ -107,6 +107,63 @@ func TestManagedProcessRestartAndNICSelection(t *testing.T) {
 	}
 }
 
+func TestManagedNetworkLayersDoNotInflateHostTraffic(t *testing.T) {
+	previous := rawResources{
+		at: time.Unix(100, 0),
+		networks: []gnet.IOCountersStat{
+			{Name: "eth0", BytesSent: 1000, BytesRecv: 2000},
+			{Name: "bwg2", BytesSent: 10000, BytesRecv: 20000},
+			{Name: "ifb-bosun", BytesSent: 30000, BytesRecv: 40000},
+			{Name: "ifb-bosun-up", BytesSent: 50000, BytesRecv: 60000},
+		},
+		networkIDs: map[string]string{"eth0": "boot:1", "bwg2": "boot:2", "ifb-bosun": "boot:3", "ifb-bosun-up": "boot:4"},
+	}
+	current := rawResources{
+		at: time.Unix(110, 0),
+		networks: []gnet.IOCountersStat{
+			{Name: "eth0", BytesSent: 1200, BytesRecv: 2400},
+			{Name: "bwg2", BytesSent: 11000, BytesRecv: 22000},
+			{Name: "ifb-bosun", BytesSent: 33000, BytesRecv: 44000},
+			{Name: "ifb-bosun-up", BytesSent: 55000, BytesRecv: 66000},
+		},
+		networkIDs: previous.networkIDs,
+	}
+	for _, tc := range []struct {
+		name      string
+		options   spec.ResourceOptions
+		included  string
+		up, down  uint64
+		totalUp   uint64
+		totalDown uint64
+	}{
+		{name: "default", included: "eth0", up: 20, down: 40, totalUp: 1200, totalDown: 2400},
+		{name: "explicit tunnel", options: spec.ResourceOptions{IncludeInterfaces: []string{"bwg2"}}, included: "bwg2", up: 100, down: 200, totalUp: 11000, totalDown: 22000},
+		{name: "explicit exclusion", options: spec.ResourceOptions{IncludeInterfaces: []string{"eth0", "bwg2"}, ExcludeInterfaces: []string{"bwg2"}}, included: "eth0", up: 20, down: 40, totalUp: 1200, totalDown: 2400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, _, up, down, totalUp, totalDown, _, valid := reduceResources(current, previous, tc.options)
+			if !valid || up != tc.up || down != tc.down || totalUp != tc.totalUp || totalDown != tc.totalDown {
+				t.Fatalf("host traffic valid=%v rates=%d/%d totals=%d/%d", valid, up, down, totalUp, totalDown)
+			}
+			if len(r.Networks) != 4 {
+				t.Fatalf("lost interface details: %+v", r.Networks)
+			}
+			for _, n := range r.Networks {
+				if n.Included != (n.Name == tc.included) || n.UpRate == nil || n.DownRate == nil || *n.UpRate <= 0 || *n.DownRate <= 0 {
+					t.Fatalf("interface details must retain measured traffic: %+v", n)
+				}
+			}
+		})
+	}
+	// A newly created tunnel has no rate yet, but must not invalidate the
+	// physical interface's established host-rate baseline.
+	previous.networks = previous.networks[:1]
+	_, _, up, down, _, _, _, valid := reduceResources(current, previous, spec.ResourceOptions{})
+	if !valid || up != 20 || down != 40 {
+		t.Fatalf("new managed interfaces invalidated host traffic: valid=%v rates=%d/%d", valid, up, down)
+	}
+}
+
 func TestSamplerSharesCachedSnapshot(t *testing.T) {
 	p := Sampler{Dial: func(context.Context, string, string) error { return nil }}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

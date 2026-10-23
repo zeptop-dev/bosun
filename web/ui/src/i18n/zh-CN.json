@@ -763,7 +763,7 @@
     "processHint": "CPU 100% 表示占满一个逻辑核心。RSS 为驻留内存；这里只显示 bosun 及其管理的进程。",
     "includeInterfaces": "包含网卡",
     "excludeInterfaces": "排除网卡",
-    "selectionHint": "填写完整网卡名。包含列表留空时自动过滤回环、Docker 和桥接网卡；排除列表优先。新选中的网卡从下一次采样开始累计。"
+    "selectionHint": "填写完整网卡名。包含列表留空时自动排除回环、Docker、桥接及 bosun 反向 WireGuard、整形网卡，避免同一流量在多层重复汇总。显式包含可覆盖默认规则，排除列表优先。新选中的网卡从下一次采样开始累计。"
   },
   "networkQuality": {
     "title": "网络质量",

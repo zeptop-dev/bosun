@@ -244,7 +244,12 @@ In containers this is the OS-visible CPU count, not a cgroup CPU-time quota.
 
 In standalone Probe settings, set exact interface include/exclude lists for
 host traffic totals. Empty includes use the default loopback/Docker/veth/bridge
-filter, and explicit exclusions win. Captain controls this per managed node.
+filter and exclude bosun's reverse WireGuard interfaces (`bwg1`–`bwg16383`)
+and shaping interfaces (`ifb-bosun`, `ifb-bosun-up`): their packets are already
+counted on the underlying interfaces. Their individual counters remain visible.
+Explicit includes can select these interfaces; explicit exclusions always win.
+Other custom WireGuard, TUN and IFB names keep their existing defaults.
+Captain controls this per managed node.
 The corresponding standalone YAML is `probe.resources.include_interfaces`
 and `probe.resources.exclude_interfaces` (lists). Selection only affects
 monitoring totals, never proxy-user billing.
