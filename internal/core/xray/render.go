@@ -359,13 +359,9 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		if mtu <= 0 {
 			mtu = wg.DefaultMTU
 		}
-		peers := []m{}
-		for _, u := range users {
-			_, pub, err := wg.DerivePeer(ib.WGPrivateKey, u.UUID)
-			if err != nil {
-				return nil, fmt.Errorf("xray: inbound %q: %w", ib.Tag, err)
-			}
-			peers = append(peers, m{"publicKey": pub, "allowedIPs": []string{wg.ClientAddress(u.ID)}, "email": u.Name})
+		peers, err := wireGuardPeers(ib, users)
+		if err != nil {
+			return nil, err
 		}
 		in["protocol"] = "wireguard"
 		in["settings"] = m{"secretKey": ib.WGPrivateKey, "mtu": mtu, "peers": peers, "noKernelTun": true}
