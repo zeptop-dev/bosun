@@ -518,6 +518,11 @@ func renderStream(ib spec.Inbound) (m, error) {
 			"serverNames": []string{t.ServerName},
 			"privateKey":  r.PrivateKey,
 			"shortIds":    r.ShortIDs,
+			// Preserve the existing cross-client admission policy. Xray
+			// 26.7.11 otherwise defaults to its own 26.3.27 version floor,
+			// rejecting Mihomo's REALITY identity (1.8.2) before VLESS auth.
+			// This is an initial server setting, not a post-override rewrite.
+			"minClientVer": "0.0.0",
 		}
 		if lim, on := r.EffectiveFallbackLimit(); on {
 			bucket := m{"afterBytes": lim.AfterBytes, "bytesPerSec": lim.BytesPerSec, "burstBytesPerSec": lim.BurstBytesPerSec}

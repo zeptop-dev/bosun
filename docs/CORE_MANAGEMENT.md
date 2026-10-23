@@ -47,6 +47,27 @@ restarts Xray; retained clients may take a WireGuard handshake retry interval
 to reconnect. The version threshold identifies a capability, not a blanket
 recommendation to select every newer Xray release; use the reviewed catalog.
 
+Since bosun 0.77.1, generated REALITY server settings explicitly retain the
+previous no-client-version-floor policy with `minClientVer: "0.0.0"`.
+[Xray 26.7.11 changed the omitted-field default to 26.3.27](https://github.com/XTLS/Xray-core/commit/af7eb68028732a8ee3c0e5d6ab2b8a657bb2e770),
+rejecting clients such as Mihomo that send a REALITY version identity of 1.8.2.
+The default is applied during initial inbound rendering, before overrides;
+explicit raw version restrictions are never rewritten. Managed inbounds still
+cannot be replaced through the node-level override. Keys, short IDs, user
+authentication and unauthenticated fallback limits remain required as before.
+Upstream's version floor addresses client TLS-fingerprint concerns; restoring
+connectivity does not upgrade those fingerprints or establish resistance to
+traffic classification.
+
+The 26.7.28-r2 build is marked broken: it uses Go 1.27.3, whose standard TLS
+buffer layout no longer matches the unsafe layout assumptions in that upstream
+version's Vision implementation. See the [upstream compatibility fix](https://github.com/XTLS/Xray-core/pull/7176).
+Passing WireGuard or REALITY-only tests does not verify ordinary TLS + Vision.
+The separately published 26.7.28-r3 rebuild retains Go 1.26.10's compatible
+TLS layout and the same security dependency updates. It remains an explicitly
+selected caution version; use bosun 0.77.1 or newer for its REALITY compatibility
+policy. The default 26.3.27-r1 core remains unchanged.
+
 New Xray versions also apply a [final destination policy in freedom
 outbounds](https://github.com/XTLS/Xray-core/blob/v26.7.28/proxy/freedom/freedom.go).
 bosun states its existing permissions explicitly: private destinations stay
@@ -79,7 +100,14 @@ The opt-in tests use only local sockets and temporary configurations:
 ```sh
 BOSUN_XRAY_WG_TEST_BINARY=/path/to/xray go test ./internal/core/xray -run 'TestWireGuardDevicesLiveXray|TestFreedomFinalRules.*LiveXray' -count=1
 BOSUN_XRAY_TEST_BINARY=/path/to/xray go test ./internal/core/xray -run '^TestReverseLiveXray$' -count=1
+BOSUN_XRAY_TEST_BINARY=/path/to/xray-26.7.28 BOSUN_MIHOMO_TEST_BINARY=/path/to/mihomo go test ./internal/core/xray -run '^TestRealityMihomoClientVersionLive$' -count=1
 ```
+
+The Mihomo regression uses a local TLS disguise service and HTTP destination.
+It checks that the omitted upstream version floor rejects Mihomo, bosun's
+rendered compatibility default permits a real REALITY + Vision request, and
+an explicitly restored 26.3.27 floor rejects that same client again. This does
+not test public network quality or ordinary certificate-based TLS + Vision.
 
 They cover concurrent device clients, shared account/separate inbound
 counters, revocation, private destination permission changes, internal DNS

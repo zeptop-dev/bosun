@@ -629,7 +629,8 @@ Current manifest:
 | singbox | 1.14.0-r2 | tested | upstream 1.14.0 built with `with_v2ray_api` and `with_wireguard` (WARP) |
 | singbox | 1.14.0 | caution | first build without `with_wireguard`; WARP outbounds fail |
 | xray | 26.3.27-r1 | tested | upstream 26.3.27 rebuilt by bosun CI with Go 1.26.8 (the official binary is Go 1.26.1); REALITY works with mihomo and sing-box clients |
-| xray | 26.7.28-r2 | caution | optional WG device accounting; Go 1.27.3 and security dependency updates; explicit selection and compatible outbound settings required |
+| xray | 26.7.28-r3 | caution | optional WG device accounting; Go 1.26.10 and security dependency updates; REALITY compatibility requires bosun 0.77.1 or newer; explicit selection required |
+| xray | 26.7.28-r2 | broken | Go 1.27.3 TLS buffer layout is incompatible with this upstream version's Vision implementation |
 | xray | 26.3.27 | tested | official binary; REALITY works with mihomo and sing-box clients |
 | xray | 26.9.9 | broken | REALITY rejects mihomo/sing-box clients |
 | mita | 3.37.0 | tested | official mieru server; line-bound inbounds bind natively (`listenIPAddress`) |
@@ -678,6 +679,16 @@ it in `config.example.yaml` still describes the GitLab setup). Note sing-box has
 user or inbound change is a config rewrite plus restart, batched per pull interval.
 
 ## Xray binary and REALITY interop
+
+Since bosun 0.77.1, managed Xray REALITY inbounds explicitly set
+`minClientVer: "0.0.0"`, preserving the previous admission policy across core
+upgrades. Xray 26.7.11 introduced a default floor of 26.3.27, which also rejects
+Mihomo's REALITY version identity (1.8.2). This compatibility setting does not
+change credentials, fallback limits or an explicitly supplied raw policy.
+Upstream introduced the floor over client-fingerprint concerns; accepting a
+client does not establish that its TLS fingerprint matches a current browser.
+See [core compatibility](docs/CORE_MANAGEMENT.md) for the separate Vision build
+restriction.
 
 Tested: Xray 26.3.27 serves REALITY to mihomo 1.19.30 and sing-box 1.14.0
 clients. **Xray 26.9.9 does not**: xtls/reality commit 8cdf7bf (2026-09-08,
