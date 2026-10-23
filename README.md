@@ -1097,6 +1097,14 @@ plus an ordered ACL4SSR rule list with presets) that generates every
 format at once. Under Captain the page is read-only and Captain's templates
 apply.
 
+bosun v0.78 adds shared compiler support for Captain's administrator-managed
+ACL4SSR preset library and optional regional, DNS, Claude, WebRTC and UDP-443
+enhancements. Official imports and protection options currently require Mihomo;
+unsupported formats are reported explicitly. The standalone editor retains its
+existing preset controls. Generated groups with no matching nodes reject traffic,
+and hand-written templates retain their existing behavior. These are subscription
+configuration features, not a guarantee of system-wide leak protection.
+
 ## Managed reverse WireGuard (bosun 0.68 / Captain 1.20)
 
 Captain's exit-node editor connects B actively to A over kernel WireGuard.

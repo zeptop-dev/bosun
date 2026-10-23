@@ -6,6 +6,9 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.78.0** (2026-10-23) — Add a shared ACL4SSR INI importer and optional regional groups, DNS protection, Claude routing, WebRTC mitigation and UDP-443 restrictions for Captain's subscription designer. Preserve imported rule order, regular-expression semantics and source attribution; reject unsupported syntax rather than silently simplifying it. Official imports and the new protection options currently target Mihomo; existing formats retain basic and regional designs.
+  - Derive enhancements without changing the editable base, reject conflicting generated rules and unsafe DNS policy references, and make empty generated groups reject traffic while preserving hand-written templates. No agent protocol change or proxy-core upgrade is required for these panel-side features.
+
 - **v0.77.1** (2026-10-23) — Preserve existing REALITY client admission when selecting newer Xray versions: explicitly retain the previous no-version-floor policy instead of inheriting Xray 26.7.11's default that rejects Mihomo. Keep authentication and unauthenticated fallback limits intact. Mark the Go 1.27.3-based Xray 26.7.28-r2 build broken because upstream Vision expects the older TLS buffer layout; offer an immutable 26.7.28-r3 rebuild with Go 1.26.10 and the same security dependency updates. The default core remains 26.3.27-r1.
 
 - **v0.77.0** (2026-10-23) — Add independent WireGuard device peers with shared parent-user and inbound accounting. Preserve legacy peers, derive device keys from both parent and device identity, isolate device addresses, and replace the running WG configuration on peer changes so revocation removes the correct key. All devices retain the parent's bandwidth mark and traffic allowance.
