@@ -18,7 +18,10 @@ type Line struct {
 	UUID     string // user identity
 	UserID   int64  // numeric id (WireGuard tunnel address)
 	Password string
-	Tags     []string // labels for the portal's server list; not rendered into configs
+	// WireGuardPeer selects a registered device only for WG. Other protocols
+	// continue to use the account's UUID, password and numeric identity.
+	WireGuardPeer *spec.WireGuardPeer
+	Tags          []string // labels for the portal's server list; not rendered into configs
 	// Extra holds client-side fields merged into this server's entry in
 	// the map-shaped formats (mihomo/Clash, Stash, sing-box): things the
 	// panel does not model such as tfo, smux, dialer-proxy, ip-version.

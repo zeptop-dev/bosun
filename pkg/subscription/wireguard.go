@@ -44,6 +44,14 @@ func WGClient(l Line) (WGPeer, bool) {
 		return WGPeer{}, false
 	}
 	priv, pub, err := wg.DerivePeer(ib.WGPrivateKey, l.UUID)
+	address := wg.ClientAddress(l.UserID)
+	if l.WireGuardPeer != nil {
+		if l.WireGuardPeer.Validate() != nil {
+			return WGPeer{}, false
+		}
+		priv, pub, err = wg.DeriveDevicePeer(ib.WGPrivateKey, l.UUID, l.WireGuardPeer.UUID)
+		address = l.WireGuardPeer.Address
+	}
 	if err != nil {
 		return WGPeer{}, false
 	}
@@ -55,7 +63,7 @@ func WGClient(l Line) (WGPeer, bool) {
 	if mtu <= 0 {
 		mtu = wg.DefaultMTU
 	}
-	return WGPeer{PrivateKey: priv, PublicKey: pub, ServerPublicKey: srvPub, Address: wg.ClientAddress(l.UserID), MTU: mtu}, true
+	return WGPeer{PrivateKey: priv, PublicKey: pub, ServerPublicKey: srvPub, Address: address, MTU: mtu}, true
 }
 
 // WGConf is the client .conf text for a WireGuard line ("" otherwise).

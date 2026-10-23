@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 
 	"golang.org/x/crypto/curve25519"
 )
@@ -58,12 +59,26 @@ func PublicKey(priv string) (string, error) {
 // HMAC-SHA256(serverPrivateKey, uuid), clamped. Rotating the server key
 // re-keys every client.
 func DerivePeer(serverPriv, uuid string) (priv, pub string, err error) {
+	return derivePeer(serverPriv, "bosun-wireguard-peer:"+uuid)
+}
+
+// DeriveDevicePeer derives an independent identity for a registered device.
+// Including the account identity preserves account-wide credential rotation.
+// The separate domain prevents a device identity colliding with a legacy one.
+func DeriveDevicePeer(serverPriv, userUUID, deviceUUID string) (priv, pub string, err error) {
+	if userUUID == "" || deviceUUID == "" || strings.ContainsRune(userUUID, 0) || strings.ContainsRune(deviceUUID, 0) {
+		return "", "", errors.New("wireguard: invalid device identity")
+	}
+	return derivePeer(serverPriv, "bosun-wireguard-device:"+userUUID+"\x00"+deviceUUID)
+}
+
+func derivePeer(serverPriv, identity string) (priv, pub string, err error) {
 	sk, err := base64.StdEncoding.DecodeString(serverPriv)
 	if err != nil || len(sk) != 32 {
 		return "", "", errors.New("wireguard: server private key must be 32 bytes base64")
 	}
 	mac := hmac.New(sha256.New, sk)
-	mac.Write([]byte("bosun-wireguard-peer:" + uuid))
+	mac.Write([]byte(identity))
 	k := mac.Sum(nil)
 	clamp(k)
 	p, err := curve25519.X25519(k, curve25519.Basepoint)
@@ -71,6 +86,15 @@ func DerivePeer(serverPriv, uuid string) (priv, pub string, err error) {
 		return "", "", err
 	}
 	return base64.StdEncoding.EncodeToString(k), base64.StdEncoding.EncodeToString(p), nil
+}
+
+// DeviceAddress is a distinct /32 for a monotonically allocated device id.
+// IDs must not be reused after revocation. Exhaustion fails instead of wrapping.
+func DeviceAddress(deviceID int64) (string, error) {
+	if deviceID < 1 || deviceID > 65534 {
+		return "", errors.New("wireguard: device address pool exhausted or invalid id")
+	}
+	return fmt.Sprintf("10.67.%d.%d/32", deviceID>>8, deviceID&255), nil
 }
 
 // ClientAddress is the /32 a user gets inside the tunnel network: derived
