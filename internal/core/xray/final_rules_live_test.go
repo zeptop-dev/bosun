@@ -113,6 +113,16 @@ func TestFreedomFinalRulesLiveXray(t *testing.T) {
 	if !request() || hits.Load() != 2 {
 		t.Fatal("explicit global private destination exemption was ignored")
 	}
+	// Advanced overrides use the same case-insensitive struct fields as the
+	// upstream JSON loader. An explicit restrictive policy must survive them.
+	patch, _ := json.Marshal(m{"outbounds": []m{{"Protocol": "Freedom", "Tag": "fixture", "Settings": m{
+		"redirect": strings.TrimPrefix(destination.URL, "http://"), "FinalRules": []m{{"action": "block", "blockDelay": 0}},
+	}}}})
+	node.Overrides = map[string]json.RawMessage{"xray": patch}
+	apply()
+	if request() || hits.Load() != 2 {
+		t.Fatal("case-insensitive override fields lost the explicit blocking policy")
+	}
 }
 
 func TestFreedomFinalRulesPrivateDNSLiveXray(t *testing.T) {

@@ -313,6 +313,10 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 			cfg["dns"] = m{"servers": []any{"localhost"}}
 		}
 	}
+	cfg, err = normalizeXrayConfigFields(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := validateXrayConfigCompatibility(cfg, opt); err != nil {
 		return nil, nil, err
 	}
