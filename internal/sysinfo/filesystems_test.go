@@ -34,6 +34,9 @@ func TestFilesystemMountinfoLocalPoolsAndSharedCapacity(t *testing.T) {
 17 1 0:13 / /containers rw - overlay overlay rw
 18 1 8:4 / /mnt/data\040space rw - ext4 /dev/disk\134name rw
 19 1 8:5 / /mnt/tab\011line\012break rw - ext4 /dev/sde1 rw
+20 1 8:6 /var/lib/container/hosts /etc/hosts rw - ext4 /dev/sdf1 rw
+21 1 8:6 /var/lib/container/resolv.conf /etc/resolv.conf rw - ext4 /dev/sdf1 rw
+22 1 8:7 /only-subdirectory /mnt/bind-only rw - ext4 /dev/sdg1 rw
 `
 	mounts, err := parseFilesystemMountinfo(strings.NewReader(raw))
 	if err != nil {
@@ -66,11 +69,18 @@ func TestFilesystemMountinfoLocalPoolsAndSharedCapacity(t *testing.T) {
 	}
 	// Reboots may renumber mount IDs; the public-opaque stable identifier does
 	// not contain that instance number, while the sampling identity must.
-	again, _ := parseFilesystemMountinfo(strings.NewReader(strings.Replace(raw, "2 1 8:1", "22 1 8:1", 1)))
+	again, _ := parseFilesystemMountinfo(strings.NewReader(strings.Replace(raw, "2 1 8:1", "32 1 8:1", 1)))
 	for _, mount := range again {
 		if mount.resource.Mount == "/data" && mount.resource.ID != got["/data"].ID {
 			t.Fatal("ID changed with mount instance")
 		}
+	}
+}
+
+func TestFilesystemMountinfoContainerSubdirectoryRoot(t *testing.T) {
+	mounts, err := parseFilesystemMountinfo(strings.NewReader("1 1 8:1 /containers/root / rw - ext4 /dev/sda1 rw\n"))
+	if err != nil || len(mounts) != 1 || mounts[0].resource.Mount != "/" {
+		t.Fatalf("container root omitted: %v %v", mounts, err)
 	}
 }
 

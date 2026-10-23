@@ -13,12 +13,13 @@ import (
 )
 
 type mountinfoEntry struct {
-	mount     filesystemMount
-	device    string
-	root      string
-	subvolume string
-	number    int
-	parent    int
+	mount         filesystemMount
+	device        string
+	root          string
+	subvolume     string
+	subvolumeRoot string
+	number        int
+	parent        int
 }
 
 // Parse the calling process's namespace rather than /proc/1: a path is only
@@ -68,6 +69,12 @@ func parseFilesystemMountinfo(reader io.Reader) ([]filesystemMount, error) {
 				if strings.HasPrefix(opt, "subvolid=") {
 					entry.subvolume = opt
 				}
+				if value, ok := strings.CutPrefix(opt, "subvol="); ok {
+					entry.subvolumeRoot, err = unescapeMountinfo(value)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
 		if _, exists := byID[number]; exists {
@@ -112,6 +119,12 @@ func parseFilesystemMountinfo(reader io.Reader) ([]filesystemMount, error) {
 		}
 		fs := entry.mount.resource
 		if fs.Mount != "/" && (remoteFS(fs.Type) || pseudoFS(fs.Type)) {
+			continue
+		}
+		// A subdirectory/file bind is not an independent storage volume. In
+		// containers, /etc/hosts binds otherwise expose the host's whole disk
+		// as a data volume. Preserve container roots and real Btrfs subvolumes.
+		if fs.Mount != "/" && entry.root != "/" && !(fs.Type == "btrfs" && entry.root == entry.subvolumeRoot) {
 			continue
 		}
 		entries = append(entries, entry)
