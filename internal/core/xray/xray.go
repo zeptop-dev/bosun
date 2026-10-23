@@ -46,11 +46,12 @@ type Core struct {
 	opt Options
 	log *slog.Logger
 
-	mu               sync.Mutex
-	sup              *subprocess.Supervisor
-	conn             *grpc.ClientConn
-	applied          *state
-	wireGuardDevices bool
+	mu                     sync.Mutex
+	sup                    *subprocess.Supervisor
+	conn                   *grpc.ClientConn
+	applied                *state
+	wireGuardDevices       bool
+	strictOutboundSecurity bool
 
 	online   *onlineWindowMap
 	pollStop context.CancelFunc
@@ -83,7 +84,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := runas.MkdirRoot(opt.WorkDir); err != nil {
 		return nil, err
 	}
-	return &Core{opt: opt, log: log.With("core", "xray"), online: newOnlineWindow(), wireGuardDevices: detectWireGuardDevices(opt.Binary)}, nil
+	version := inspectBinaryVersion(opt.Binary)
+	return &Core{opt: opt, log: log.With("core", "xray"), online: newOnlineWindow(),
+		wireGuardDevices: supportsWireGuardDevices(version), strictOutboundSecurity: xrayVersionAtLeast(version, [3]int{26, 7, 11})}, nil
 }
 
 func (c *Core) Name() string { return "xray" }
@@ -98,7 +101,8 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 	if needsWireGuardDevices(inbounds, users) && !c.wireGuardDevices {
 		return nil, fmt.Errorf("xray: WireGuard devices require Xray %s or newer with user accounting", spec.WireGuardDevicesMinXray)
 	}
-	cfg, st, err := render(node, inbounds, users, renderOptions{LogLevel: c.opt.LogLevel, APIListen: c.opt.APIListen, ConnLog: node != nil && (node.ConnLog || len(node.AuditRules) > 0) && c.opt.ConnSink != nil})
+	cfg, st, err := render(node, inbounds, users, renderOptions{LogLevel: c.opt.LogLevel, APIListen: c.opt.APIListen, ConnLog: node != nil && (node.ConnLog || len(node.AuditRules) > 0) && c.opt.ConnSink != nil,
+		ModernConfig: c.wireGuardDevices, StrictOutboundSecurity: c.strictOutboundSecurity})
 	if err != nil {
 		return nil, err
 	}

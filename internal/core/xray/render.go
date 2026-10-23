@@ -23,6 +23,10 @@ type renderOptions struct {
 	// ConnLog switches the access log on (to stdout, parsed by bosun);
 	// otherwise it is off so the pipe only carries real log lines.
 	ConnLog bool
+	// Runtime-version gates for upstream's removed settings and encryption
+	// requirements. They also inspect custom/override JSON before activation.
+	ModernConfig           bool
+	StrictOutboundSecurity bool
 }
 
 // state is carried from Render to Start/Apply so Apply can decide between a
@@ -308,6 +312,12 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		if cfg["dns"] == nil {
 			cfg["dns"] = m{"servers": []any{"localhost"}}
 		}
+	}
+	if err := validateXrayConfigCompatibility(cfg, opt); err != nil {
+		return nil, nil, err
+	}
+	if err := applyFreedomFinalRules(cfg, node, users); err != nil {
+		return nil, nil, err
 	}
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	return b, st, err

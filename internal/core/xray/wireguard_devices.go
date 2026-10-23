@@ -18,11 +18,14 @@ var xrayVersionPattern = regexp.MustCompile(`(?m)^Xray ([0-9]+)\.([0-9]+)\.([0-9
 // versions silently ignore peers.email, so accepting a device configuration
 // there would provide connectivity without its promised accounting/limits.
 func supportsWireGuardDevices(versionOutput []byte) bool {
+	return xrayVersionAtLeast(versionOutput, [3]int{26, 6, 27})
+}
+
+func xrayVersionAtLeast(versionOutput []byte, minimum [3]int) bool {
 	m := xrayVersionPattern.FindSubmatch(versionOutput)
 	if m == nil {
 		return false
 	}
-	minimum := [3]int{26, 6, 27}
 	for i := range minimum {
 		n, err := strconv.Atoi(string(m[i+1]))
 		if err != nil {
@@ -35,11 +38,14 @@ func supportsWireGuardDevices(versionOutput []byte) bool {
 	return true
 }
 
-func detectWireGuardDevices(binary string) bool {
+func inspectBinaryVersion(binary string) []byte {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, binary, "version").Output()
-	return err == nil && supportsWireGuardDevices(out)
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 func needsWireGuardDevices(inbounds []spec.Inbound, users []spec.User) bool {
