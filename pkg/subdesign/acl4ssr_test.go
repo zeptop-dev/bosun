@@ -351,3 +351,108 @@ func TestValidateProtectsGeneratedConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestProtectionPoliciesCannotFallBackToDirect(t *testing.T) {
+	for _, enhancement := range []string{"dns", "claude"} {
+		t.Run(enhancement, func(t *testing.T) {
+			d, _ := Preset("basic")
+			d.Groups = append(d.Groups, Group{Name: "INNER", Type: "select", Members: []string{"@all", "DIRECT"}}, Group{Name: "OUTER", Type: "select", Members: []string{"INNER"}})
+			if enhancement == "dns" {
+				d.Enhancements = Enhancements{DNSProtection: true, DNSPolicy: "OUTER"}
+			} else {
+				d.Enhancements = Enhancements{Claude: true, ClaudePolicy: "OUTER"}
+			}
+			if _, err := d.Render("clash"); err == nil || !strings.Contains(err.Error(), "DIRECT") {
+				t.Fatalf("nested direct policy accepted: %v", err)
+			}
+			d.Groups[len(d.Groups)-2].Members = []string{"@all", "REJECT"}
+			if _, err := d.Render("clash"); err != nil {
+				t.Fatalf("fail-closed policy rejected: %v", err)
+			}
+		})
+	}
+}
+
+func TestDNSPolicyFragmentInjectionIsRejected(t *testing.T) {
+	for _, name := range []string{"Proxy&DIRECT", "Proxy%26DIRECT", "Proxy%20Group", "RULES"} {
+		for _, claude := range []bool{false, true} {
+			d, _ := Preset("basic")
+			d.Groups = append(d.Groups, Group{Name: name, Type: "select", Members: []string{"@all"}})
+			d.Enhancements.DNSProtection = true
+			if claude {
+				d.Enhancements.Claude = true
+				d.Enhancements.ClaudePolicy = name
+			} else {
+				d.Enhancements.DNSPolicy = name
+			}
+			if _, err := d.Render("clash"); err == nil {
+				t.Fatalf("fragment policy accepted: %q", name)
+			}
+		}
+	}
+}
+
+func TestMihomoRuleStringsAndUnicodeLineSeparators(t *testing.T) {
+	d := Design{Groups: []Group{{Name: "A: B", Type: "select", Members: []string{"@all"}}}, Rules: []Rule{{Set: GeoIPCN, Policy: "A: B"}}, Final: "A: B"}
+	tpl, err := d.Render("clash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err = yaml.Unmarshal([]byte(tpl), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, rule := range doc["rules"].([]any) {
+		if _, ok := rule.(string); !ok {
+			t.Fatalf("rule parsed as non-string: %#v", rule)
+		}
+	}
+	for _, separator := range []string{"\u2028", "\u2029"} {
+		x, _ := Preset("basic")
+		x.Source = &PresetSource{URL: "https://github.com/ACL4SSR/ACL4SSR/" + separator + "external-controller: 0.0.0.0:9090" + separator + "#"}
+		if _, err := x.Render("clash"); err == nil {
+			t.Fatal("Unicode source line separator accepted")
+		}
+		x.Source = nil
+		x.Groups[0].Name = "BAD" + separator + "NAME"
+		if err := x.Validate(); err == nil {
+			t.Fatal("Unicode INI line separator accepted")
+		}
+	}
+}
+
+func TestDesignRejectsNonCanonicalRuleURL(t *testing.T) {
+	d, _ := Preset("basic")
+	d.RuleSets = []RuleSet{{Key: "extra", Name: "extra", URL: "rules/ACL4SSR/Clash/BanAD.list"}}
+	if err := d.Validate(); err == nil {
+		t.Fatal("relative HTTP provider URL accepted")
+	}
+}
+
+func TestDNSBootstrapAndDomesticResolversAreExplicitlyDirect(t *testing.T) {
+	d, _ := Preset("basic")
+	d.Enhancements.DNSProtection = true
+	tpl, err := d.Render("clash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err = yaml.Unmarshal([]byte(tpl), &doc); err != nil {
+		t.Fatal(err)
+	}
+	dns := doc["dns"].(map[string]any)
+	for _, key := range []string{"default-nameserver", "proxy-server-nameserver", "direct-nameserver"} {
+		for _, resolver := range dns[key].([]any) {
+			if !strings.HasSuffix(resolver.(string), "#DIRECT") {
+				t.Fatalf("%s may follow user routing: %s", key, resolver)
+			}
+		}
+	}
+	for _, value := range dns["nameserver-policy"].(map[string]any) {
+		for _, resolver := range value.([]any) {
+			if !strings.HasSuffix(resolver.(string), "#DIRECT") {
+				t.Fatalf("domestic policy may follow proxy routing: %s", resolver)
+			}
+		}
+	}
+}
