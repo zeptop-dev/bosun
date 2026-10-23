@@ -214,6 +214,51 @@ own identity in the core (Xray email / sing-box name `NAME|TAG`,
 so a panel can charge the inbound's own group. Panels that only know users
 (Xboard, the local panel) receive one summed entry per user.
 
+### Forward WireGuard device identities (bosun 0.77)
+
+Native WireGuard identifies a peer by its public key. Importing the same
+legacy user configuration on independent devices makes them share that
+identity; their endpoint roaming can interrupt each other. Registered
+devices instead receive stable independent keys and unique `10.67.0.0/16`
+host addresses, separate from the legacy `10.66.0.0/16` user pool. A device
+must be present in the server's desired state before its subscription is
+issued. Address IDs never wrap or get reused after revocation.
+
+`spec.User.wireguard_peers` adds these registered peers. The legacy peer is
+retained unless `wireguard_legacy_disabled` is explicitly set. Missing new
+fields preserve old configurations. Each device's key includes both the
+parent account's UUID and its device UUID, so rotating account credentials
+also changes all device keys. Other proxy protocols keep the account's usual
+credentials. A selected `subscription.Line.wireguard_peer` controls only
+that line's WireGuard client identity; invalid selections fail instead of
+silently returning the shared legacy identity.
+
+This feature requires bosun 0.77 and Xray's reported `wireguard_devices`
+capability. The adapter checks the actual executable version: upstream
+26.6.27 introduced source-address-to-user attribution for WireGuard.
+Earlier versions, including the default 26.3.27 build, **ignore peer email**
+and cannot supply the per-user WireGuard traffic accounting or user-routing
+marks described here. Legacy connectivity remains available on those
+cores, but new device fields are rejected until a capable core is selected.
+The version threshold identifies the feature, not a recommendation to
+install any later release; check the core catalog's compatibility status.
+
+On capable cores, legacy and registered peers all use the parent's
+`NAME|INBOUND` billing identity and the same user shaping mark. They share
+the account's traffic allowance and speed limit rather than gaining an
+allowance per device. Peer changes replace the running WireGuard config,
+including revocations; they require a core restart and can briefly interrupt
+other inbounds on that core. The upstream email-based hot removal API is
+not used, since several keys intentionally share one account email.
+
+An opt-in local integration test checks concurrent independent clients,
+shared account accounting, separate inbound accounting, legacy coexistence
+and revocation against a real Xray binary, without changing OS networking:
+
+```sh
+BOSUN_XRAY_WG_TEST_BINARY=/path/to/xray go test ./internal/core/xray -run '^TestWireGuardDevicesLiveXray$' -count=1
+```
+
 ## Resource detail (v0.56)
 
 The standalone Overview and Captain node detail show logical CPU utilization,
