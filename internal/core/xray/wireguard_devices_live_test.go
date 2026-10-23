@@ -74,11 +74,9 @@ func TestWireGuardDevicesLiveXray(t *testing.T) {
 	defer destination.Close()
 	// gVisor rejects external packets destined for loopback. Dial a reserved
 	// test address through WG and redirect only on the server to our fixture.
-	_, fixturePort, _ := net.SplitHostPort(strings.TrimPrefix(destination.URL, "http://"))
 	node := &spec.Node{AllowPrivateDest: true, DefaultOutbound: "fixture", Outbounds: []spec.Outbound{{
 		Tag: "fixture", Protocol: "freedom", Settings: map[string]any{
-			"redirect":   strings.TrimPrefix(destination.URL, "http://"),
-			"finalRules": []m{{"action": "allow", "network": "tcp", "ip": []string{"127.0.0.1/32"}, "port": fixturePort}},
+			"redirect": strings.TrimPrefix(destination.URL, "http://"),
 		},
 	}}}
 	bundle, err := server.Render(node, ibs, []spec.User{alice, bob})
