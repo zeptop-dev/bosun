@@ -171,6 +171,14 @@ var Manifest = []Release{
 		},
 	},
 	{
+		Core: "xray", Version: "26.7.28-r2", Status: StatusCaution,
+		Note: "optional WG device accounting; Go 1.27.3 and vetted security dependencies; explicit selection required, removed or incompatible outbound settings rejected; default unchanged",
+		Assets: map[string]Asset{
+			"linux/amd64": {URL: RegistryBase + "xray-26.7.28-r2/xray-26.7.28-r2-linux-amd64", SHA256: "789143d02935731b4db2e19b81cb8732665fa422da6bdf1a036dcfcfbb279c34", Archive: "raw"},
+			"linux/arm64": {URL: RegistryBase + "xray-26.7.28-r2/xray-26.7.28-r2-linux-arm64", SHA256: "f80cd8079a9079428b125ba368b986343a9715af35a098cdcf8e4423ea0c5b11", Archive: "raw"},
+		},
+	},
+	{
 		// -r1: upstream v26.3.27 rebuilt by bosun CI (workflow xray.yml) with
 		// Go 1.26.8 and upstream's release flags; the official binaries are
 		// Go 1.26.1. macOS dev machines keep upstream's build.

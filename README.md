@@ -222,7 +222,8 @@ identity; their endpoint roaming can interrupt each other. Registered
 devices instead receive stable independent keys and unique `10.67.0.0/16`
 host addresses, separate from the legacy `10.66.0.0/16` user pool. A device
 must be present in the server's desired state before its subscription is
-issued. Address IDs never wrap or get reused after revocation.
+issued. Device identities are never reused; Captain may reuse a freed address
+slot only with a new independently generated device identity.
 
 `spec.User.wireguard_peers` adds these registered peers. The legacy peer is
 retained unless `wireguard_legacy_disabled` is explicitly set. Missing new
@@ -242,6 +243,11 @@ marks described here. Legacy connectivity remains available on those
 cores, but new device fields are rejected until a capable core is selected.
 The version threshold identifies the feature, not a recommendation to
 install any later release; check the core catalog's compatibility status.
+The optional `26.7.28-r2` build uses Go 1.27.3 and vetted dependency security
+updates. It remains **caution** and requires explicit selection; the default
+core is unchanged. Bosun preserves its explicit private-access policies on
+this core, and rejects removed or incompatible outbound settings instead of
+silently changing their meaning.
 
 On capable cores, legacy and registered peers all use the parent's
 `NAME|INBOUND` billing identity and the same user shaping mark. They share
@@ -258,6 +264,12 @@ and revocation against a real Xray binary, without changing OS networking:
 ```sh
 BOSUN_XRAY_WG_TEST_BINARY=/path/to/xray go test ./internal/core/xray -run '^TestWireGuardDevicesLiveXray$' -count=1
 ```
+
+Linux root can additionally verify both devices against the real shared
+2 Mbps shaper with `BOSUN_WG_SHAPING_TEST=1` and the same binary variable,
+running `TestWireGuardDevicesSharedLimitLinux`. The test creates private
+network namespaces; it never edits the host's networking. Updating device
+support raises the built-in bosun update/rollback floor to v0.77.0.
 
 ## Resource detail (v0.56)
 
@@ -617,6 +629,7 @@ Current manifest:
 | singbox | 1.14.0-r2 | tested | upstream 1.14.0 built with `with_v2ray_api` and `with_wireguard` (WARP) |
 | singbox | 1.14.0 | caution | first build without `with_wireguard`; WARP outbounds fail |
 | xray | 26.3.27-r1 | tested | upstream 26.3.27 rebuilt by bosun CI with Go 1.26.8 (the official binary is Go 1.26.1); REALITY works with mihomo and sing-box clients |
+| xray | 26.7.28-r2 | caution | optional WG device accounting; Go 1.27.3 and security dependency updates; explicit selection and compatible outbound settings required |
 | xray | 26.3.27 | tested | official binary; REALITY works with mihomo and sing-box clients |
 | xray | 26.9.9 | broken | REALITY rejects mihomo/sing-box clients |
 | mita | 3.37.0 | tested | official mieru server; line-bound inbounds bind natively (`listenIPAddress`) |

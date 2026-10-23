@@ -63,10 +63,10 @@ import (
 // newUpdater returns the self-update client for this binary. minVersion
 // (config min_version) is the floor no update or rollback may go below.
 func newUpdater(minVersion string) *selfupdate.Client {
-	// Older binaries cannot retire the WG forwarding ownership journal or honor
-	// its domain preference. They also lack earlier firewall/recovery support.
-	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.75.0", minVersion) {
-		minVersion = "v0.75.0"
+	// Older binaries ignore independent WG peers and their revocation state.
+	// Preserve this boundary and earlier firewall/recovery ownership support.
+	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.77.0", minVersion) {
+		minVersion = "v0.77.0"
 	}
 	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version, MinVersion: minVersion}
 }

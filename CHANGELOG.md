@@ -6,6 +6,10 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.77.0** (2026-10-23) — Add independent WireGuard device peers with shared parent-user and inbound accounting. Preserve legacy peers, derive device keys from both parent and device identity, isolate device addresses, and replace the running WG configuration on peer changes so revocation removes the correct key. All devices retain the parent's bandwidth mark and traffic allowance.
+  - Report actual Xray device support and reject device state on older cores, including the default 26.3.27 which cannot attribute native WG traffic to users. Offer an explicitly selected 26.7.28-r2 core rebuilt with Go 1.27.3 and vetted security dependencies, preserving bosun's existing private-access policies and rejecting incompatible removed settings. The default core stays unchanged.
+  - Extend subscription renderers with an explicit device identity; invalid selections cannot fall back to a shared legacy key. Raise the built-in update/rollback floor to v0.77.0 so older binaries cannot ignore device state and revocation.
+
 - **v0.76.1** (2026-10-22) — Exclude bosun-managed reverse WireGuard interfaces and traffic-shaping IFB devices from automatic host network totals, rates and monitoring traffic. Their traffic is already visible on the uplink; counting both inflated server usage and could invalidate the rate baseline when a tunnel appeared. Keep all interface details and explicit include/exclude choices, without changing user proxy billing or rewriting historical usage.
 
 - **v0.76.0** (2026-10-22) — Report optional physical CPU core/socket totals and virtualization roles, preserving the existing logical CPU count. Linux physical topology requires consistent online sysfs data and a confirmed non-guest environment; incomplete observations retry every five minutes without mutating previously published reports. Guest/container counts remain OS-visible logical CPUs, not a cgroup quota.
