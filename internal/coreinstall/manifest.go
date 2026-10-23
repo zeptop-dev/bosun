@@ -171,8 +171,16 @@ var Manifest = []Release{
 		},
 	},
 	{
-		Core: "xray", Version: "26.7.28-r2", Status: StatusCaution,
-		Note: "optional WG device accounting; Go 1.27.3 and vetted security dependencies; explicit selection required, removed or incompatible outbound settings rejected; default unchanged",
+		Core: "xray", Version: "26.7.28-r3", Status: StatusCaution,
+		Note: "optional WG device accounting; Go 1.26.10 with security dependency updates and compatible Vision TLS layout; REALITY interoperability requires bosun 0.77.1 or newer; removed or incompatible outbound settings rejected; default unchanged",
+		Assets: map[string]Asset{
+			"linux/amd64": {URL: RegistryBase + "xray-26.7.28-r3/xray-26.7.28-r3-linux-amd64", SHA256: "32f8ebcf5fefa0599c5ec08e7cbd09a18c99f494ece7169113cd6d221c764ff1", Archive: "raw"},
+			"linux/arm64": {URL: RegistryBase + "xray-26.7.28-r3/xray-26.7.28-r3-linux-arm64", SHA256: "a67828e03145fb5a5da1336676015f9663cdc0ba86d1cf855c333991689beae9", Archive: "raw"},
+		},
+	},
+	{
+		Core: "xray", Version: "26.7.28-r2", Status: StatusBroken,
+		Note: "Go 1.27.3 changes the TLS buffer layout expected by this upstream version's Vision implementation; do not select this build; default unchanged",
 		Assets: map[string]Asset{
 			"linux/amd64": {URL: RegistryBase + "xray-26.7.28-r2/xray-26.7.28-r2-linux-amd64", SHA256: "789143d02935731b4db2e19b81cb8732665fa422da6bdf1a036dcfcfbb279c34", Archive: "raw"},
 			"linux/arm64": {URL: RegistryBase + "xray-26.7.28-r2/xray-26.7.28-r2-linux-arm64", SHA256: "f80cd8079a9079428b125ba368b986343a9715af35a098cdcf8e4423ea0c5b11", Archive: "raw"},
