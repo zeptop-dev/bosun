@@ -13,6 +13,10 @@ on:
         description: rebuild suffix (e.g. -r1)
         required: true
         default: "-r1"
+      go-version:
+        description: Optional Go security toolchain override (otherwise go.mod)
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -23,15 +27,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version-file: go.mod }
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: go.mod
       - name: resolve the tag's commit
         run: |
           sha=$(git ls-remote https://github.com/XTLS/Xray-core "refs/tags/v${{ inputs.version }}" "refs/tags/v${{ inputs.version }}^{}" | tail -1 | cut -c1-7)
           test -n "$sha" && echo "XRAY_COMMIT=$sha" >> "$GITHUB_ENV"
       - run: scripts/build-xray.sh "${{ inputs.version }}" linux amd64 dist
-        env: { SUFFIX: "${{ inputs.suffix }}" }
+        env: { SUFFIX: "${{ inputs.suffix }}", GOTOOLCHAIN: local }
       - run: scripts/build-xray.sh "${{ inputs.version }}" linux arm64 dist
-        env: { SUFFIX: "${{ inputs.suffix }}" }
+        env: { SUFFIX: "${{ inputs.suffix }}", GOTOOLCHAIN: local }
       - run: cd dist && sha256sum xray-* > SHA256SUMS && cat SHA256SUMS && ./xray-${{ inputs.version }}${{ inputs.suffix }}-linux-amd64 version
       - env: { GH_TOKEN: "${{ github.token }}" }
         run: |
