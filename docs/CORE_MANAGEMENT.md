@@ -101,6 +101,7 @@ The opt-in tests use only local sockets and temporary configurations:
 BOSUN_XRAY_WG_TEST_BINARY=/path/to/xray go test ./internal/core/xray -run 'TestWireGuardDevicesLiveXray|TestFreedomFinalRules.*LiveXray' -count=1
 BOSUN_XRAY_TEST_BINARY=/path/to/xray go test ./internal/core/xray -run '^TestReverseLiveXray$' -count=1
 BOSUN_XRAY_TEST_BINARY=/path/to/xray-26.7.28 BOSUN_MIHOMO_TEST_BINARY=/path/to/mihomo go test ./internal/core/xray -run '^TestRealityMihomoClientVersionLive$' -count=1
+BOSUN_XRAY_TEST_BINARY=/path/to/xray BOSUN_MIHOMO_TEST_BINARY=/path/to/mihomo go test ./internal/core/xray -run '^TestVisionTLSMihomoHTTPSLive$' -count=1
 ```
 
 The Mihomo regression uses a local TLS disguise service and HTTP destination.
@@ -108,6 +109,12 @@ It checks that the omitted upstream version floor rejects Mihomo, bosun's
 rendered compatibility default permits a real REALITY + Vision request, and
 an explicitly restored 26.3.27 floor rejects that same client again. This does
 not test public network quality or ordinary certificate-based TLS + Vision.
+The separate TLS + Vision fixture uses locally generated certificates and a
+local HTTPS destination. Two connections each upload and download a fixed
+payload and compare every byte. Core debug events must confirm TLS 1.3 detection and the
+Vision direct-copy command, exercising the reflected TLS buffers instead of
+only checking that a TLS handshake succeeded. Both fixture certificate checks
+are disabled only for these generated local test certificates.
 
 They cover concurrent device clients, shared account/separate inbound
 counters, revocation, private destination permission changes, internal DNS
