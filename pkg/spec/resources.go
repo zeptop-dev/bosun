@@ -106,13 +106,17 @@ type NetworkResource struct {
 }
 
 type FilesystemResource struct {
-	Mount       string  `json:"mount"`
-	Device      string  `json:"device"`
-	Type        string  `json:"type"`
-	Total       *uint64 `json:"total"`
-	Used        *uint64 `json:"used"`
-	InodesTotal *uint64 `json:"inodes_total"`
-	InodesUsed  *uint64 `json:"inodes_used"`
+	ID           string   `json:"id,omitempty"`            // opaque identity; private paths remain in Mount/Device
+	SampledAt    int64    `json:"sampled_at,omitempty"`    // last successful capacity read, Unix milliseconds
+	Pool         bool     `json:"pool,omitempty"`          // explicitly identified union filesystem, not inferred from capacity
+	MemberMounts []string `json:"member_mounts,omitempty"` // confirmed complete pool membership; private management data
+	Mount        string   `json:"mount"`
+	Device       string   `json:"device"`
+	Type         string   `json:"type"`
+	Total        *uint64  `json:"total"`
+	Used         *uint64  `json:"used"`
+	InodesTotal  *uint64  `json:"inodes_total"`
+	InodesUsed   *uint64  `json:"inodes_used"`
 }
 
 type DiskResource struct {
