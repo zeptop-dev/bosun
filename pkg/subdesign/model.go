@@ -110,12 +110,12 @@ func (g Group) tolerance() int {
 }
 
 func safeLabel(s string) bool {
-	return strings.TrimSpace(s) == s && s != "" && len(s) <= 256 && !strings.ContainsAny(s, ",=;#\"'`{}[]\\") && !strings.ContainsFunc(s, unicode.IsControl)
+	return strings.TrimSpace(s) == s && s != "" && len(s) <= 256 && !strings.ContainsAny(s, ",=;#\"'`{}[]\\") && !configurationControl(s)
 }
 
 func validURL(s string) bool {
 	u, err := url.Parse(s)
-	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != "" && u.User == nil && u.Fragment == "" && !strings.ContainsAny(s, ",`\n\r\t {}") && !strings.ContainsFunc(s, unicode.IsControl)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != "" && u.User == nil && u.Fragment == "" && !strings.ContainsAny(s, ",`\n\r\t {}") && !configurationControl(s)
 }
 
 var setKey = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$`)
@@ -187,11 +187,11 @@ func (d *Design) Validate() error {
 			switch {
 			case m == "@all", m == "DIRECT", m == "REJECT", names[m]:
 			case strings.HasPrefix(m, "@tag:"):
-				if len(m) > 512 || strings.TrimSpace(m[5:]) == "" || strings.ContainsFunc(m, unicode.IsControl) {
+				if len(m) > 512 || strings.TrimSpace(m[5:]) == "" || configurationControl(m) {
 					return fmt.Errorf("group %q: invalid tag filter", g.Name)
 				}
 			case strings.HasPrefix(m, "@match:"):
-				if len(m) > 2048 || strings.ContainsFunc(m, unicode.IsControl) {
+				if len(m) > 2048 || configurationControl(m) {
 					return fmt.Errorf("group %q: invalid pattern", g.Name)
 				}
 				if _, err := regexp.Compile("(?i)" + m[7:]); err != nil {
@@ -241,15 +241,17 @@ func (d *Design) Validate() error {
 			return fmt.Errorf("rule set %q shadows a built-in rule set", r.Key)
 		}
 		sets[r.Key] = true
-		if r.Name == "" || len(r.Name) > 256 || strings.ContainsFunc(r.Name, unicode.IsControl) {
+		if r.Name == "" || len(r.Name) > 256 || configurationControl(r.Name) {
 			return fmt.Errorf("invalid rule set name")
 		}
 		if (r.URL == "") == (r.Inline == "") {
 			return fmt.Errorf("rule set %q requires exactly one URL or inline rule", r.Key)
 		}
 		if r.URL != "" {
-			if _, err := aclRuleURL(r.URL); err != nil {
+			if normalized, err := aclRuleURL(r.URL); err != nil {
 				return fmt.Errorf("rule set %q: %w", r.Key, err)
+			} else if normalized != r.URL {
+				return fmt.Errorf("rule set %q: absolute canonical URL is required", r.Key)
 			}
 		}
 		if r.Inline != "" && !validInline(r.Inline) {
@@ -274,8 +276,55 @@ func (d *Design) Validate() error {
 	if p := d.Enhancements.DNSPolicy; d.Enhancements.DNSProtection && p != "" && !names[p] {
 		return fmt.Errorf("DNS policy %q is not a base proxy group", p)
 	}
+
+	// A protection policy may traverse nested selection/automatic groups. Even
+	// an indirect DIRECT member permits bypass when the client selects it.
+	hasDirect := func(root string) bool {
+		pending := []string{root}
+		seen := map[string]bool{}
+		for len(pending) > 0 {
+			n := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			if n == "DIRECT" {
+				return true
+			}
+			if seen[n] {
+				continue
+			}
+			seen[n] = true
+			if g, ok := byName[n]; ok {
+				pending = append(pending, g.Members...)
+			}
+		}
+		return false
+	}
+	for _, p := range []struct {
+		enabled       bool
+		policy, label string
+	}{
+		{d.Enhancements.Claude, d.Enhancements.ClaudePolicy, "Claude"},
+		{d.Enhancements.DNSProtection, d.Enhancements.DNSPolicy, "DNS"},
+	} {
+		if p.enabled && p.policy != "" && hasDirect(p.policy) {
+			return fmt.Errorf("%s policy %q can select DIRECT; use a proxy-only group", p.label, p.policy)
+		}
+	}
+	if d.Enhancements.DNSProtection {
+		policies := []string{d.Enhancements.DNSPolicy}
+		if d.Enhancements.Claude {
+			policies = append(policies, d.Enhancements.ClaudePolicy)
+		}
+		for _, p := range policies {
+			if p == "RULES" {
+				return fmt.Errorf("RULES is reserved by mihomo DNS; select another policy")
+			}
+			if strings.ContainsAny(p, "&%") {
+				return fmt.Errorf("DNS policy names cannot contain & or %%")
+			}
+		}
+	}
 	if d.Source != nil {
-		if strings.ContainsFunc(d.Source.Key+d.Source.Name+d.Source.Revision+d.Source.URL, unicode.IsControl) {
+		if configurationControl(d.Source.Key + d.Source.Name + d.Source.Revision + d.Source.URL) {
 			return fmt.Errorf("invalid preset source metadata")
 		}
 		if len(d.Source.Key) > 256 || len(d.Source.Name) > 512 || len(d.Source.Revision) > 128 || len(d.Source.URL) > 2048 {
@@ -307,4 +356,10 @@ func (d *Design) attribution() string {
 	return "# Preset source: " + d.Source.URL + " (revision " + d.Source.Revision + ")\n" +
 		"# ACL4SSR license: CC-BY-SA-4.0 https://creativecommons.org/licenses/by-sa/4.0/\n" +
 		"# Preset adaptation: generated and adjusted by Captain; enhancement options may change the source layout and rules.\n"
+}
+
+// YAML treats Unicode line/paragraph separators as line breaks too, while
+// unicode.IsControl only covers Cc. They must not reach comments or INI fields.
+func configurationControl(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool { return unicode.IsControl(r) || r == '\u2028' || r == '\u2029' })
 }

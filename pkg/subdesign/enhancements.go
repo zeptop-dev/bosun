@@ -188,11 +188,11 @@ func (d *Design) writeDNS(b *strings.Builder, format string) {
 		return
 	}
 	policy := d.Enhancements.DNSPolicy
-	b.WriteString("dns:\n  enable: true\n  enhanced-mode: fake-ip\n  fake-ip-range: 198.18.0.1/16\n  respect-rules: true\n  default-nameserver:\n    - https://223.5.5.5/dns-query\n  proxy-server-nameserver:\n    - https://223.5.5.5/dns-query\n    - https://119.29.29.29/dns-query\n  direct-nameserver:\n    - https://223.5.5.5/dns-query\n    - https://119.29.29.29/dns-query\n  direct-nameserver-follow-policy: false\n  nameserver:\n")
+	b.WriteString("dns:\n  enable: true\n  enhanced-mode: fake-ip\n  fake-ip-range: 198.18.0.1/16\n  respect-rules: true\n  default-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n  proxy-server-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n    - https://119.29.29.29/dns-query#DIRECT\n  direct-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n    - https://119.29.29.29/dns-query#DIRECT\n  direct-nameserver-follow-policy: false\n  nameserver:\n")
 	for _, resolver := range []string{"https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"} {
 		fmt.Fprintf(b, "    - %s\n", yq(resolver+"#"+policy))
 	}
-	b.WriteString("  fake-ip-filter:\n    - '+.lan'\n    - '+.local'\n    - '+.home.arpa'\n    - '+.msftconnecttest.com'\n    - '+.msftncsi.com'\n  nameserver-policy:\n    '+.cn':\n      - https://223.5.5.5/dns-query\n    'geosite:cn':\n      - https://223.5.5.5/dns-query\n")
+	b.WriteString("  fake-ip-filter:\n    - '+.lan'\n    - '+.local'\n    - '+.home.arpa'\n    - '+.msftconnecttest.com'\n    - '+.msftncsi.com'\n  nameserver-policy:\n    '+.cn':\n      - https://223.5.5.5/dns-query#DIRECT\n    'geosite:cn':\n      - https://223.5.5.5/dns-query#DIRECT\n")
 	if d.Enhancements.Claude {
 		for _, domain := range append(append([]string{}, claudeDomains...), claudeExactDomains...) {
 			fmt.Fprintf(b, "    %s:\n      - %s\n", yq("+."+domain), yq("https://1.1.1.1/dns-query#"+d.Enhancements.ClaudePolicy))
