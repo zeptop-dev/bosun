@@ -3,6 +3,7 @@ package subscription
 import (
 	"bytes"
 	"embed"
+	"encoding/base64"
 	"regexp"
 	"sort"
 	"strconv"
@@ -64,7 +65,7 @@ type Named struct {
 	Tags []string
 }
 
-var namesPH = regexp.MustCompile(`\{\{proxy_names(?::(tag|match)=([^}]*))?\}\}`)
+var namesPH = regexp.MustCompile(`\{\{proxy_names(?::(tag|match|tag64|match64|matchcase64)=([^}]*))?\}\}`)
 
 // expandNames resolves one {{proxy_names...}} placeholder; ok is false when
 // s is not a placeholder. A filter nobody matches yields an empty list.
@@ -74,10 +75,22 @@ func expandNames(s string, names []Named) ([]string, bool) {
 		return nil, false
 	}
 	out := []string{}
+	if m[1] == "tag64" || m[1] == "match64" || m[1] == "matchcase64" {
+		b, err := base64.RawURLEncoding.DecodeString(m[2])
+		if err != nil {
+			return out, true
+		}
+		m[2] = string(b)
+		m[1] = strings.TrimSuffix(m[1], "64")
+	}
 	var re *regexp.Regexp
-	if m[1] == "match" {
+	if m[1] == "match" || m[1] == "matchcase" {
 		var err error
-		if re, err = regexp.Compile("(?i)" + m[2]); err != nil {
+		pattern := m[2]
+		if m[1] == "match" {
+			pattern = "(?i)" + pattern
+		}
+		if re, err = regexp.Compile(pattern); err != nil {
 			return out, true
 		}
 	}
@@ -87,7 +100,7 @@ func expandNames(s string, names []Named) ([]string, bool) {
 			if !hasTag(n.Tags, m[2]) {
 				continue
 			}
-		case "match":
+		case "match", "matchcase":
 			if !re.MatchString(n.Name) {
 				continue
 			}
@@ -116,6 +129,9 @@ func applyINI(tpl, format, lines string, names []Named) []byte {
 		list, _ := expandNames(ph, names)
 		return strings.Join(list, ", ")
 	})
+	if strings.Contains(tpl, designerEmptyMarker) {
+		out = guardEmptyINI(out, format)
+	}
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
@@ -162,13 +178,20 @@ func applyYAML(tpl, format string, proxies []any, names []Named) ([]byte, error)
 				expanded = append(expanded, item)
 			}
 			gm["proxies"] = expanded
+			if len(expanded) == 0 && strings.Contains(tpl, designerEmptyMarker) {
+				gm["type"] = "select"
+				gm["proxies"] = []any{"REJECT"}
+				for _, key := range []string{"url", "interval", "tolerance", "timeout", "strategy"} {
+					delete(gm, key)
+				}
+			}
 		}
 	}
 	b, err := yaml.Marshal(doc)
 	if err != nil {
 		return nil, err
 	}
-	return unescapeAstral(b), nil
+	return append(designerAttribution(tpl), unescapeAstral(b)...), nil
 }
 
 // yaml.v3 escapes every character above U+FFFF (emoji flags included) as
@@ -189,4 +212,77 @@ func unescapeAstral(b []byte) []byte {
 		}
 		return append(m[:i-1:i-1], []byte(string(rune(n)))...)
 	})
+}
+
+// This marker is emitted only by the visual designer. Hand-written templates
+// retain their existing semantics; generated empty groups must never become an
+// implicit direct route or an invalid client configuration.
+const designerEmptyMarker = "# captain-designer-empty-groups: reject-v1"
+
+func guardEmptyINI(text, format string) string {
+	lines := strings.Split(text, "\n")
+	section := ""
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == designerEmptyMarker {
+			lines[i] = ""
+			continue
+		}
+		if strings.HasPrefix(trimmed, "[") {
+			section = strings.ToLower(trimmed)
+			continue
+		}
+		if section != "[proxy group]" && section != "[policy]" {
+			continue
+		}
+		left, right, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		parts := strings.Split(right, ",")
+		if len(parts) < 2 {
+			continue
+		}
+		prefix := strings.TrimSpace(parts[0])
+		members := []string{}
+		params := []string{}
+		for _, p := range parts[1:] {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if strings.Contains(p, "=") {
+				params = append(params, p)
+			} else {
+				members = append(members, p)
+			}
+		}
+		if len(members) == 0 {
+			if format == "qx" {
+				lines[i] = "static=" + prefix + ", reject"
+			} else {
+				lines[i] = strings.TrimSpace(left) + " = select, REJECT"
+			}
+		} else {
+			fields := append([]string{prefix}, members...)
+			fields = append(fields, params...)
+			lines[i] = strings.TrimSpace(left) + " = " + strings.Join(fields, ", ")
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Preserve source and adaptation notices when YAML parsing discards comments.
+func designerAttribution(tpl string) []byte {
+	if !strings.Contains(tpl, designerEmptyMarker) {
+		return nil
+	}
+	var out strings.Builder
+	for _, line := range strings.Split(tpl, "\n") {
+		if strings.HasPrefix(line, "# Preset source:") || strings.HasPrefix(line, "# ACL4SSR license:") || strings.HasPrefix(line, "# Preset adaptation:") {
+			out.WriteString(line)
+			out.WriteByte('\n')
+		}
+	}
+	return []byte(out.String())
 }
