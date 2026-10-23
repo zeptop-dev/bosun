@@ -3,6 +3,7 @@ package spec
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -34,6 +35,18 @@ func (o ResourceOptions) Includes(name string) bool {
 	}
 	if len(o.IncludeInterfaces) > 0 {
 		return slices.Contains(o.IncludeInterfaces, name)
+	}
+	// Managed tunnels and shaping devices see packets also counted on the
+	// uplink. Keep their details, but exclude the extra layer from host totals
+	// unless the operator explicitly selects it.
+	if name == "ifb-bosun" || name == "ifb-bosun-up" {
+		return false
+	}
+	if suffix, ok := strings.CutPrefix(name, "bwg"); ok {
+		slot, err := strconv.Atoi(suffix)
+		if err == nil && slot >= 1 && slot <= 16383 && (WireGuardLink{Slot: slot}).Interface() == name {
+			return false
+		}
 	}
 	return name != "lo" && name != "lo0" && !strings.HasPrefix(name, "docker") && !strings.HasPrefix(name, "br-") && !strings.HasPrefix(name, "veth") && !strings.HasPrefix(name, "virbr")
 }

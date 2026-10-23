@@ -763,7 +763,7 @@
     "processHint": "CPU: 100% equals one logical CPU. RSS is resident memory; only bosun and its supervised processes are shown.",
     "includeInterfaces": "Include interfaces",
     "excludeInterfaces": "Exclude interfaces",
-    "selectionHint": "Exact names. Empty include list uses automatic filtering of loopback, Docker and bridge interfaces. Exclusions take precedence. New selections start a traffic baseline."
+    "selectionHint": "Exact names. Empty includes automatically exclude loopback, Docker, bridges, and bosun's reverse WireGuard and shaping interfaces to avoid counting the same traffic at multiple layers. Explicit includes override defaults; exclusions take precedence. New selections start a traffic baseline."
   },
   "networkQuality": {
     "title": "Network quality",
