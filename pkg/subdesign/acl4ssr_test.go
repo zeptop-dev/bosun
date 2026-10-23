@@ -1,6 +1,8 @@
 package subdesign
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -454,5 +456,49 @@ func TestDNSBootstrapAndDomesticResolversAreExplicitlyDirect(t *testing.T) {
 				t.Fatalf("domestic policy may follow proxy routing: %s", resolver)
 			}
 		}
+	}
+}
+
+func TestEnhancementRuleKeyCollisionCannotReplaceContent(t *testing.T) {
+	expr := "DOMAIN-SUFFIX,anthropic.com"
+	sum := sha256.Sum256([]byte(expr))
+	key := fmt.Sprintf("enh-%x", sum[:8])
+	for _, conflict := range []RuleSet{
+		{Key: key, Name: "custom", Inline: "DOMAIN-SUFFIX,example.com"},
+		{Key: key, Name: "custom", URL: acl + "BanAD.list"},
+	} {
+		d, _ := Preset("basic")
+		d.Enhancements.Claude = true
+		d.RuleSets = []RuleSet{conflict}
+		before := clone(d)
+		if _, err := d.Render("clash"); err == nil || !strings.Contains(err.Error(), "conflicts") {
+			t.Fatalf("enhancement key collision accepted: %v", err)
+		}
+		if !reflect.DeepEqual(d, before) {
+			t.Fatal("collision check modified base design")
+		}
+	}
+	d, _ := Preset("basic")
+	d.Enhancements.Claude = true
+	d.RuleSets = []RuleSet{{Key: key, Name: "existing identical rule", Inline: expr}}
+	effective, err := d.Effective()
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, rs := range effective.RuleSets {
+		if rs.Key == key {
+			count++
+			if rs.Inline != expr {
+				t.Fatal("identical content changed")
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatal("identical rule was duplicated")
+	}
+	text, err := d.Render("clash")
+	if err != nil || !strings.Contains(text, expr) {
+		t.Fatalf("Claude rule missing: %v", err)
 	}
 }

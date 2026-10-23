@@ -142,13 +142,16 @@ func (d *Design) Effective() (Design, error) {
 		out.Enhancements.ClaudePolicy = claudePolicy
 	}
 	var prefix []Rule
-	appendRule := func(expr, policy string) {
+	appendRule := func(expr, policy string) error {
 		sum := sha256.Sum256([]byte(expr))
 		key := fmt.Sprintf("enh-%x", sum[:8])
 		rs := RuleSet{Key: key, Name: expr, Inline: expr}
 		found := false
 		for _, old := range out.RuleSets {
 			if old.Key == key {
+				if old.URL != "" || old.Inline != expr {
+					return fmt.Errorf("enhancement rule set %q conflicts with a base rule set", key)
+				}
 				found = true
 				break
 			}
@@ -157,21 +160,30 @@ func (d *Design) Effective() (Design, error) {
 			out.RuleSets = append(out.RuleSets, rs)
 		}
 		prefix = append(prefix, Rule{Set: key, Policy: policy})
+		return nil
 	}
 	if out.Enhancements.WebRTC {
 		for _, r := range webRTCRules {
-			appendRule(r, "REJECT")
+			if err := appendRule(r, "REJECT"); err != nil {
+				return Design{}, err
+			}
 		}
 	}
 	if out.Enhancements.QUIC {
-		appendRule(quicRule, "REJECT")
+		if err := appendRule(quicRule, "REJECT"); err != nil {
+			return Design{}, err
+		}
 	}
 	if out.Enhancements.Claude {
 		for _, s := range claudeDomains {
-			appendRule("DOMAIN-SUFFIX,"+s, claudePolicy)
+			if err := appendRule("DOMAIN-SUFFIX,"+s, claudePolicy); err != nil {
+				return Design{}, err
+			}
 		}
 		for _, s := range claudeExactDomains {
-			appendRule("DOMAIN,"+s, claudePolicy)
+			if err := appendRule("DOMAIN,"+s, claudePolicy); err != nil {
+				return Design{}, err
+			}
 		}
 	}
 	if len(prefix) > 0 {
