@@ -224,8 +224,8 @@ rate samples are null, displayed as **—**; measured zero is still zero.
 Sampling is serialized and cached for one second across reports, UI and
 external exporters; no second monitoring agent is required.
 
-Host facts keep `cpu_cores` as the logical CPU count for compatibility. Linux
-agents additionally report `cpu_physical_cores` and `cpu_sockets` when online
+Host facts keep `cpu_cores` as the logical CPU count for compatibility. Since
+**v0.76.0**, Linux agents additionally report `cpu_physical_cores` and `cpu_sockets` when online
 CPU topology is complete and consistent in sysfs and virtualization detection
 finds no guest environment. Counts cover cores/packages with online threads;
 they do not assume two threads per core or include fully offline processors.
@@ -249,7 +249,7 @@ The corresponding standalone YAML is `probe.resources.include_interfaces`
 and `probe.resources.exclude_interfaces` (lists). Selection only affects
 monitoring totals, never proxy-user billing.
 
-Filesystem capacity is collected independently in the background every 15
+Since **v0.76.0**, filesystem capacity is collected independently in the background every 15
 seconds, with mount discovery once per minute. Linux uses the collector's own
 mount namespace, includes local mounted filesystems (including RAID/LVM-backed
 filesystems, Btrfs subvolumes and ZFS datasets) and explicitly supports
