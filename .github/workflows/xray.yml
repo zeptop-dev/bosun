@@ -17,6 +17,10 @@ on:
         description: Optional Go security toolchain override (otherwise go.mod)
         required: false
         default: ""
+      security-deps:
+        description: Vetted dependency security profile (empty or 2026-10)
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -35,13 +39,13 @@ jobs:
           sha=$(git ls-remote https://github.com/XTLS/Xray-core "refs/tags/v${{ inputs.version }}" "refs/tags/v${{ inputs.version }}^{}" | tail -1 | cut -c1-7)
           test -n "$sha" && echo "XRAY_COMMIT=$sha" >> "$GITHUB_ENV"
       - run: scripts/build-xray.sh "${{ inputs.version }}" linux amd64 dist
-        env: { SUFFIX: "${{ inputs.suffix }}", GOTOOLCHAIN: local }
+        env: { SUFFIX: "${{ inputs.suffix }}", GOTOOLCHAIN: local, XRAY_SECURITY_DEPS: "${{ inputs.security-deps }}" }
       - run: scripts/build-xray.sh "${{ inputs.version }}" linux arm64 dist
-        env: { SUFFIX: "${{ inputs.suffix }}", GOTOOLCHAIN: local }
+        env: { SUFFIX: "${{ inputs.suffix }}", GOTOOLCHAIN: local, XRAY_SECURITY_DEPS: "${{ inputs.security-deps }}" }
       - run: cd dist && sha256sum xray-* > SHA256SUMS && cat SHA256SUMS && ./xray-${{ inputs.version }}${{ inputs.suffix }}-linux-amd64 version
-      - env: { GH_TOKEN: "${{ github.token }}" }
+      - env: { GH_TOKEN: "${{ github.token }}", XRAY_SECURITY_DEPS: "${{ inputs.security-deps }}" }
         run: |
           gh release create "xray-${{ inputs.version }}${{ inputs.suffix }}" --prerelease \
             --title "Xray-core ${{ inputs.version }}${{ inputs.suffix }} (bosun build)" \
-            --notes "Unmodified upstream Xray-core v${{ inputs.version }} (${XRAY_COMMIT}) built with $(go env GOVERSION) and upstream's release flags. Consumed by bosun's core installer." \
-            dist/xray-* dist/SHA256SUMS
+            --notes "Upstream Xray-core v${{ inputs.version }} (${XRAY_COMMIT}) built with $(go env GOVERSION) and upstream's release flags. Upstream Go source unchanged; dependency profile: ${XRAY_SECURITY_DEPS:-upstream}. Security-profile builds include updated module manifests and the source commit. Consumed by bosun's core installer." \
+            dist/*
