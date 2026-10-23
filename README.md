@@ -255,7 +255,9 @@ mount namespace, includes local mounted filesystems (including RAID/LVM-backed
 filesystems, Btrfs subvolumes and ZFS datasets) and explicitly supports
 `fuse.mergerfs`. Other FUSE and remote filesystems remain excluded; the root
 filesystem retains compatibility even in containers. Repeated bind mounts are
-deduplicated when their filesystem identity is known. Shared pools/subvolumes
+deduplicated when their filesystem identity is known; non-root subdirectory or
+file binds are excluded, so container configuration-file binds do not appear as
+additional host disks. Shared pools/subvolumes
 are never summed into a machine capacity: the legacy disk summary still means
 the root filesystem only.
 
