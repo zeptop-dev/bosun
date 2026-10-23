@@ -88,13 +88,14 @@ func derivePeer(serverPriv, identity string) (priv, pub string, err error) {
 	return base64.StdEncoding.EncodeToString(k), base64.StdEncoding.EncodeToString(p), nil
 }
 
-// DeviceAddress is a distinct /32 for a monotonically allocated device id.
-// IDs must not be reused after revocation. Exhaustion fails instead of wrapping.
-func DeviceAddress(deviceID int64) (string, error) {
-	if deviceID < 1 || deviceID > 65534 {
-		return "", errors.New("wireguard: device address pool exhausted or invalid id")
+// DeviceAddress is a distinct /32 for an allocated address slot. The UUID/key
+// carries device identity; a freed slot can be reused with a new identity after
+// removing the old peer from desired state. Exhaustion never wraps addresses.
+func DeviceAddress(slot int64) (string, error) {
+	if slot < 1 || slot > 65534 {
+		return "", errors.New("wireguard: device address pool exhausted or invalid slot")
 	}
-	return fmt.Sprintf("10.67.%d.%d/32", deviceID>>8, deviceID&255), nil
+	return fmt.Sprintf("10.67.%d.%d/32", slot>>8, slot&255), nil
 }
 
 // ClientAddress is the /32 a user gets inside the tunnel network: derived
