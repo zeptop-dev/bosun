@@ -49,7 +49,7 @@ func (Egern) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 			if !ok {
 				continue
 			}
-			for _, body := range gm {
+			for kind, body := range gm {
 				bm, ok := body.(map[string]any)
 				if !ok {
 					continue
@@ -71,10 +71,22 @@ func (Egern) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 					expanded = append(expanded, item)
 				}
 				bm["policies"] = expanded
+				if len(expanded) == 0 && strings.Contains(tpl, designerEmptyMarker) {
+					bm["policies"] = []any{"REJECT"}
+					delete(gm, kind)
+					gm["select"] = bm
+					for _, key := range []string{"url", "interval", "tolerance"} {
+						delete(bm, key)
+					}
+				}
 			}
 		}
 	}
-	return yaml.Marshal(doc)
+	b, err := yaml.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	return append(designerAttribution(tpl), b...), nil
 }
 
 // egernProxy maps one line; nil when Egern cannot dial it.

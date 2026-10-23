@@ -6,9 +6,9 @@
 package subdesign
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -21,9 +21,13 @@ type Group struct {
 	// Members: other group names, DIRECT, REJECT, "@all" (every server),
 	// "@tag:<tag>" (servers whose entry carries the tag) or "@match:<re>"
 	// (servers whose name matches the case-insensitive regexp).
-	Members  []string `json:"members"`
-	URL      string   `json:"url,omitempty"`
-	Interval int      `json:"interval,omitempty"`
+	Members            []string `json:"members"`
+	URL                string   `json:"url,omitempty"`
+	Interval           int      `json:"interval,omitempty"`
+	Timeout            int      `json:"timeout,omitempty"`
+	Tolerance          *int     `json:"tolerance,omitempty"`
+	Region             string   `json:"region,omitempty"`
+	MatchCaseSensitive bool     `json:"match_case_sensitive,omitempty"`
 }
 
 // Rule routes one rule set to a policy (a group name, DIRECT or REJECT).
@@ -37,15 +41,20 @@ type Design struct {
 	Groups []Group `json:"groups"`
 	Rules  []Rule  `json:"rules"`
 	// Final is the policy for traffic no rule matched.
-	Final string `json:"final"`
+	Final        string        `json:"final"`
+	Source       *PresetSource `json:"source,omitempty"`
+	Enhancements Enhancements  `json:"enhancements,omitempty"`
+	RuleSets     []RuleSet     `json:"rule_sets,omitempty"`
+	effective    bool
 }
 
 // RuleSet is a catalogue entry: an ACL4SSR list the clients fetch
 // themselves, or the built-in GEOIP CN match.
 type RuleSet struct {
-	Key  string `json:"key"`
-	Name string `json:"name"`
-	URL  string `json:"url,omitempty"`
+	Key    string `json:"key"`
+	Name   string `json:"name"`
+	URL    string `json:"url,omitempty"`
+	Inline string `json:"inline,omitempty"`
 }
 
 const acl = "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/"
@@ -105,7 +114,7 @@ func Preset(key string) (Design, bool) {
 	case "basic":
 		return Design{
 			Groups: []Group{{Name: "🚀 节点选择", Type: "select", Members: []string{"♻️ 自动选择", "@all"}}, auto},
-			Rules:  []Rule{{"lan", "DIRECT"}, {"ads", "REJECT"}, {"china-domain", "DIRECT"}, {"china-ip", "DIRECT"}, {GeoIPCN, "DIRECT"}},
+			Rules:  []Rule{{"lan", "DIRECT"}, {"china-domain", "DIRECT"}, {"china-ip", "DIRECT"}, {GeoIPCN, "DIRECT"}},
 			Final:  "🚀 节点选择",
 		}, true
 	case "acl4ssr", "acl4ssr-regions":
@@ -165,83 +174,32 @@ var Regions = []Region{
 
 var groupTypes = map[string]bool{"select": true, "url-test": true, "fallback": true, "load-balance": true}
 
-// Validate checks names, types, member and policy references.
-func (d *Design) Validate() error {
-	if len(d.Groups) == 0 {
-		return fmt.Errorf("at least one proxy group is required")
-	}
-	names := map[string]bool{}
-	for i, g := range d.Groups {
-		g.Name = strings.TrimSpace(g.Name)
-		d.Groups[i].Name = g.Name
-		if g.Name == "" {
-			return fmt.Errorf("group %d has no name", i+1)
-		}
-		if g.Name == "DIRECT" || g.Name == "REJECT" || strings.ContainsAny(g.Name, ",\n\"") {
-			return fmt.Errorf("group name %q is not allowed", g.Name)
-		}
-		if names[g.Name] {
-			return fmt.Errorf("duplicate group name %q", g.Name)
-		}
-		names[g.Name] = true
-		if !groupTypes[g.Type] {
-			return fmt.Errorf("group %q: unknown type %q", g.Name, g.Type)
-		}
-		if len(g.Members) == 0 {
-			return fmt.Errorf("group %q has no members", g.Name)
-		}
-	}
-	for _, g := range d.Groups {
-		for _, m := range g.Members {
-			switch {
-			case m == "@all", m == "DIRECT", m == "REJECT", names[m]:
-			case strings.HasPrefix(m, "@tag:"):
-				if strings.TrimSpace(m[5:]) == "" {
-					return fmt.Errorf("group %q: empty tag filter", g.Name)
-				}
-			case strings.HasPrefix(m, "@match:"):
-				if _, err := regexp.Compile("(?i)" + m[7:]); err != nil {
-					return fmt.Errorf("group %q: bad pattern %q", g.Name, m[7:])
-				}
-			default:
-				return fmt.Errorf("group %q: unknown member %q", g.Name, m)
-			}
-			if m == g.Name {
-				return fmt.Errorf("group %q contains itself", g.Name)
-			}
-		}
-	}
-	policy := func(p string) bool { return p == "DIRECT" || p == "REJECT" || names[p] }
-	for _, r := range d.Rules {
-		if _, ok := ruleSet(r.Set); !ok {
-			return fmt.Errorf("unknown rule set %q", r.Set)
-		}
-		if !policy(r.Policy) {
-			return fmt.Errorf("rule %s: unknown policy %q", r.Set, r.Policy)
-		}
-	}
-	if !policy(d.Final) {
-		return fmt.Errorf("final policy %q is not a group", d.Final)
-	}
-	return nil
-}
-
 // Render generates the template for one format.
 func (d *Design) Render(format string) (string, error) {
 	if err := d.Validate(); err != nil {
 		return "", err
 	}
+	for _, s := range d.Support() {
+		if s.Format == format && !s.Supported {
+			return "", fmt.Errorf("%s: %s", format, strings.Join(s.Reasons, "; "))
+		}
+	}
+	effective, err := d.Effective()
+	if err != nil {
+		return "", err
+	}
+	d = &effective
 	switch format {
 	case "clash", "stash":
-		return d.clash(format), nil
+		return d.attribution() + d.clash(format), nil
 	case "surge", "surfboard":
-		return d.surge(format), nil
+		return d.attribution() + d.surge(format), nil
 	case "loon":
-		return d.loon(), nil
+		return d.attribution() + d.loon(), nil
 	case "qx":
-		return d.qx(), nil
+		return d.attribution() + d.qx(), nil
 	case "egern":
-		return d.egern(), nil
+		return d.attribution() + d.egern(), nil
 	}
 	return "", fmt.Errorf("no generator for %q", format)
 }
@@ -260,14 +218,18 @@ func (d *Design) RenderAll() (map[string]string, error) {
 }
 
 // member turns a designer member into the template token.
-func member(m string) string {
+func (g Group) member(m string) string {
 	switch {
 	case m == "@all":
 		return "{{proxy_names}}"
 	case strings.HasPrefix(m, "@tag:"):
-		return "{{proxy_names:tag=" + m[5:] + "}}"
+		return "{{proxy_names:tag64=" + base64.RawURLEncoding.EncodeToString([]byte(m[5:])) + "}}"
 	case strings.HasPrefix(m, "@match:"):
-		return "{{proxy_names:match=" + m[7:] + "}}"
+		kind := "match64"
+		if g.MatchCaseSensitive {
+			kind = "matchcase64"
+		}
+		return "{{proxy_names:" + kind + "=" + base64.RawURLEncoding.EncodeToString([]byte(m[7:])) + "}}"
 	}
 	return m
 }
@@ -297,7 +259,7 @@ func (d *Design) rulesUsed() []RuleSet {
 	seen := map[string]bool{}
 	var out []RuleSet
 	for _, r := range d.Rules {
-		rs, _ := ruleSet(r.Set)
+		rs, _ := d.ruleSet(r.Set)
 		if rs.URL == "" || seen[rs.Key] {
 			continue
 		}
@@ -309,7 +271,7 @@ func (d *Design) rulesUsed() []RuleSet {
 
 func (d *Design) clash(format string) string {
 	var b strings.Builder
-	b.WriteString("# Generated by the Captain subscription designer; edit the design, not this file.\n")
+	b.WriteString(designerMarker + "\n# Generated by the Captain subscription designer; edit the design, not this file.\n")
 	if format == "clash" {
 		b.WriteString("mixed-port: 7890\nallow-lan: false\n")
 	}
@@ -317,14 +279,17 @@ func (d *Design) clash(format string) string {
 	for _, g := range d.Groups {
 		fmt.Fprintf(&b, "  - name: %s\n    type: %s\n", yq(g.Name), g.Type)
 		if g.Type != "select" {
-			fmt.Fprintf(&b, "    url: %s\n    interval: %d\n", g.url(), g.interval())
+			fmt.Fprintf(&b, "    url: %s\n    interval: %d\n", yq(g.url()), g.interval())
+			if g.Timeout > 0 {
+				fmt.Fprintf(&b, "    timeout: %d\n", g.Timeout*1000)
+			}
 			if g.Type == "url-test" {
-				b.WriteString("    tolerance: 50\n")
+				fmt.Fprintf(&b, "    tolerance: %d\n", g.tolerance())
 			}
 		}
 		b.WriteString("    proxies:\n")
 		for _, m := range g.Members {
-			fmt.Fprintf(&b, "      - %s\n", yq(member(m)))
+			fmt.Fprintf(&b, "      - %s\n", yq(g.member(m)))
 		}
 	}
 	if used := d.rulesUsed(); len(used) > 0 {
@@ -334,16 +299,22 @@ func (d *Design) clash(format string) string {
 			if format == "clash" {
 				b.WriteString("    format: text\n")
 			}
-			fmt.Fprintf(&b, "    url: %s\n    path: ./ruleset/%s.list\n    interval: 86400\n", rs.URL, rs.Key)
+			fmt.Fprintf(&b, "    url: %s\n    path: ./ruleset/%s.list\n    interval: 86400\n", yq(rs.URL), rs.Key)
 		}
 	}
+	d.writeDNS(&b, format)
 	b.WriteString("rules:\n")
 	for _, r := range d.Rules {
 		if r.Set == GeoIPCN {
 			fmt.Fprintf(&b, "  - GEOIP,CN,%s\n", r.Policy)
 			continue
 		}
-		fmt.Fprintf(&b, "  - RULE-SET,%s,%s\n", r.Set, r.Policy)
+		rs, _ := d.ruleSet(r.Set)
+		if rs.Inline != "" {
+			fmt.Fprintf(&b, "  - %s\n", yq(withPolicy(rs.Inline, r.Policy)))
+		} else {
+			fmt.Fprintf(&b, "  - %s\n", yq("RULE-SET,"+r.Set+","+r.Policy))
+		}
 	}
 	fmt.Fprintf(&b, "  - MATCH,%s\n", d.Final)
 	return b.String()
@@ -352,14 +323,14 @@ func (d *Design) clash(format string) string {
 func iniMembers(g Group) string {
 	parts := make([]string, 0, len(g.Members))
 	for _, m := range g.Members {
-		parts = append(parts, member(m))
+		parts = append(parts, g.member(m))
 	}
 	return strings.Join(parts, ", ")
 }
 
 func (d *Design) surge(format string) string {
 	var b strings.Builder
-	b.WriteString("[General]\nloglevel = notify\n")
+	b.WriteString(designerMarker + "\n[General]\nloglevel = notify\n")
 	if format == "surfboard" {
 		b.WriteString("ipv6 = false\n")
 	}
@@ -375,7 +346,7 @@ func (d *Design) surge(format string) string {
 		if g.Type != "select" {
 			fmt.Fprintf(&b, ", url=%s, interval=%d", g.url(), g.interval())
 			if g.Type == "url-test" {
-				b.WriteString(", tolerance=50")
+				fmt.Fprintf(&b, ", tolerance=%d", g.tolerance())
 			}
 		}
 		b.WriteString("\n")
@@ -386,7 +357,7 @@ func (d *Design) surge(format string) string {
 			fmt.Fprintf(&b, "GEOIP,CN,%s\n", r.Policy)
 			continue
 		}
-		rs, _ := ruleSet(r.Set)
+		rs, _ := d.ruleSet(r.Set)
 		fmt.Fprintf(&b, "RULE-SET,%s,%s\n", rs.URL, r.Policy)
 	}
 	fmt.Fprintf(&b, "FINAL,%s,dns-failed\n", d.Final)
@@ -395,19 +366,19 @@ func (d *Design) surge(format string) string {
 
 func (d *Design) loon() string {
 	var b strings.Builder
-	b.WriteString("[General]\nskip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local, e.crashlytics.com\nbypass-tun = 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.88.99.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 255.255.255.255/32\ndns-server = system\n\n[Proxy]\n{{proxies}}\n\n[Proxy Group]\n")
+	b.WriteString(designerMarker + "\n[General]\nskip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local, e.crashlytics.com\nbypass-tun = 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.88.99.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 255.255.255.255/32\ndns-server = system\n\n[Proxy]\n{{proxies}}\n\n[Proxy Group]\n")
 	for _, g := range d.Groups {
 		fmt.Fprintf(&b, "%s = %s,%s", g.Name, g.Type, strings.ReplaceAll(iniMembers(g), ", ", ","))
 		fmt.Fprintf(&b, ",url = %s,interval = %d", g.url(), g.interval())
 		if g.Type == "url-test" {
-			b.WriteString(",tolerance = 50")
+			fmt.Fprintf(&b, ",tolerance = %d", g.tolerance())
 		}
 		b.WriteString("\n")
 	}
 	if used := d.rulesUsed(); len(used) > 0 {
 		b.WriteString("\n[Remote Rule]\n")
 		for _, r := range d.Rules {
-			rs, _ := ruleSet(r.Set)
+			rs, _ := d.ruleSet(r.Set)
 			if rs.URL == "" {
 				continue
 			}
@@ -436,16 +407,16 @@ func qxPolicy(p string) string {
 
 func (d *Design) qx() string {
 	var b strings.Builder
-	b.WriteString("[general]\nserver_check_url=" + testURL + "\n\n[policy]\n")
+	b.WriteString(designerMarker + "\n[general]\nserver_check_url=" + testURL + "\n\n[policy]\n")
 	for _, g := range d.Groups {
 		kind := map[string]string{"select": "static", "url-test": "url-latency-benchmark", "fallback": "available", "load-balance": "round-robin"}[g.Type]
 		parts := make([]string, 0, len(g.Members))
 		for _, m := range g.Members {
-			parts = append(parts, qxPolicy(member(m)))
+			parts = append(parts, qxPolicy(g.member(m)))
 		}
 		fmt.Fprintf(&b, "%s=%s, %s", kind, g.Name, strings.Join(parts, ", "))
 		if g.Type == "url-test" {
-			fmt.Fprintf(&b, ", check-interval=%d, tolerance=50", g.interval())
+			fmt.Fprintf(&b, ", check-interval=%d, tolerance=%d", g.interval(), g.tolerance())
 		}
 		b.WriteString("\n")
 	}
@@ -453,7 +424,7 @@ func (d *Design) qx() string {
 	if used := d.rulesUsed(); len(used) > 0 {
 		b.WriteString("\n[filter_remote]\n")
 		for _, r := range d.Rules {
-			rs, _ := ruleSet(r.Set)
+			rs, _ := d.ruleSet(r.Set)
 			if rs.URL == "" {
 				continue
 			}
@@ -472,17 +443,17 @@ func (d *Design) qx() string {
 
 func (d *Design) egern() string {
 	var b strings.Builder
-	b.WriteString("# Generated by the Captain subscription designer; edit the design, not this file.\nproxies: []\npolicy_groups:\n")
+	b.WriteString(designerMarker + "\n# Generated by the Captain subscription designer; edit the design, not this file.\nproxies: []\npolicy_groups:\n")
 	for _, g := range d.Groups {
 		kind := map[string]string{"select": "select", "url-test": "auto_test", "fallback": "fallback", "load-balance": "load_balance"}[g.Type]
 		fmt.Fprintf(&b, "  - %s:\n      name: %s\n      policies:\n", kind, yq(g.Name))
 		for _, m := range g.Members {
-			fmt.Fprintf(&b, "        - %s\n", yq(member(m)))
+			fmt.Fprintf(&b, "        - %s\n", yq(g.member(m)))
 		}
 		if g.Type != "select" {
 			fmt.Fprintf(&b, "      url: %s\n      interval: %d\n", g.url(), g.interval())
 			if g.Type == "url-test" {
-				b.WriteString("      tolerance: 50\n")
+				fmt.Fprintf(&b, "      tolerance: %d\n", g.tolerance())
 			}
 		}
 	}
@@ -492,7 +463,7 @@ func (d *Design) egern() string {
 			fmt.Fprintf(&b, "  - geoip:\n      match: CN\n      policy: %s\n", yq(r.Policy))
 			continue
 		}
-		rs, _ := ruleSet(r.Set)
+		rs, _ := d.ruleSet(r.Set)
 		fmt.Fprintf(&b, "  - rule_set:\n      match: %s\n      policy: %s\n      update_interval: 86400\n", rs.URL, yq(r.Policy))
 	}
 	fmt.Fprintf(&b, "  - default:\n      policy: %s\n", yq(d.Final))

@@ -1,0 +1,201 @@
+package subdesign
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"strings"
+)
+
+const claudeGroup = "🤖 Claude"
+const dnsGroup = "🔒 DNS 代理"
+const quicRule = "AND,((NETWORK,UDP),(DST-PORT,443))"
+
+// Deliberately excludes blanket telemetry keywords, third-party shared domains,
+// IP ranges/ASNs and NTP claims. See Anthropic's published network requirements:
+// https://code.claude.com/docs/en/network-config
+var claudeDomains = []string{"anthropic.com", "claude.ai", "claude.com", "clau.de", "claudemcpclient.com", "claudemcpcontent.com", "claudeusercontent.com"}
+var claudeExactDomains = []string{"anthropic.auth0.com", "servd-anthropic-website.b-cdn.net", "anthropic.com.cdn.cloudflare.net"}
+var webRTCRules = []string{
+	"AND,((NETWORK,UDP),(DST-PORT,3478-3481))",
+	"AND,((NETWORK,UDP),(DST-PORT,5349))",
+	"AND,((NETWORK,UDP),(DST-PORT,19302))",
+	"DOMAIN,stun.l.google.com", "DOMAIN,stun1.l.google.com", "DOMAIN,stun2.l.google.com", "DOMAIN,stun3.l.google.com", "DOMAIN,stun4.l.google.com",
+	"DOMAIN-SUFFIX,stun.services.mozilla.com",
+}
+var regionCodes = []string{"HK", "TW", "JP", "SG", "US", "KR"}
+
+func knownRegion(s string) bool {
+	for _, r := range regionCodes {
+		if r == s {
+			return true
+		}
+	}
+	return false
+}
+
+// Effective derives a render-only design. The base and its manual edits stay
+// unchanged; disabling an enhancement simply stops generating that layer.
+func (d *Design) Effective() (Design, error) {
+	if err := d.Validate(); err != nil {
+		return Design{}, err
+	}
+	out := clone(*d)
+	if out.effective {
+		return out, nil
+	}
+	out.effective = true
+	names := map[string]bool{}
+	for _, g := range out.Groups {
+		names[g.Name] = true
+	}
+	addGroup := func(name string) (string, error) {
+		if names[name] {
+			return "", fmt.Errorf("enhancement group %q conflicts with a base group; select the existing group explicitly or rename it", name)
+		}
+		out.Groups = append(out.Groups, Group{Name: name, Type: "select", Members: []string{"@all"}})
+		names[name] = true
+		return name, nil
+	}
+	if out.Enhancements.Regions {
+		// Add regions to the first all-nodes selection group, never to an arbitrary
+		// final policy (which can be a direct/block group in official presets).
+		target := -1
+		for i, g := range out.Groups {
+			if g.Type == "select" {
+				for _, m := range g.Members {
+					if m == "@all" {
+						target = i
+						break
+					}
+				}
+			}
+			if target >= 0 {
+				break
+			}
+		}
+		if target < 0 {
+			for i, g := range out.Groups {
+				if g.Type == "select" {
+					target = i
+					break
+				}
+			}
+		}
+		if target < 0 {
+			return Design{}, fmt.Errorf("regional groups require a selection group")
+		}
+		for i, r := range Regions {
+			role := regionCodes[i]
+			existing := ""
+			for _, g := range out.Groups {
+				if g.Region == role {
+					existing = g.Name
+					break
+				}
+				if g.Name == r.Name && len(g.Members) == 1 && g.Members[0] == "@match:"+r.Match {
+					existing = g.Name
+					break
+				}
+			}
+			if existing == "" {
+				if names[r.Name] {
+					return Design{}, fmt.Errorf("regional group %q conflicts with a base group", r.Name)
+				}
+				existing = r.Name
+				out.Groups = append(out.Groups, Group{Name: r.Name, Type: "url-test", Members: []string{"@match:" + r.Match}, URL: testURL, Interval: 300, Region: role})
+				names[r.Name] = true
+			}
+			if existing != out.Groups[target].Name {
+				found := false
+				for _, m := range out.Groups[target].Members {
+					if m == existing {
+						found = true
+						break
+					}
+				}
+				if !found {
+					out.Groups[target].Members = append(out.Groups[target].Members, existing)
+				}
+			}
+		}
+	}
+	claudePolicy := out.Enhancements.ClaudePolicy
+	if out.Enhancements.Claude && claudePolicy == "" {
+		var err error
+		claudePolicy, err = addGroup(claudeGroup)
+		if err != nil {
+			return Design{}, err
+		}
+	}
+	if out.Enhancements.DNSProtection && out.Enhancements.DNSPolicy == "" {
+		if out.Enhancements.Claude {
+			out.Enhancements.DNSPolicy = claudePolicy
+		} else {
+			p, err := addGroup(dnsGroup)
+			if err != nil {
+				return Design{}, err
+			}
+			out.Enhancements.DNSPolicy = p
+		}
+	}
+	if out.Enhancements.Claude {
+		out.Enhancements.ClaudePolicy = claudePolicy
+	}
+	var prefix []Rule
+	appendRule := func(expr, policy string) {
+		sum := sha256.Sum256([]byte(expr))
+		key := fmt.Sprintf("enh-%x", sum[:8])
+		rs := RuleSet{Key: key, Name: expr, Inline: expr}
+		found := false
+		for _, old := range out.RuleSets {
+			if old.Key == key {
+				found = true
+				break
+			}
+		}
+		if !found {
+			out.RuleSets = append(out.RuleSets, rs)
+		}
+		prefix = append(prefix, Rule{Set: key, Policy: policy})
+	}
+	if out.Enhancements.WebRTC {
+		for _, r := range webRTCRules {
+			appendRule(r, "REJECT")
+		}
+	}
+	if out.Enhancements.QUIC {
+		appendRule(quicRule, "REJECT")
+	}
+	if out.Enhancements.Claude {
+		for _, s := range claudeDomains {
+			appendRule("DOMAIN-SUFFIX,"+s, claudePolicy)
+		}
+		for _, s := range claudeExactDomains {
+			appendRule("DOMAIN,"+s, claudePolicy)
+		}
+	}
+	if len(prefix) > 0 {
+		out.Rules = append(prefix, out.Rules...)
+	}
+	if err := out.Validate(); err != nil {
+		return Design{}, err
+	}
+	return out, nil
+}
+
+func (d *Design) writeDNS(b *strings.Builder, format string) {
+	if format != "clash" || !d.Enhancements.DNSProtection {
+		return
+	}
+	policy := d.Enhancements.DNSPolicy
+	b.WriteString("dns:\n  enable: true\n  enhanced-mode: fake-ip\n  fake-ip-range: 198.18.0.1/16\n  respect-rules: true\n  default-nameserver:\n    - https://223.5.5.5/dns-query\n  proxy-server-nameserver:\n    - https://223.5.5.5/dns-query\n    - https://119.29.29.29/dns-query\n  direct-nameserver:\n    - https://223.5.5.5/dns-query\n    - https://119.29.29.29/dns-query\n  direct-nameserver-follow-policy: false\n  nameserver:\n")
+	for _, resolver := range []string{"https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"} {
+		fmt.Fprintf(b, "    - %s\n", yq(resolver+"#"+policy))
+	}
+	b.WriteString("  fake-ip-filter:\n    - '+.lan'\n    - '+.local'\n    - '+.home.arpa'\n    - '+.msftconnecttest.com'\n    - '+.msftncsi.com'\n  nameserver-policy:\n    '+.cn':\n      - https://223.5.5.5/dns-query\n    'geosite:cn':\n      - https://223.5.5.5/dns-query\n")
+	if d.Enhancements.Claude {
+		for _, domain := range append(append([]string{}, claudeDomains...), claudeExactDomains...) {
+			fmt.Fprintf(b, "    %s:\n      - %s\n", yq("+."+domain), yq("https://1.1.1.1/dns-query#"+d.Enhancements.ClaudePolicy))
+		}
+	}
+}
