@@ -34,34 +34,39 @@ type Enhancements struct {
 
 // FormatSupport is explicit: unsupported options never silently disappear.
 type FormatSupport struct {
-	Format    string   `json:"format"`
-	Supported bool     `json:"supported"`
-	Reasons   []string `json:"reasons"`
+	Format      string   `json:"format"`
+	Supported   bool     `json:"supported"`
+	Reasons     []string `json:"reasons"`
+	ReasonCodes []string `json:"reason_codes"`
 }
 
 func (d *Design) Support() []FormatSupport {
 	out := make([]FormatSupport, 0, len(Formats))
 	for _, format := range Formats {
-		s := FormatSupport{Format: format, Supported: true, Reasons: []string{}}
+		s := FormatSupport{Format: format, Supported: true, Reasons: []string{}, ReasonCodes: []string{}}
+		addReason := func(code, message string) {
+			s.ReasonCodes = append(s.ReasonCodes, code)
+			s.Reasons = append(s.Reasons, message)
+		}
 		if format != "clash" {
 			if len(d.RuleSets) > 0 {
-				s.Reasons = append(s.Reasons, "Imported rule sets and inline rules currently require mihomo")
+				addReason("imported_rules_mihomo", "Imported rule sets and inline rules currently require mihomo")
 			}
 			if d.Enhancements.DNSProtection {
-				s.Reasons = append(s.Reasons, "DNS protection currently requires mihomo")
+				addReason("dns_mihomo", "DNS protection currently requires mihomo")
 			}
 			if d.Enhancements.Claude {
-				s.Reasons = append(s.Reasons, "Claude rule priority currently requires mihomo")
+				addReason("claude_mihomo", "Claude rule priority currently requires mihomo")
 			}
 			if d.Enhancements.WebRTC {
-				s.Reasons = append(s.Reasons, "WebRTC mitigation currently requires mihomo")
+				addReason("webrtc_mihomo", "WebRTC mitigation currently requires mihomo")
 			}
 			if d.Enhancements.QUIC {
-				s.Reasons = append(s.Reasons, "UDP 443 restriction currently requires mihomo")
+				addReason("quic_mihomo", "UDP 443 restriction currently requires mihomo")
 			}
 			for _, g := range d.Groups {
 				if g.Timeout > 0 {
-					s.Reasons = append(s.Reasons, "Explicit group timeout currently requires mihomo")
+					addReason("timeout_mihomo", "Explicit group timeout currently requires mihomo")
 					break
 				}
 			}
