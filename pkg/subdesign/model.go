@@ -359,12 +359,13 @@ func withPolicy(expr, policy string) string {
 }
 
 func (d *Design) attribution() string {
+	claude := d.claudeAttribution()
 	if d.Source == nil || (!strings.HasPrefix(d.Source.URL, "https://github.com/ACL4SSR/ACL4SSR/") && !strings.HasPrefix(d.Source.URL, "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/")) {
-		return ""
+		return claude
 	}
 	return "# Preset source: " + d.Source.URL + " (revision " + d.Source.Revision + ")\n" +
 		"# ACL4SSR license: CC-BY-SA-4.0 https://creativecommons.org/licenses/by-sa/4.0/\n" +
-		"# Preset adaptation: generated and adjusted by Captain; enhancement options may change the source layout and rules.\n"
+		"# Preset adaptation: generated and adjusted by Captain; enhancement options may change the source layout and rules.\n" + claude
 }
 
 // YAML treats Unicode line/paragraph separators as line breaks too, while

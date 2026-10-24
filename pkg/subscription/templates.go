@@ -279,7 +279,8 @@ func designerAttribution(tpl string) []byte {
 	}
 	var out strings.Builder
 	for _, line := range strings.Split(tpl, "\n") {
-		if strings.HasPrefix(line, "# Preset source:") || strings.HasPrefix(line, "# ACL4SSR license:") || strings.HasPrefix(line, "# Preset adaptation:") {
+		if strings.HasPrefix(line, "# Preset source:") || strings.HasPrefix(line, "# ACL4SSR license:") || strings.HasPrefix(line, "# Preset adaptation:") ||
+			strings.HasPrefix(line, "# Claude rules source:") || strings.HasPrefix(line, "# Claude rules adaptation:") || strings.HasPrefix(line, "# V2Ray license:") {
 			out.WriteString(line)
 			out.WriteByte('\n')
 		}
