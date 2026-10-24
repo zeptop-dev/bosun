@@ -1105,7 +1105,8 @@ existing preset controls. Generated groups with no matching nodes reject traffic
 and hand-written templates retain their existing behavior. These are subscription
 configuration features, not a guarantee of system-wide leak protection.
 
-Claude rules may be pinned into a design's `enhancements.claude_rules` snapshot.
+Since bosun v0.79, Claude rules may be pinned into a design's
+`enhancements.claude_rules` snapshot.
 The compiler uses that saved version for both routing and protected DNS, keeping
 `domain` suffix matches distinct from `full` exact hosts. Source downloads belong
 to Captain's administrator library; rendering never fetches updates. Older designs
@@ -1113,6 +1114,8 @@ without a snapshot retain the ten original built-in rules. Disabling the Claude
 option retains the snapshot but stops generating its routing and DNS entries.
 Community snapshots carry their pinned source URL and upstream V2Ray MIT notice
 through to the rendered subscription, including Captain's adaptation notice.
+The shared compiler runs inside Captain for managed subscriptions; this rule
+library feature does not require upgrading existing nodes.
 
 ## Managed reverse WireGuard (bosun 0.68 / Captain 1.20)
 

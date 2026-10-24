@@ -6,6 +6,8 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.79.0** (2026-10-24) — Add pinned Claude rule snapshots to the shared subscription designer used by Captain. Keep suffix and exact-host semantics consistent across routing and protected DNS, validate saved snapshots even when disabled, and preserve the original built-in rules for older designs. Rendering uses the saved snapshot without fetching updates and carries its pinned source attribution and upstream MIT notice into the subscription. No agent protocol, server runtime or default proxy-core change; the rule library itself does not require node upgrades.
+
 - **v0.78.1** (2026-10-24) — Update the standalone panel's React, query, translation and build dependencies within their existing major versions. No agent protocol, configuration, accounting or default proxy-core changes.
 
 - **v0.78.0** (2026-10-23) — Add a shared ACL4SSR INI importer and optional regional groups, DNS protection, Claude routing, WebRTC mitigation and UDP-443 restrictions for Captain's subscription designer. Preserve imported rule order, regular-expression semantics and source attribution; reject unsupported syntax rather than silently simplifying it. Official imports and the new protection options currently target Mihomo; existing formats retain basic and regional designs.
