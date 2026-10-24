@@ -96,25 +96,42 @@ func ValidateClaudeRules(snapshot *ClaudeRuleSnapshot) error {
 }
 
 func validClaudeDomain(domain string) bool {
-	if len(domain) == 0 || len(domain) > 253 {
+	if len(domain) > 253 || !strings.Contains(domain, ".") {
 		return false
 	}
 	if _, err := netip.ParseAddr(domain); err == nil {
 		return false
 	}
-	for _, label := range strings.Split(domain, ".") {
+	labels := strings.Split(strings.ToLower(domain), ".")
+	for _, label := range labels {
 		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return false
 		}
 		for _, c := range label {
-			if !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' || c == '-') {
+			if !('a' <= c && c <= 'z' || '0' <= c && c <= '9' || c == '-') {
+				return false
+			}
+		}
+		// ASCII shape alone accepts malformed xn-- labels. Check their round
+		// trip without applying IDNA restrictions to ordinary ASCII labels.
+		if strings.HasPrefix(label, "xn--") {
+			decoded, err := idna.Lookup.ToUnicode(label)
+			if err != nil {
+				return false
+			}
+			ascii, err := idna.Lookup.ToASCII(decoded)
+			if err != nil || ascii != label {
 				return false
 			}
 		}
 	}
-	// ASCII shape alone accepts malformed xn-- labels; IDNA checks those too.
-	ascii, err := idna.Lookup.ToASCII(domain)
-	return err == nil && ascii == strings.ToLower(domain)
+	// Reject numeric final labels, including noncanonical dotted IPv4 forms.
+	for _, c := range labels[len(labels)-1] {
+		if c < '0' || c > '9' {
+			return true
+		}
+	}
+	return false
 }
 
 func (e Enhancements) claudeRules() []ClaudeRule {
@@ -122,4 +139,39 @@ func (e Enhancements) claudeRules() []ClaudeRule {
 		return e.ClaudeRules.Rules
 	}
 	return BuiltinClaudeRules().Rules
+}
+
+// Community data is downloaded by the panel at runtime rather than embedded
+// here. Its notice must travel with rendered copies, independently of the panel.
+const v2rayMITNotice = `MIT License
+Copyright (c) 2018-2019 V2Ray
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`
+
+func (d *Design) claudeAttribution() string {
+	snapshot := d.Enhancements.ClaudeRules
+	if !d.Enhancements.Claude || snapshot == nil || snapshot.Source != "v2fly" {
+		return ""
+	}
+	base := "https://github.com/v2fly/domain-list-community/blob/" + snapshot.Revision + "/"
+	return "# Claude rules source: " + base + "data/anthropic\n" +
+		"# Claude rules adaptation: Captain routing and DNS matches with explicit Captain supplements; community data, not Anthropic endorsement.\n" +
+		"# V2Ray license: " + base + "LICENSE\n" +
+		"# V2Ray license: " + strings.ReplaceAll(v2rayMITNotice, "\n", "\n# V2Ray license: ") + "\n"
 }

@@ -1111,6 +1111,8 @@ The compiler uses that saved version for both routing and protected DNS, keeping
 to Captain's administrator library; rendering never fetches updates. Older designs
 without a snapshot retain the ten original built-in rules. Disabling the Claude
 option retains the snapshot but stops generating its routing and DNS entries.
+Community snapshots carry their pinned source URL and upstream V2Ray MIT notice
+through to the rendered subscription, including Captain's adaptation notice.
 
 ## Managed reverse WireGuard (bosun 0.68 / Captain 1.20)
 

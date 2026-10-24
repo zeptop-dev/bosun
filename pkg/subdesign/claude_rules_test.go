@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zeptop-dev/bosun/pkg/subscription"
 	"gopkg.in/yaml.v3"
 )
 
@@ -158,7 +159,7 @@ func TestClaudeSnapshotDeepCopy(t *testing.T) {
 func TestClaudeSnapshotValidation(t *testing.T) {
 	valid := []*ClaudeRuleSnapshot{nil, BuiltinClaudeRules(), syntheticClaudeRules()}
 	idn := syntheticClaudeRules()
-	idn.Rules = []ClaudeRule{{Type: "domain", Value: "xn--bcher-kva.example"}, {Type: "full", Value: "EXAMPLE.COM"}}
+	idn.Rules = []ClaudeRule{{Type: "domain", Value: "xn--bcher-kva.example"}, {Type: "full", Value: "EXAMPLE.COM"}, {Type: "domain", Value: "ab--cd.example.com"}}
 	valid = append(valid, idn)
 	reordered := BuiltinClaudeRules()
 	reordered.Rules[0], reordered.Rules[1] = reordered.Rules[1], reordered.Rules[0]
@@ -196,6 +197,7 @@ func TestClaudeSnapshotValidation(t *testing.T) {
 	mutate("pretend-builtin", func(s *ClaudeRuleSnapshot) { s.Source, s.Revision = "builtin", "captain-v1" })
 	for name, domain := range map[string]string{
 		"empty-domain": "", "ipv4": "192.0.2.10", "ipv6": "2001:db8::1", "url": "https://example.com",
+		"single-label": "localhost", "numeric-tld": "example.123", "noncanonical-ipv4": "192.0.2.010",
 		"comma": "example.com,DIRECT", "newline": "example.com\n", "space": " example.com", "tab": "example\t.com", "nul": "example\x00.com",
 		"unicode": "bücher.example", "invalid-punycode": "xn--a.example", "trailing-dot": "example.com.", "leading-dot": ".example.com",
 		"double-dot": "example..com", "wildcard": "*.example.com", "underscore": "_service.example.com", "leading-hyphen": "-service.example.com",
@@ -220,5 +222,45 @@ func TestClaudeSnapshotValidation(t *testing.T) {
 				t.Fatal("disabled enhancement bypassed snapshot validation")
 			}
 		})
+	}
+}
+
+func TestClaudeSnapshotAttributionSurvivesSubscriptionRendering(t *testing.T) {
+	d, err := ParseACL4SSR("synthetic.ini", syntheticINI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Enhancements = Enhancements{Claude: true, ClaudeRules: syntheticClaudeRules()}
+	template, err := d.Render("clash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := subscription.Clash{}.RenderWith(testLines(), subscription.Account{}, template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{template, string(output)} {
+		for _, want := range []string{
+			"https://github.com/v2fly/domain-list-community/blob/" + strings.Repeat("a", 40) + "/data/anthropic",
+			"Captain supplements", "Copyright (c) 2018-2019 V2Ray", "Permission is hereby granted",
+			"copies or substantial portions of the Software", "SOFTWARE IS PROVIDED", "CC-BY-SA-4.0", "synthetic.ini",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("source or license notice lost: %s", want)
+			}
+		}
+		if strings.Contains(text, "/blob/master/data/anthropic") {
+			t.Fatal("attribution uses a moving source ref")
+		}
+	}
+	d.Enhancements.Claude = false
+	disabled, err := d.Render("clash")
+	if err != nil || strings.Contains(disabled, "# V2Ray license:") || strings.Contains(disabled, "# Claude rules source:") {
+		t.Fatalf("disabled snapshot claimed generated community rules: %v", err)
+	}
+	d.Enhancements = Enhancements{Claude: true, ClaudeRules: BuiltinClaudeRules()}
+	builtin, err := d.Render("clash")
+	if err != nil || strings.Contains(builtin, "# V2Ray license:") || strings.Contains(builtin, "# Claude rules source:") {
+		t.Fatalf("built-in snapshot claimed community provenance: %v", err)
 	}
 }
