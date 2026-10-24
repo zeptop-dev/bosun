@@ -10,11 +10,6 @@ const claudeGroup = "🤖 Claude"
 const dnsGroup = "🔒 DNS 代理"
 const quicRule = "AND,((NETWORK,UDP),(DST-PORT,443))"
 
-// Deliberately excludes blanket telemetry keywords, third-party shared domains,
-// IP ranges/ASNs and NTP claims. See Anthropic's published network requirements:
-// https://code.claude.com/docs/en/network-config
-var claudeDomains = []string{"anthropic.com", "claude.ai", "claude.com", "clau.de", "claudemcpclient.com", "claudemcpcontent.com", "claudeusercontent.com"}
-var claudeExactDomains = []string{"anthropic.auth0.com", "servd-anthropic-website.b-cdn.net", "anthropic.com.cdn.cloudflare.net"}
 var webRTCRules = []string{
 	"AND,((NETWORK,UDP),(DST-PORT,3478-3481))",
 	"AND,((NETWORK,UDP),(DST-PORT,5349))",
@@ -175,13 +170,12 @@ func (d *Design) Effective() (Design, error) {
 		}
 	}
 	if out.Enhancements.Claude {
-		for _, s := range claudeDomains {
-			if err := appendRule("DOMAIN-SUFFIX,"+s, claudePolicy); err != nil {
-				return Design{}, err
+		for _, rule := range out.Enhancements.claudeRules() {
+			kind := "DOMAIN-SUFFIX"
+			if rule.Type == "full" {
+				kind = "DOMAIN"
 			}
-		}
-		for _, s := range claudeExactDomains {
-			if err := appendRule("DOMAIN,"+s, claudePolicy); err != nil {
+			if err := appendRule(kind+","+rule.Value, claudePolicy); err != nil {
 				return Design{}, err
 			}
 		}
@@ -206,8 +200,12 @@ func (d *Design) writeDNS(b *strings.Builder, format string) {
 	}
 	b.WriteString("  fake-ip-filter:\n    - '+.lan'\n    - '+.local'\n    - '+.home.arpa'\n    - '+.msftconnecttest.com'\n    - '+.msftncsi.com'\n  nameserver-policy:\n    '+.cn':\n      - https://223.5.5.5/dns-query#DIRECT\n    'geosite:cn':\n      - https://223.5.5.5/dns-query#DIRECT\n")
 	if d.Enhancements.Claude {
-		for _, domain := range append(append([]string{}, claudeDomains...), claudeExactDomains...) {
-			fmt.Fprintf(b, "    %s:\n      - %s\n", yq("+."+domain), yq("https://1.1.1.1/dns-query#"+d.Enhancements.ClaudePolicy))
+		for _, rule := range d.Enhancements.claudeRules() {
+			domain := rule.Value
+			if rule.Type == "domain" {
+				domain = "+." + domain
+			}
+			fmt.Fprintf(b, "    %s:\n      - %s\n", yq(domain), yq("https://1.1.1.1/dns-query#"+d.Enhancements.ClaudePolicy))
 		}
 	}
 }

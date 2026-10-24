@@ -24,6 +24,9 @@ func TestMihomoDesignerConfigurationsLive(t *testing.T) {
 	designs := map[string]Design{}
 	basic, _ := Preset("basic")
 	designs["basic"] = basic
+	pinned := clone(basic)
+	pinned.Enhancements.ClaudeRules = syntheticClaudeRules()
+	designs["pinned-claude-rules"] = pinned
 	files, _ := filepath.Glob(filepath.Join(os.Getenv("BOSUN_ACL4SSR_PRESET_DIR"), "*.ini"))
 	for _, f := range files {
 		b, err := os.ReadFile(f)
@@ -44,7 +47,7 @@ func TestMihomoDesignerConfigurationsLive(t *testing.T) {
 					mode = "empty"
 				}
 				t.Run(mode, func(t *testing.T) {
-					d.Enhancements = Enhancements{Regions: true, DNSProtection: true, Claude: true, WebRTC: true, QUIC: true}
+					d.Enhancements = Enhancements{Regions: true, DNSProtection: true, Claude: true, WebRTC: true, QUIC: true, ClaudeRules: d.Enhancements.ClaudeRules}
 					tpl, err := d.Render("clash")
 					if err != nil {
 						t.Fatal(err)

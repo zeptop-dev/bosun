@@ -23,13 +23,14 @@ type PresetSource struct {
 
 // Enhancements are applied to a copy of the base design on every render.
 type Enhancements struct {
-	Regions       bool   `json:"regions,omitempty"`
-	DNSProtection bool   `json:"dns_protection,omitempty"`
-	Claude        bool   `json:"claude,omitempty"`
-	WebRTC        bool   `json:"webrtc,omitempty"`
-	QUIC          bool   `json:"quic,omitempty"`
-	ClaudePolicy  string `json:"claude_policy,omitempty"`
-	DNSPolicy     string `json:"dns_policy,omitempty"`
+	Regions       bool                `json:"regions,omitempty"`
+	DNSProtection bool                `json:"dns_protection,omitempty"`
+	Claude        bool                `json:"claude,omitempty"`
+	WebRTC        bool                `json:"webrtc,omitempty"`
+	QUIC          bool                `json:"quic,omitempty"`
+	ClaudePolicy  string              `json:"claude_policy,omitempty"`
+	DNSPolicy     string              `json:"dns_policy,omitempty"`
+	ClaudeRules   *ClaudeRuleSnapshot `json:"claude_rules,omitempty"`
 }
 
 // FormatSupport is explicit: unsupported options never silently disappear.
@@ -156,6 +157,9 @@ func validInline(s string) bool {
 // Validate checks both base structure and enhancement references. It does not
 // mutate the saved design, so rejected input and previews leave drafts intact.
 func (d *Design) Validate() error {
+	if err := ValidateClaudeRules(d.Enhancements.ClaudeRules); err != nil {
+		return err
+	}
 	if len(d.Groups) == 0 || len(d.Groups) > 256 {
 		return fmt.Errorf("between 1 and 256 proxy groups are required")
 	}
