@@ -77,15 +77,20 @@ type Beat struct {
 // Report is what bosun pushes every push interval.
 type Report struct {
 	// Hostname is freshly read for each report; omitted on lookup failure.
-	Hostname         string             `json:"hostname,omitempty"`
-	PublicAddresses  *PublicAddresses   `json:"public_addresses,omitempty"`
-	WireGuard        *WireGuardReport   `json:"wireguard,omitempty"`
-	NodeModeRevision uint64             `json:"node_mode_revision,omitempty"`
-	NodeMode         spec.NodeMode      `json:"node_mode,omitempty"`
-	NodeModeError    string             `json:"node_mode_error,omitempty"`
-	Version          string             `json:"version"`
-	Revision         string             `json:"revision"` // state revision currently applied
-	Traffic          []spec.UserTraffic `json:"traffic,omitempty"`
+	Hostname         string           `json:"hostname,omitempty"`
+	PublicAddresses  *PublicAddresses `json:"public_addresses,omitempty"`
+	WireGuard        *WireGuardReport `json:"wireguard,omitempty"`
+	NodeModeRevision uint64           `json:"node_mode_revision,omitempty"`
+	NodeMode         spec.NodeMode    `json:"node_mode,omitempty"`
+	NodeModeError    string           `json:"node_mode_error,omitempty"`
+	Version          string           `json:"version"`
+	Revision         string           `json:"revision"` // latest state revision received (not an apply acknowledgment)
+	// AppliedRevision is set only after both proxy configuration and forwards
+	// from this exact revision were successfully applied by this process. Empty
+	// means no current confirmation; older agents omit the field. Liveness and
+	// per-inbound acceptance still require Cores/Forwards/WireGuard observations.
+	AppliedRevision string             `json:"applied_revision,omitempty"`
+	Traffic         []spec.UserTraffic `json:"traffic,omitempty"`
 	// TrafficSeq identifies this delta batch. A batch that could not be
 	// acknowledged is re-sent unchanged under the same number, so the
 	// panel can apply it exactly once. 0 = an agent that does not number

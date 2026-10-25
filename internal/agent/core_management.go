@@ -137,6 +137,15 @@ func (a *Agent) activateCore(runCtx, ctx context.Context, r spec.CoreRequest) er
 			}
 		}
 	}
+	// Activation/rollback may stop a previously applied core. A subsequent
+	// full apply must confirm the configuration, including failed activation.
+	a.setAppliedCoreRevision("")
+	defer func() {
+		select {
+		case a.kick <- struct{}{}:
+		default:
+		}
+	}()
 	if old != nil && old.Running() {
 		if err = a.drainBeforeCoreChange(ctx, old); err != nil {
 			return err
@@ -186,10 +195,6 @@ func (a *Agent) activateCore(runCtx, ctx context.Context, r spec.CoreRequest) er
 		a.appliedCores[r.Distribution] = append(a.appliedCores[r.Distribution], ib.Tag)
 	}
 	a.statusMu.Unlock()
-	select {
-	case a.kick <- struct{}{}:
-	default:
-	}
 	select {
 	case a.reportNow <- struct{}{}:
 	default:

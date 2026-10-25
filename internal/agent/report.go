@@ -143,6 +143,9 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 	defer cancel()
 	rep := agentproto.Report{WireGuard: a.wireGuardReport(ctx), NodeMode: a.cfg.NodeMode.Effective(), NodeModeRevision: a.modeRevision(), CoreInventory: a.CoreInventory(), Traffic: traffic, Host: host, Cores: a.CoreStatus(), Online: map[string][]string{}}
 	a.statusMu.Lock()
+	if a.appliedCoreRevision != "" && a.appliedCoreRevision == a.appliedForwardRevision {
+		rep.AppliedRevision = a.appliedCoreRevision
+	}
 	rep.Doctor = a.pendingDoctor
 	if a.MonitorOnly() || (a.node != nil && ((a.node.Mode != "" && a.node.Mode != a.cfg.NodeMode.Effective()) || a.node.ModeRevision != a.modeRevision())) {
 		rep.NodeModeError = a.status.LastError

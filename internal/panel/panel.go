@@ -48,6 +48,13 @@ type ForwardSource interface {
 	Forwards(ctx context.Context) (forwards []spec.Forward, changed bool, err error)
 }
 
+// ConsumedRevisionSource identifies the configurations already handed to the
+// agent, independently of an asynchronous watcher's latest desired state.
+// nodeUsers is empty when Node and Users came from different revisions.
+type ConsumedRevisionSource interface {
+	ConsumedRevisions() (nodeUsers, forwards string)
+}
+
 // Notifier is implemented by drivers that can wake the agent when desired
 // state changes (the local store does this on every edit), so changes apply
 // at once instead of on the next pull tick.
