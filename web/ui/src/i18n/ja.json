@@ -702,7 +702,7 @@
     "presetConfirm": "プリセットを読み込むと編集中のグループとルールが置き換わります（未適用の変更は失われます）。",
     "groups": "ポリシーグループ",
     "addGroup": "グループ追加",
-    "groupsHint": "メンバー：全サーバー、タグ付きサーバー、名前が地域に一致するサーバー、他のグループ。url-test は最低遅延、fallback は最初の利用可能、load-balance は順番に使用。",
+    "groupsHint": "メンバーには全ノード、タグ、地域、他のグループを指定できます。select は手動選択、url-test は測定遅延で自動選択、fallback は順番に利用可能なノードを選択、load-balance は負荷分散です。",
     "groupName": "グループ名",
     "members": "メンバー",
     "noGroups": "グループがありません。プリセットから始められます。",
@@ -717,7 +717,7 @@
     "finalHint": "どのルールにも一致しない通信の行き先",
     "preview": "プレビュー",
     "save": "設計のみ保存",
-    "saveHint": "テンプレートを変えずに設計を保存",
+    "saveHint": "下書きの保存では公開済み購読は更新されません。変更を反映するには再度生成して適用してください。",
     "apply": "生成して適用",
     "applyConfirm": "{{formats}} のテンプレートを生成して置き換えますか？他のクライアントのテンプレートは変更されません。",
     "applied": "選択したテンプレートを生成して適用しました",
@@ -747,7 +747,11 @@
     "unsupported": "この設計では利用不可",
     "selectSupported": "利用可能な形式をすべて選択",
     "warningRemoteProcessMacOS": "このルールソースには macOS でのみ機能するプロセスルールが含まれています。iOS/tvOS では無視されます。",
-    "warningRemoteNativeUnsupported": "互換性のため既存の Mihomo リモートルールソースを保持します。ただし、Mihomo が対応していない URL-REGEX が含まれるため、完全に同等の動作は保証できません。"
+    "warningRemoteNativeUnsupported": "互換性のため既存の Mihomo リモートルールソースを保持します。ただし、Mihomo が対応していない URL-REGEX が含まれるため、完全に同等の動作は保証できません。",
+    "regionMembersHint": "地域は購読ノードに登録された地域を優先し、未登録の場合はノード名から判定します。既存の名前パターン条件は元の動作を維持します。",
+    "nameMatchRegion": "{{region}} · 名前で判定",
+    "regionGroupsHint": "内蔵の地域プリセットでは、各地域で自動選択と全ノードを選べます。自動生成された空の地域グループは非表示になりますが、ルールや既定ポリシーが明示的に使用する場合は残して接続を拒否します。",
+    "customMembers": "このプリセット内のその他のメンバー"
   },
   "accountID": {
     "label": "アカウント ID",

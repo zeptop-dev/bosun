@@ -702,7 +702,7 @@
     "presetConfirm": "载入预设会替换现在编辑的策略组和规则（尚未应用的改动会丢失）。",
     "groups": "策略组",
     "addGroup": "添加策略组",
-    "groupsHint": "成员可以是全部节点、带某个标签的节点、名称匹配某个地区的节点，或其他策略组。url-test 自动选延迟最低的，fallback 按顺序选可用的，load-balance 轮流用。",
+    "groupsHint": "成员可选全部节点、标签、地区或其他策略组。select 手动选择，url-test 按测速延迟自动选择，fallback 按顺序选择可用节点，load-balance 负载均衡。",
     "groupName": "组名",
     "members": "成员",
     "noGroups": "还没有策略组，可以先载入一个预设。",
@@ -717,7 +717,7 @@
     "finalHint": "没有规则命中时走哪里",
     "preview": "预览",
     "save": "仅保存设计",
-    "saveHint": "保存设计但不改动模板",
+    "saveHint": "保存草稿不会更新已发布订阅；修改后需重新生成并应用。",
     "apply": "生成并应用",
     "applyConfirm": "生成并替换以下客户端的模板：{{formats}}？其他客户端模板保持不变。",
     "applied": "已生成并应用所选模板",
@@ -747,7 +747,11 @@
     "unsupported": "当前设计不可用",
     "selectSupported": "选择全部可用格式",
     "warningRemoteProcessMacOS": "此规则源包含仅在 macOS 生效的进程规则，iOS/tvOS 会忽略这些规则。",
-    "warningRemoteNativeUnsupported": "为保持兼容，保留原有 Mihomo 远程规则源；但该源含有 Mihomo 不支持的 URL-REGEX，不能保证完整等价。"
+    "warningRemoteNativeUnsupported": "为保持兼容，保留原有 Mihomo 远程规则源；但该源含有 Mihomo 不支持的 URL-REGEX，不能保证完整等价。",
+    "regionMembersHint": "地区条件优先使用订阅节点登记的地区，未登记时按节点名称识别；原有名称匹配条件保持不变。",
+    "nameMatchRegion": "{{region}} · 名称匹配",
+    "regionGroupsHint": "内置地区预设为每个地区提供自动选择和全部节点。自动生成的空地区组默认隐藏；被规则或默认策略明确指定时保留并拒绝连接。",
+    "customMembers": "此预设中的其他成员"
   },
   "accountID": {
     "label": "账号 ID",
