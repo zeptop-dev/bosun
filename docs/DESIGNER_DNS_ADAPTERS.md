@@ -20,9 +20,24 @@ That distinction is required when DNSPolicy and ClaudePolicy select different
 groups. Both DNS queries and traffic rules use the same pinned Claude snapshot;
 an exact domain remains exact, while a suffix includes the apex and descendants.
 The domestic resolver routes precede BackCN or other custom final rules.
+Stash downloads geosite data from GitHub on first use; that startup fetch must
+be reachable before geosite-based domestic classification can be relied on.
 
 Sources: [Stash DNS](https://stash.wiki/en/features/dns-server),
 [Cloudflare resolver addresses](https://developers.cloudflare.com/1.1.1.1/ip-addresses/).
+
+The domestic encrypted fallback uses `223.6.6.6`, replacing the earlier
+`https://119.29.29.29/dns-query` assumption. The latter is a traditional DNS
+address and its TLS handshake failed in this audit. The two AliDNS endpoints
+passed certificate verification and returned the same HTTP 400 response to an
+empty HEAD request at `/dns-query`; no business domains were queried. This is
+an endpoint check, not a guarantee of availability from every client network.
+DNSPod's separate IP DoH endpoints are no longer advertised for new deployments,
+so they are not substituted as another IP-only bootstrap dependency.
+
+Sources: [AliDNS](https://www.alidns.com/),
+[Stash geosite startup](https://stash.wiki/en/rules/rule-types),
+[DNSPod IP access notice](https://docs.dnspod.cn/notices/mian-fei-ban-dot-dohbu-zai-gong-kai-ipjie-ru-de-gong-gao/).
 
 ## Surfboard
 
