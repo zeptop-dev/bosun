@@ -203,7 +203,7 @@ func TestEgernDNSForwardAndIndependentProxyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, resolver := range doc.DNS.Proxy {
-		if resolver != "https://223.5.5.5/dns-query" && resolver != "https://119.29.29.29/dns-query" {
+		if resolver != "https://223.5.5.5/dns-query" && resolver != "https://223.6.6.6/dns-query" {
 			t.Fatalf("proxy DNS cannot bootstrap independently: %s", resolver)
 		}
 	}

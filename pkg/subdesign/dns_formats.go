@@ -10,6 +10,10 @@ import (
 // ClaudePolicy independently, including when the two policies are different.
 const claudeDoH = "https://1.0.0.1/dns-query"
 
+// Domestic DoH uses AliDNS's two TLS-valid IP endpoints. In particular,
+// 119.29.29.29 is a traditional DNS address, not a documented DoH endpoint;
+// keeping it as an HTTPS fallback would provide only apparent redundancy.
+
 // DNS capability is separate from routing-rule capability. Do not silently
 // publish a DIRECT DoH configuration when the user requested DNSPolicy.
 func (d *Design) dnsFormatSupport(format string) (reasonCodes, reasons, warningCodes, warnings []string) {
@@ -93,7 +97,7 @@ func (d *Design) writeDNSRules(b *strings.Builder, format string) {
 			fmt.Fprintf(b, "  - ip_cidr:\n      match: %s/32\n      policy: %s\n      no_resolve: true\n", ip, yq(policy))
 		}
 	}
-	for _, ip := range []string{"223.5.5.5", "119.29.29.29"} {
+	for _, ip := range []string{"223.5.5.5", "223.6.6.6"} {
 		write(ip, "DIRECT")
 	}
 	for _, ip := range []string{"1.1.1.1", "8.8.8.8"} {
@@ -123,7 +127,7 @@ func (d *Design) writeEgernDNS(b *strings.Builder) {
 	// All encrypted upstream addresses are IP literals, so their setup does
 	// not need plaintext bootstrap. Egern's independent proxy-DNS path is
 	// always direct and must not inherit a user rule that creates a cycle.
-	b.WriteString("dns:\n  bootstrap:\n    - 223.5.5.5\n    - 119.29.29.29\n  proxy_nameservers:\n    - https://223.5.5.5/dns-query\n    - https://119.29.29.29/dns-query\n  upstreams:\n    captain-proxy-dns:\n      - https://1.1.1.1/dns-query\n      - https://8.8.8.8/dns-query\n    captain-domestic-dns:\n      - https://223.5.5.5/dns-query\n      - https://119.29.29.29/dns-query\n")
+	b.WriteString("dns:\n  bootstrap:\n    - 223.5.5.5\n    - 119.29.29.29\n  proxy_nameservers:\n    - https://223.5.5.5/dns-query\n    - https://223.6.6.6/dns-query\n  upstreams:\n    captain-proxy-dns:\n      - https://1.1.1.1/dns-query\n      - https://8.8.8.8/dns-query\n    captain-domestic-dns:\n      - https://223.5.5.5/dns-query\n      - https://223.6.6.6/dns-query\n")
 	if d.Enhancements.Claude {
 		fmt.Fprintf(b, "    captain-claude-dns:\n      - %s\n", claudeDoH)
 	}
@@ -143,7 +147,7 @@ func (d *Design) writeEgernDNS(b *strings.Builder) {
 }
 
 func (d *Design) writeStashDNS(b *strings.Builder) {
-	b.WriteString("dns:\n  follow-rule: true\n  default-nameserver:\n    - https://223.5.5.5/dns-query\n  proxy-server-nameserver:\n    - https://223.5.5.5/dns-query\n    - https://119.29.29.29/dns-query\n  nameserver:\n    - https://1.1.1.1/dns-query\n    - https://8.8.8.8/dns-query\n  fake-ip-filter:\n    - '+.lan'\n    - '+.local'\n    - '+.home.arpa'\n    - '+.msftconnecttest.com'\n    - '+.msftncsi.com'\n  nameserver-policy:\n    '+.cn':\n      - https://223.5.5.5/dns-query\n    'geosite:cn':\n      - https://223.5.5.5/dns-query\n")
+	b.WriteString("dns:\n  follow-rule: true\n  default-nameserver:\n    - https://223.5.5.5/dns-query\n  proxy-server-nameserver:\n    - https://223.5.5.5/dns-query\n    - https://223.6.6.6/dns-query\n  nameserver:\n    - https://1.1.1.1/dns-query\n    - https://8.8.8.8/dns-query\n  fake-ip-filter:\n    - '+.lan'\n    - '+.local'\n    - '+.home.arpa'\n    - '+.msftconnecttest.com'\n    - '+.msftncsi.com'\n  nameserver-policy:\n    '+.cn':\n      - https://223.5.5.5/dns-query\n    'geosite:cn':\n      - https://223.5.5.5/dns-query\n")
 	if d.Enhancements.Claude {
 		for _, rule := range d.Enhancements.claudeRules() {
 			domain := rule.Value
@@ -160,7 +164,7 @@ func (d *Design) writeMihomoDNS(b *strings.Builder, format string) {
 		return
 	}
 	policy := d.Enhancements.DNSPolicy
-	b.WriteString("dns:\n  enable: true\n  enhanced-mode: fake-ip\n  fake-ip-range: 198.18.0.1/16\n  respect-rules: true\n  default-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n  proxy-server-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n    - https://119.29.29.29/dns-query#DIRECT\n  direct-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n    - https://119.29.29.29/dns-query#DIRECT\n  direct-nameserver-follow-policy: false\n  nameserver:\n")
+	b.WriteString("dns:\n  enable: true\n  enhanced-mode: fake-ip\n  fake-ip-range: 198.18.0.1/16\n  respect-rules: true\n  default-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n  proxy-server-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n    - https://223.6.6.6/dns-query#DIRECT\n  direct-nameserver:\n    - https://223.5.5.5/dns-query#DIRECT\n    - https://223.6.6.6/dns-query#DIRECT\n  direct-nameserver-follow-policy: false\n  nameserver:\n")
 	for _, resolver := range []string{"https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"} {
 		fmt.Fprintf(b, "    - %s\n", yq(resolver+"#"+policy))
 	}
