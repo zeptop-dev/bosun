@@ -168,12 +168,40 @@ func TestRegionalSelectorsAndNameConflictsAreValidated(t *testing.T) {
 			t.Fatalf("invalid region selector %q accepted", code)
 		}
 	}
-	for _, name := range []string{"🇭🇰 香港", "🇭🇰 香港 · 自动"} {
+	for _, name := range []string{"🇭🇰 香港", "🇭🇰 香港 · 自动", "@region:HK"} {
 		d, _ := Preset("basic")
 		d.Groups = append(d.Groups, Group{Name: name, Type: "select", Members: []string{"@all"}})
 		d.Enhancements.Regions = true
 		if _, err := d.Effective(); err == nil || !strings.Contains(err.Error(), "conflicts") {
 			t.Fatalf("manual group collision for %q not rejected: %v", name, err)
 		}
+	}
+}
+
+func TestRegionalSelectorDoesNotReinterpretExistingGroupName(t *testing.T) {
+	d := Design{
+		Groups: []Group{
+			{Name: "Main", Type: "select", Members: []string{"@region:HK"}},
+			{Name: "@region:HK", Type: "select", Members: []string{"@all"}},
+		},
+		Final: "Main",
+	}
+	for _, format := range Formats {
+		tpl, err := d.Render(format)
+		if err != nil {
+			t.Fatalf("%s: %v", format, err)
+		}
+		if strings.Contains(tpl, "{{proxy_names:region=HK}}") {
+			t.Fatalf("%s: old literal group reference became a region selector", format)
+		}
+		if strings.Count(tpl, "@region:HK") != 2 {
+			t.Fatalf("%s: lost the original group name or reference:\n%s", format, tpl)
+		}
+	}
+	// A legacy group can also have a region role; a coincidentally canonical
+	// shape does not make its literal member safe to prune as a region selector.
+	d.Groups = append(d.Groups, Group{Name: "Region", Type: "url-test", Members: []string{"@region:HK"}, Region: "HK"})
+	if d.regionalMetadata() != "" {
+		t.Fatal("literal group reference acquired typed-region pruning semantics")
 	}
 }
