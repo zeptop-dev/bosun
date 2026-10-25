@@ -1,7 +1,9 @@
 package subscription
 
 import (
+	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -10,6 +12,10 @@ import (
 // Surge renders a Surge 5 proxy list. Surge speaks ss, vmess, trojan,
 // hysteria2 and tuic; other protocols are skipped.
 type Surge struct{}
+
+// ErrSurgeDNSHostname prevents Surge's documented DIRECT fallback when an
+// encrypted DNS connection uses a proxy whose hostname itself needs DNS.
+var ErrSurgeDNSHostname = errors.New("Surge DNS protection requires IP-address proxy endpoints")
 
 func (Surge) Name() string        { return "surge" }
 func (Surge) ContentType() string { return "text/plain; charset=utf-8" }
@@ -20,7 +26,77 @@ func (s Surge) Render(lines []Line, acct Account) ([]byte, error) {
 
 func (Surge) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 	body, names := iniLines(lines, surgeLine)
-	return applyINI(tpl, "surge", body, names), nil
+	out := applyINI(tpl, "surge", body, names)
+	if strings.Contains(tpl, "# captain-dns-protection: surge-ip-only") && !surgeDNSHasLiteralProxyEndpoints(string(out)) {
+		return nil, ErrSurgeDNSHostname
+	}
+	return out, nil
+}
+
+// Inspect the final profile as well as generated proxies: an operator may edit
+// a designer template to add static or remote candidates while keeping its DNS
+// marker. Remote providers cannot be verified at subscription delivery time.
+func surgeDNSHasLiteralProxyEndpoints(profile string) bool {
+	section := ""
+	for _, raw := range strings.Split(profile, "\n") {
+		line := strings.TrimSpace(raw)
+		// Includes and managed-profile directives can introduce candidates
+		// after this validation. Their contents are deliberately not fetched.
+		if strings.HasPrefix(line, "#!") {
+			return false
+		}
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "//") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			// Designer sections never contain trailing comments. Fail closed
+			// on edited headers rather than interpreting their rows as part
+			// of a preceding non-proxy section.
+			if !strings.HasSuffix(line, "]") {
+				return false
+			}
+			section = strings.ToLower(line)
+			switch section {
+			case "[general]", "[proxy]", "[proxy group]", "[rule]", "[host]":
+			default:
+				return false
+			}
+			continue
+		}
+		if section != "[proxy]" && section != "[proxy group]" {
+			continue
+		}
+		_, value, ok := strings.Cut(line, "=")
+		if !ok {
+			return false
+		}
+		parts := strings.Split(value, ",")
+		if section == "[proxy group]" {
+			for _, part := range parts[1:] {
+				key, _, _ := strings.Cut(strings.TrimSpace(part), "=")
+				if strings.EqualFold(strings.TrimSpace(key), "policy-path") {
+					return false
+				}
+			}
+			continue
+		}
+		if len(parts) < 3 {
+			return false
+		}
+		switch strings.ToLower(strings.TrimSpace(parts[0])) {
+		case "ss", "vmess", "trojan", "hysteria2", "tuic", "snell":
+		default:
+			return false
+		}
+		host := strings.TrimSpace(parts[1])
+		if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+			host = host[1 : len(host)-1]
+		}
+		if _, err := netip.ParseAddr(host); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // iniLines renders each line with fn, skipping the ones it cannot express.

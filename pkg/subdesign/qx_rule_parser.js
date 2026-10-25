@@ -46,10 +46,11 @@
     }
     var lines = source.replace(/^\uFEFF/, "").split(/\r?\n/);
     if (lines.length > 200000) throw new Error("Too many rules");
-    var output = [
-      "# ACL4SSR rule adaptation by Captain; source: https://github.com/ACL4SSR/ACL4SSR",
-      "# ACL4SSR data license: CC-BY-SA-4.0 https://creativecommons.org/licenses/by-sa/4.0/"
-    ];
+    var output = ["# Rule adaptation by Captain"];
+    if (typeof $resource.link === "string" && /^https:\/\/raw\.githubusercontent\.com\/ACL4SSR\/ACL4SSR\//.test($resource.link)) {
+      output.push("# Source: https://github.com/ACL4SSR/ACL4SSR");
+      output.push("# ACL4SSR data license: CC-BY-SA-4.0 https://creativecommons.org/licenses/by-sa/4.0/");
+    }
     var kinds = {
       "DOMAIN": "host", "DOMAIN-SUFFIX": "host-suffix", "DOMAIN-KEYWORD": "host-keyword",
       "IP-CIDR": "ip-cidr", "IP-CIDR6": "ip6-cidr", "GEOIP": "geoip"

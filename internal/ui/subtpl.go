@@ -13,6 +13,8 @@ import (
 
 func (s *Server) subTemplateRoutes() {
 	m := s.mux
+	m.HandleFunc("GET "+subdesign.QuantumultXRuleParserPath, subdesign.ServeQuantumultXRuleParser)
+	m.HandleFunc("GET "+subdesign.InlineRuleResourcePath+"{format}/{rule}", subdesign.ServeInlineRuleResource)
 	auth := s.requireAuth
 	m.HandleFunc("GET /api/sub-templates", auth(s.getSubTemplates))
 	m.HandleFunc("PUT /api/sub-templates", auth(s.local(s.putSubTemplates)))

@@ -32,6 +32,7 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 	"github.com/zeptop-dev/bosun/pkg/spec"
+	"github.com/zeptop-dev/bosun/pkg/subdesign"
 	"github.com/zeptop-dev/bosun/pkg/wg"
 	"github.com/zeptop-dev/bosun/web"
 )
@@ -781,7 +782,24 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		acct.Expire = u.ExpiresAt.Unix()
 	}
 	rd := subscription.Pick(r.URL.Query().Get("client"), r.UserAgent())
-	body, err := rd.RenderWith(lines, acct, s.d.Store.SubTemplate(rd.Name()))
+	tpl := s.d.Store.SubTemplate(rd.Name())
+	if rd.Name() == "qx" || rd.Name() == "loon" {
+		scheme := "http"
+		if r.TLS != nil || s.d.Secure {
+			scheme = "https"
+		}
+		var err error
+		tpl, err = subdesign.BindResourceURLs(tpl, scheme+"://"+r.Host)
+		if err != nil {
+			http.Error(w, "invalid subscription resource origin", http.StatusBadRequest)
+			return
+		}
+	}
+	body, err := rd.RenderWith(lines, acct, tpl)
+	if errors.Is(err, subscription.ErrSurgeDNSHostname) {
+		http.Error(w, "Surge DNS protection requires IP-address proxy endpoints", http.StatusUnprocessableEntity)
+		return
+	}
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
