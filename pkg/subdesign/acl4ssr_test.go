@@ -128,8 +128,8 @@ func TestEnhancementDerivationDoesNotModifyBase(t *testing.T) {
 	if !reflect.DeepEqual(a, again) {
 		t.Fatal("effective design duplicated enhancements")
 	}
-	if len(a.Groups) != len(d.Groups)+7 {
-		t.Fatalf("expected 6 region groups and Claude group: %d", len(a.Groups))
+	if len(a.Groups) != len(d.Groups)+13 {
+		t.Fatalf("expected 6 region pairs and Claude group: %d", len(a.Groups))
 	}
 	for _, g := range a.Groups {
 		if g.Name == claudeGroup {
