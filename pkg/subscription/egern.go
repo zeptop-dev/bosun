@@ -75,7 +75,7 @@ func (Egern) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 					bm["policies"] = []any{"REJECT"}
 					delete(gm, kind)
 					gm["select"] = bm
-					for _, key := range []string{"url", "interval", "tolerance"} {
+					for _, key := range []string{"url", "latency_test_url", "interval", "tolerance", "timeout"} {
 						delete(bm, key)
 					}
 				}

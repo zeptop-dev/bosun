@@ -117,12 +117,24 @@ func (d *Design) ruleFormatSupport(format string, s *FormatSupport) {
 	for _, r := range d.Rules {
 		rs, _ := d.ruleSet(r.Set)
 		if rs.URL != "" {
-			// The maintained ProxyMedia list contains PROCESS-NAME and
-			// URL-REGEX rules, which Quantumult X cannot express as filters.
-			// Other lists still pass through the strict runtime parser: a new
-			// unsupported upstream rule fails the update, never disappears.
-			if format == "qx" && rs.URL == acl+"ProxyMedia.list" {
-				s.addReason("remote_rules_unsupported", "Quantumult X cannot preserve PROCESS-NAME and URL-REGEX rules in ACL4SSR ProxyMedia.list")
+			// This maintained source includes process and full-URL rules.
+			// Do not advertise complete support when a client's native parser
+			// cannot represent them. No rules are removed from remote resources.
+			if rs.URL == acl+"ProxyMedia.list" {
+				switch format {
+				case "clash":
+					// Preserve the established native-source path for existing
+					// Mihomo designs, while disclosing its unsupported URL rule.
+					s.addWarning("remote_native_unsupported", "The existing Mihomo source is retained for compatibility, but ACL4SSR ProxyMedia.list contains URL-REGEX, which Mihomo does not support; this source is not fully equivalent")
+				case "qx":
+					s.addReason("remote_rules_unsupported", "Quantumult X cannot preserve PROCESS-NAME and URL-REGEX rules in ACL4SSR ProxyMedia.list")
+				case "surfboard":
+					s.addReason("remote_rules_unsupported", "Surfboard cannot preserve URL-REGEX rules in ACL4SSR ProxyMedia.list")
+				case "egern":
+					s.addReason("remote_rules_unsupported", "Egern cannot preserve PROCESS-NAME rules in ACL4SSR ProxyMedia.list")
+				case "stash", "surge", "loon":
+					s.addWarning("remote_process_macos", "This rule resource includes process rules that only work on macOS; iOS/tvOS ignore them")
+				}
 			}
 			qxDropPrefix = false
 			continue

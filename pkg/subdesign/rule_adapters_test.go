@@ -133,6 +133,64 @@ func TestEnhancementRulesAcrossSevenFormats(t *testing.T) {
 	}
 }
 
+func TestKnownRemoteRulesReportClientLimitations(t *testing.T) {
+	d, _ := Preset("acl4ssr")
+	warnings := map[string]string{
+		"clash": "remote_native_unsupported", "stash": "remote_process_macos",
+		"surge": "remote_process_macos", "loon": "remote_process_macos",
+	}
+	missingTypes := map[string]string{"qx": "PROCESS-NAME and URL-REGEX", "surfboard": "URL-REGEX", "egern": "PROCESS-NAME"}
+	for _, s := range d.Support() {
+		if warning, ok := warnings[s.Format]; ok {
+			if !s.Supported || !strings.Contains(strings.Join(s.WarningCodes, ","), warning) {
+				t.Fatalf("missing native limitation for %s: %+v", s.Format, s)
+			}
+		} else if s.Supported || !strings.Contains(strings.Join(s.ReasonCodes, ","), "remote_rules_unsupported") || !strings.Contains(strings.Join(s.Reasons, ","), missingTypes[s.Format]) {
+			t.Fatalf("missing exact unsupported rule type for %s: %+v", s.Format, s)
+		}
+	}
+	// The source limitation must not ban unrelated native remote rule sets.
+	d, _ = Preset("basic")
+	for _, s := range d.Support() {
+		if !s.Supported || strings.Contains(strings.Join(s.WarningCodes, ","), "remote_") {
+			t.Fatalf("unrelated source rejected or mislabelled: %+v", s)
+		}
+	}
+}
+
+func TestEgernEmptyGroupsRemoveAutomaticTestOptions(t *testing.T) {
+	for _, kind := range []string{"url-test", "fallback"} {
+		t.Run(kind, func(t *testing.T) {
+			d, _ := Preset("basic")
+			d.Groups[1].Type = kind
+			d.Groups[1].Timeout = 3
+			tpl, err := d.Render("egern")
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := (subscription.Egern{}).RenderWith(nil, subscription.Account{}, tpl)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var doc struct {
+				Groups []map[string]map[string]any `yaml:"policy_groups"`
+			}
+			if err = yaml.Unmarshal(out, &doc); err != nil {
+				t.Fatal(err)
+			}
+			group := doc.Groups[1]["select"]
+			if !reflect.DeepEqual(group["policies"], []any{"REJECT"}) {
+				t.Fatalf("empty group did not reject: %+v", group)
+			}
+			for _, key := range []string{"url", "latency_test_url", "interval", "tolerance", "timeout"} {
+				if _, ok := group[key]; ok {
+					t.Fatalf("select retains automatic test option %s: %+v", key, group)
+				}
+			}
+		})
+	}
+}
+
 func assertRuleOrder(t *testing.T, text string, want []string) {
 	t.Helper()
 	last := -1
