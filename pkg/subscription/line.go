@@ -22,6 +22,11 @@ type Line struct {
 	// continue to use the account's UUID, password and numeric identity.
 	WireGuardPeer *spec.WireGuardPeer
 	Tags          []string // labels for the portal's server list; not rendered into configs
+	// Region is the explicitly configured exit region, not the entry address's
+	// location. RegionName preserves the undecorated name for fallback matching;
+	// generated flags and presentation prefixes must not change group membership.
+	Region     string
+	RegionName string
 	// Extra holds client-side fields merged into this server's entry in
 	// the map-shaped formats (mihomo/Clash, Stash, sing-box): things the
 	// panel does not model such as tfo, smux, dialer-proxy, ip-version.
