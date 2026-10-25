@@ -36,7 +36,7 @@ func clashProxies(lines []Line) ([]any, []Named) {
 			p[k] = v
 		}
 		proxies = append(proxies, p)
-		names = append(names, Named{Name: l.Name, Tags: l.Tags})
+		names = append(names, namedLine(l))
 	}
 	return proxies, names
 }

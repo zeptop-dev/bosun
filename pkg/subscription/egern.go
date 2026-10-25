@@ -28,7 +28,7 @@ func (Egern) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 	for _, l := range lines {
 		if p := egernProxy(l); p != nil {
 			proxies = append(proxies, p)
-			names = append(names, Named{Name: l.Name, Tags: l.Tags})
+			names = append(names, namedLine(l))
 		}
 	}
 	if tpl == "" {
@@ -42,6 +42,7 @@ func (Egern) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 		doc = map[string]any{}
 	}
 	doc["proxies"] = proxies
+	pruneRegionalYAML(doc, true, regionalGroups(tpl, names))
 	// policy_groups: [- select: {name, policies: [..., "{{proxy_names}}"]}]
 	if groups, ok := doc["policy_groups"].([]any); ok {
 		for _, g := range groups {

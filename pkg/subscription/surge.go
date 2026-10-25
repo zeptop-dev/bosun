@@ -106,7 +106,7 @@ func iniLines(lines []Line, fn func(Line) string) (string, []Named) {
 	for _, l := range lines {
 		if s := fn(l); s != "" {
 			b.WriteString(s + "\n")
-			names = append(names, Named{Name: l.Name, Tags: l.Tags})
+			names = append(names, namedLine(l))
 		}
 	}
 	return strings.TrimRight(b.String(), "\n"), names
