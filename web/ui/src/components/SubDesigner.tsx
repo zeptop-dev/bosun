@@ -52,7 +52,7 @@ export function SubDesigner() {
   const inspection = useQuery({
     queryKey: ['sub-design-inspect', debounced],
     queryFn: ({ signal }) => api.post<Inspection>('/api/sub-design/inspect', { design: debounced }, signal),
-    enabled: !!q.data,
+    enabled: !!q.data && (dirty || debounced.groups.length > 0),
     retry: false,
     staleTime: 30_000,
   })
@@ -123,10 +123,10 @@ export function SubDesigner() {
         <Text size="xs" c="dimmed" mb="sm">{t('subDesign.regionGroupsHint')}</Text>
         <Stack gap="xs">
           {d.groups.map((g, i) => (
-            <Group key={i} align="flex-start" wrap="nowrap" gap="xs">
-              <TextInput size="xs" w={170} placeholder={t('subDesign.groupName')} value={g.name} onChange={(e) => { const v = e.currentTarget.value; edit((x) => { const old = x.groups[i].name; x.groups[i].name = v; x.groups.forEach((gg) => { gg.members = gg.members.map((m) => (m === old && old ? v : m)) }); x.rules.forEach((r) => { if (r.policy === old && old) r.policy = v }); if (x.final === old && old) x.final = v; return x }) }} />
-              <Select size="xs" w={130} data={groupTypes} value={g.type} onChange={(v) => v && edit((x) => { x.groups[i].type = v; return x })} allowDeselect={false} />
-              <MultiSelect size="xs" flex={1} data={memberOptions(g)} value={g.members} onChange={(v) => edit((x) => { x.groups[i].members = v; return x })} searchable placeholder={t('subDesign.members')} />
+            <Group key={i} align="flex-start" wrap="wrap" gap="xs">
+              <TextInput size="xs" w={{ base: '100%', sm: 170 }} placeholder={t('subDesign.groupName')} value={g.name} onChange={(e) => { const v = e.currentTarget.value; edit((x) => { const old = x.groups[i].name; x.groups[i].name = v; x.groups.forEach((gg) => { gg.members = gg.members.map((m) => (m === old && old ? v : m)) }); x.rules.forEach((r) => { if (r.policy === old && old) r.policy = v }); if (x.final === old && old) x.final = v; return x }) }} />
+              <Select size="xs" w={{ base: '100%', sm: 130 }} data={groupTypes} value={g.type} onChange={(v) => v && edit((x) => { x.groups[i].type = v; return x })} allowDeselect={false} />
+              <MultiSelect size="xs" flex={{ base: '1 1 100%', sm: 1 }} miw={0} data={memberOptions(g)} value={g.members} onChange={(v) => edit((x) => { x.groups[i].members = v; return x })} searchable placeholder={t('subDesign.members')} />
               {g.type !== 'select' && <NumberInput size="xs" w={90} min={30} value={g.interval ?? 300} onChange={(v) => edit((x) => { x.groups[i].interval = Number(v) || 300; return x })} suffix=" s" />}
               <Group gap={2} wrap="nowrap">
                 <ActionIcon size="sm" variant="subtle" onClick={() => edit((x) => ({ ...x, groups: move(x.groups, i, -1) }))}><IconArrowUp size={14} /></ActionIcon>
