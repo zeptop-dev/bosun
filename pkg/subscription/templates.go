@@ -24,6 +24,8 @@ import (
 // {{proxy_names:tag=hk}} keeps servers carrying that entry tag and
 // {{proxy_names:match=RE}} keeps names matching the (case-insensitive)
 // regular expression, e.g. {{proxy_names:match=HK|香港|🇭🇰}}.
+// {{proxy_names:region=HK}} prefers the explicit exit region and otherwise
+// matches the original, undecorated node name without using its entry host.
 //	                 that expands to every server name
 //
 // Loon and Quantumult X default to a bare node list because their remote
@@ -61,11 +63,13 @@ const (
 
 // Named is a rendered server as the placeholders see it.
 type Named struct {
-	Name string
-	Tags []string
+	Name       string
+	Tags       []string
+	Region     string
+	RegionName string
 }
 
-var namesPH = regexp.MustCompile(`\{\{proxy_names(?::(tag|match|tag64|match64|matchcase64)=([^}]*))?\}\}`)
+var namesPH = regexp.MustCompile(`\{\{proxy_names(?::(tag|match|tag64|match64|matchcase64|region)=([^}]*))?\}\}`)
 
 // expandNames resolves one {{proxy_names...}} placeholder; ok is false when
 // s is not a placeholder. A filter nobody matches yields an empty list.
@@ -75,6 +79,9 @@ func expandNames(s string, names []Named) ([]string, bool) {
 		return nil, false
 	}
 	out := []string{}
+	if m[1] == "region" && (m[2] == "" || normalizeRegionCode(m[2]) != m[2]) {
+		return out, true
+	}
 	if m[1] == "tag64" || m[1] == "match64" || m[1] == "matchcase64" {
 		b, err := base64.RawURLEncoding.DecodeString(m[2])
 		if err != nil {
@@ -104,6 +111,10 @@ func expandNames(s string, names []Named) ([]string, bool) {
 			if !re.MatchString(n.Name) {
 				continue
 			}
+		case "region":
+			if namedRegion(n) != m[2] {
+				continue
+			}
 		}
 		out = append(out, n.Name)
 	}
@@ -125,6 +136,7 @@ func applyINI(tpl, format, lines string, names []Named) []byte {
 		tpl = DefaultTemplate(format)
 	}
 	out := strings.ReplaceAll(tpl, phProxies, lines)
+	out = pruneRegionalINI(out, format, regionalGroups(tpl, names))
 	out = namesPH.ReplaceAllStringFunc(out, func(ph string) string {
 		list, _ := expandNames(ph, names)
 		return strings.Join(list, ", ")
@@ -155,6 +167,7 @@ func applyYAML(tpl, format string, proxies []any, names []Named) ([]byte, error)
 		proxies = []any{}
 	}
 	doc["proxies"] = proxies
+	pruneRegionalYAML(doc, false, regionalGroups(tpl, names))
 	if groups, ok := doc["proxy-groups"].([]any); ok {
 		for _, g := range groups {
 			gm, ok := g.(map[string]any)
