@@ -702,7 +702,7 @@
     "presetConfirm": "Loading a preset replaces the groups and rules being edited (unapplied changes are lost).",
     "groups": "Proxy groups",
     "addGroup": "Add group",
-    "groupsHint": "Members: all servers, servers with a tag, servers whose name matches a region, or other groups. url-test picks the lowest latency, fallback the first working one, load-balance rotates.",
+    "groupsHint": "Members can be all servers, a tag, a region, or another group. select is manual, url-test chooses by measured latency, fallback uses the first available server, and load-balance distributes traffic.",
     "groupName": "Group name",
     "members": "Members",
     "noGroups": "No groups yet; load a preset to start.",
@@ -717,7 +717,7 @@
     "finalHint": "Where unmatched traffic goes",
     "preview": "Preview",
     "save": "Save design only",
-    "saveHint": "Store the design without touching templates",
+    "saveHint": "Saving a draft does not update published subscriptions. Generate and apply again to publish changes.",
     "apply": "Generate & apply",
     "applyConfirm": "Generate and replace templates for {{formats}}? All other client templates will remain unchanged.",
     "applied": "Selected templates generated and applied",
@@ -747,7 +747,11 @@
     "unsupported": "Unavailable for this design",
     "selectSupported": "Select all available formats",
     "warningRemoteProcessMacOS": "This rule resource includes process rules that only work on macOS; iOS/tvOS ignore them.",
-    "warningRemoteNativeUnsupported": "The existing Mihomo rule resource is retained for compatibility, but it contains URL-REGEX, which Mihomo does not support; this resource is not fully equivalent."
+    "warningRemoteNativeUnsupported": "The existing Mihomo rule resource is retained for compatibility, but it contains URL-REGEX, which Mihomo does not support; this resource is not fully equivalent.",
+    "regionMembersHint": "Region matching uses the subscription node’s registered region first, or its name when no region is set. Existing name-pattern conditions keep their original behavior.",
+    "nameMatchRegion": "{{region}} · name match",
+    "regionGroupsHint": "The built-in regional preset offers automatic selection and every server in each region. Empty generated region groups are hidden unless a rule or default policy explicitly uses them; then they remain and reject connections.",
+    "customMembers": "Other members in this preset"
   },
   "accountID": {
     "label": "Account ID",

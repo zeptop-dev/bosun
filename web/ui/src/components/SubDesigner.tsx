@@ -11,7 +11,7 @@ import { toast } from '../lib/notify'
 interface DGroup { name: string; type: string; members: string[]; url?: string; interval?: number }
 interface DRule { set: string; policy: string }
 interface Design { groups: DGroup[]; rules: DRule[]; final: string }
-interface Data { design: Design; catalogue: { key: string; name: string; url?: string }[]; presets: { key: string; name: string }[]; regions: { name: string; match: string }[]; tags: string[]; formats: string[] }
+interface Data { design: Design; catalogue: { key: string; name: string; url?: string }[]; presets: { key: string; name: string }[]; regions: { code?: string; name: string; match: string }[]; tags: string[]; formats: string[] }
 interface FormatSupport { format: string; supported: boolean; reasons: string[]; reason_codes: string[]; warnings: string[]; warning_codes: string[] }
 interface Inspection { formats: FormatSupport[] }
 interface Snapshot { design: Design; epoch: number }
@@ -21,7 +21,7 @@ const groupTypes = ['select', 'url-test', 'fallback', 'load-balance']
 const formatLabels: Record<string, string> = { clash: 'mihomo / Clash Meta', stash: 'Stash', surge: 'Surge', surfboard: 'Surfboard', loon: 'Loon', qx: 'Quantumult X', egern: 'Egern' }
 
 // Visual editor for the subscription document: proxy groups (members by
-// group, all servers, tag or name pattern) and an ordered rule list drawn
+// group, all servers, tag, region or name pattern) and an ordered rule list drawn
 // from the ACL4SSR catalogue. "Apply" generates only explicitly selected formats.
 export function SubDesigner() {
   const { t } = useTranslation()
@@ -86,14 +86,21 @@ export function SubDesigner() {
 
   const names = d.groups.map((g) => g.name).filter(Boolean)
   const policies = [...names, 'DIRECT', 'REJECT']
-  const memberOptions = (self: string) => [
-    { group: t('subDesign.memberServers'), items: [
+  const memberOptions = (group: DGroup) => {
+    const servers = [
       { value: '@all', label: t('subDesign.allServers') },
       ...(q.data?.tags ?? []).map((tag) => ({ value: `@tag:${tag}`, label: t('subDesign.tag', { tag }) })),
-      ...(q.data?.regions ?? []).map((r) => ({ value: `@match:${r.match}`, label: r.name })),
-    ] },
-    { group: t('subDesign.memberGroups'), items: [...names.filter((n) => n !== self).map((n) => ({ value: n, label: n })), { value: 'DIRECT', label: 'DIRECT' }, { value: 'REJECT', label: 'REJECT' }] },
-  ]
+      ...(q.data?.regions ?? []).map(region => ({ value: region.code ? `@region:${region.code}` : `@match:${region.match}`, label: region.name })),
+    ]
+    const serverKeys = new Set(servers.map(item => item.value))
+    const groups = [...new Set([...names.filter(name => name !== group.name), 'DIRECT', 'REJECT'])].filter(value => !serverKeys.has(value)).map(value => ({ value, label: value }))
+    const known = new Set([...servers, ...groups].map(item => item.value))
+    const retained = [...new Set(group.members)].filter(value => !known.has(value)).map(value => {
+      const legacyRegion = q.data?.regions.find(region => value === `@match:${region.match}`)
+      return { value, label: legacyRegion ? t('subDesign.nameMatchRegion', { region: legacyRegion.name }) : value }
+    })
+    return [{ group: t('subDesign.memberServers'), items: servers }, { group: t('subDesign.memberGroups'), items: groups }, ...(retained.length ? [{ group: t('subDesign.customMembers'), items: retained }] : [])]
+  }
   const move = <T,>(list: T[], i: number, dir: -1 | 1) => { const j = i + dir; if (j < 0 || j >= list.length) return list; const c = [...list]; ;[c[i], c[j]] = [c[j], c[i]]; return c }
   const catalogue = q.data?.catalogue ?? []
 
@@ -112,12 +119,14 @@ export function SubDesigner() {
       <Card>
         <Group justify="space-between" mb="sm"><Title order={6}>{t('subDesign.groups')}</Title><Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => edit((x) => ({ ...x, groups: [...x.groups, { name: '', type: 'select', members: ['@all'] }] }))}>{t('subDesign.addGroup')}</Button></Group>
         <Text size="xs" c="dimmed" mb="sm">{t('subDesign.groupsHint')}</Text>
+        <Text size="xs" c="dimmed" mb="sm">{t('subDesign.regionMembersHint')}</Text>
+        <Text size="xs" c="dimmed" mb="sm">{t('subDesign.regionGroupsHint')}</Text>
         <Stack gap="xs">
           {d.groups.map((g, i) => (
             <Group key={i} align="flex-start" wrap="nowrap" gap="xs">
               <TextInput size="xs" w={170} placeholder={t('subDesign.groupName')} value={g.name} onChange={(e) => { const v = e.currentTarget.value; edit((x) => { const old = x.groups[i].name; x.groups[i].name = v; x.groups.forEach((gg) => { gg.members = gg.members.map((m) => (m === old && old ? v : m)) }); x.rules.forEach((r) => { if (r.policy === old && old) r.policy = v }); if (x.final === old && old) x.final = v; return x }) }} />
               <Select size="xs" w={130} data={groupTypes} value={g.type} onChange={(v) => v && edit((x) => { x.groups[i].type = v; return x })} allowDeselect={false} />
-              <MultiSelect size="xs" flex={1} data={memberOptions(g.name)} value={g.members} onChange={(v) => edit((x) => { x.groups[i].members = v; return x })} searchable placeholder={t('subDesign.members')} />
+              <MultiSelect size="xs" flex={1} data={memberOptions(g)} value={g.members} onChange={(v) => edit((x) => { x.groups[i].members = v; return x })} searchable placeholder={t('subDesign.members')} />
               {g.type !== 'select' && <NumberInput size="xs" w={90} min={30} value={g.interval ?? 300} onChange={(v) => edit((x) => { x.groups[i].interval = Number(v) || 300; return x })} suffix=" s" />}
               <Group gap={2} wrap="nowrap">
                 <ActionIcon size="sm" variant="subtle" onClick={() => edit((x) => ({ ...x, groups: move(x.groups, i, -1) }))}><IconArrowUp size={14} /></ActionIcon>
