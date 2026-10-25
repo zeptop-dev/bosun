@@ -87,6 +87,9 @@ func (d *Design) Effective() (Design, error) {
 				}
 			}
 			if existing == "" {
+				if names["@region:"+r.Code] {
+					return Design{}, fmt.Errorf("regional selector %q conflicts with a base group; rename that group before adding regional groups", "@region:"+r.Code)
+				}
 				pair := regionalPair(r)
 				for _, g := range pair {
 					if names[g.Name] {
