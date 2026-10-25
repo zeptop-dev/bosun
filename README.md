@@ -1110,8 +1110,9 @@ uses an embedded converter that rejects malformed or unsupported resources.
 Surge DNS-protected profiles require verifiable IP-address proxy candidates.
 The standalone editor retains its
 existing preset controls. New regional selectors include an automatic latency
-group and all matching nodes for manual selection. Registered regions take
-priority over name inference. Generated empty regional groups are omitted,
+group and all matching nodes for manual selection. The shared renderer prioritizes
+registered regions supplied by Captain; standalone entries use their names.
+Generated empty regional groups are omitted,
 except when a rule or final/DNS policy explicitly needs them; those and other
 empty generated groups reject traffic. Hand-written templates retain their
 existing behavior. These are subscription
