@@ -27,7 +27,7 @@ func TestPresetsRenderEverywhere(t *testing.T) {
 			t.Fatalf("%s: %v", p.Key, err)
 		}
 		for _, s := range support {
-			want := s.Format != "qx" || p.Key == "basic"
+			want := p.Key == "basic" || (s.Format != "qx" && s.Format != "surfboard" && s.Format != "egern")
 			if s.Supported != want {
 				t.Fatalf("unexpected capability for %s: %+v", p.Key, s)
 			}
