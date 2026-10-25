@@ -339,7 +339,7 @@ func (d *Design) surge(format string) string {
 	if format == "surfboard" {
 		b.WriteString("internet-test-url = http://bing.com\nproxy-test-url = " + testURL + "\n")
 	} else {
-		b.WriteString("proxy-test-url = " + d.commonTestURL() + "\n")
+		b.WriteString("proxy-test-url = " + d.commonTestURL() + "\ninternet-test-url = " + d.commonTestURL() + "\n")
 	}
 	b.WriteString("\n[Proxy]\n{{proxies}}\n\n[Proxy Group]\n")
 	for _, g := range d.Groups {

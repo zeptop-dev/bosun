@@ -249,6 +249,21 @@ func TestGroupTimeoutCapabilityPreservesUnits(t *testing.T) {
 	}
 }
 
+func TestSurgeCommonTestURLIncludesDirectCandidates(t *testing.T) {
+	d, _ := Preset("basic")
+	d.Groups[1].URL = "http://example.com/check"
+	d.Groups[1].Members = append(d.Groups[1].Members, "DIRECT")
+	text, err := d.Render("surge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"proxy-test-url = http://example.com/check", "internet-test-url = http://example.com/check"} {
+		if !strings.Contains(text, want) {
+			t.Fatal("group candidates use different test URLs", text)
+		}
+	}
+}
+
 func TestInlineResourceValidation(t *testing.T) {
 	for _, format := range []string{"loon", "qx"} {
 		for _, expr := range []string{"DOMAIN,example.com\nFINAL,DIRECT", "DOMAIN,example.com,DIRECT", "IP-CIDR,invalid/32", "AND,((NETWORK,TCP),(DST-PORT,443))", "DOMAIN,,no-resolve"} {
