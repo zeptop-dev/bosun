@@ -14,6 +14,27 @@ Successful selections and preference order persist in `<data_dir>/cores/active.j
 
 The agent's catalog is the source of available packages. Extending it requires reviewing the upstream format, adapter capabilities, platform assets, checksums and runtime tests. Updating the inventory never silently activates a release. Concurrent activation requests, stale revisions and expired tasks are rejected. Successful replayed jobs do not restart the core again.
 
+## Received and successfully applied revisions
+
+Captain-managed reports retain `revision` as the latest state received by the
+watcher. The additive `applied_revision` field confirms that this process has
+successfully applied both proxy configuration and forwarding from that exact
+revision. It uses the revisions actually consumed by the agent, not a newer
+watcher snapshot. Partial failure, early checkpoint failure, activation/rollback,
+mode transitions and process restart clear the relevant confirmation; core-only
+reconciliation cannot acknowledge or suppress retries of failed forwards.
+
+An application acknowledgement is still not a connectivity test. Captain must
+also check the reported running inbound, forwarding observations and reverse
+connection evidence. Agents predating this field omit it and cannot provide this
+stronger status confirmation. No credentials, routes or customer accounting
+semantics change with the new field.
+
+Kernel nft forwarding reports installation, replacement and cleanup failures to
+the caller. Failed scripts are retried even when the desired rules are unchanged;
+successful identical scripts retain the existing no-reinstall behavior. A failed
+removal of the last rule cannot be acknowledged as a successful empty config.
+
 ## Traffic accounting during changes
 
 With Captain or the standalone driver, bosun collects running core counters before applying configuration changes, disabling cores, switching packages and graceful shutdown. It fsyncs them to the private traffic journal before proceeding. An unavailable panel does not prevent these local checkpoints: a report already sent retains its original sequence and contents, while newer unsent checkpoints accumulate separately. After acknowledgement, they form the next report. The standalone store saves its receipt with user and aggregate totals so replay after a restart does not charge twice. Counter identities and sing-box aliases remain tied to the last successfully applied configuration, including when a new render or apply fails.
