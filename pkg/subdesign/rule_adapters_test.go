@@ -318,4 +318,32 @@ func TestQuantumultXRuleParserRuntime(t *testing.T) {
 			t.Fatal("partial/unknown conversion accepted", result)
 		}
 	}
+	for _, valid := range []string{
+		"IP-CIDR6,::/0", "IP-CIDR6,2001:db8:0:1:2:3:4:5/128",
+		"IP-CIDR6,::ffff:192.0.2.1/128", "IP-CIDR6,2001:db8:0:1:2:3:192.0.2.1/128",
+		"DOMAIN,_ldap._tcp.example.com", "DOMAIN-SUFFIX,example.com.",
+		"DOMAIN," + strings.Repeat("a", 63) + ".example.com",
+	} {
+		result := run(valid)
+		if result["error"] != "" || result["content"] == "" {
+			t.Fatal("valid address rejected", valid, result)
+		}
+		if valid == "DOMAIN-SUFFIX,example.com." && !strings.Contains(result["content"], "host-suffix,example.com,reject") {
+			t.Fatal("final DNS root dot not normalized", result)
+		}
+	}
+	for _, invalid := range []string{
+		"IP-CIDR6,::::/64", "IP-CIDR6,1:2:3/64", "IP-CIDR6,1:2:3:4:5:6:7:8:9/64",
+		"IP-CIDR6,1::2::3/64", "IP-CIDR6,1:2:3:4:5:6:7::8/64", "IP-CIDR6,1::10000/64",
+		"IP-CIDR6,::ffff:999.0.0.1/128", "IP-CIDR6,::ffff:192.0.2.001/128",
+		"IP-CIDR6,2001:db8::%eth0/64", "IP-CIDR6,2001:db8::/129", "IP-CIDR6,2001:db8::/064",
+		"DOMAIN,foo..example.com", "DOMAIN,-foo.example.com", "DOMAIN,foo-.example.com",
+		"DOMAIN,example.com..", "DOMAIN,.", "DOMAIN," + strings.Repeat("a", 64) + ".example.com",
+		"DOMAIN," + strings.Repeat(strings.Repeat("a", 63)+".", 3) + strings.Repeat("a", 62),
+	} {
+		result := run("DOMAIN,example.com\n" + invalid)
+		if result["error"] == "" || result["content"] != "" {
+			t.Fatal("invalid address produced partial content", invalid, result)
+		}
+	}
 }
