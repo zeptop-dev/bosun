@@ -188,7 +188,7 @@ func (d *Design) Validate() error {
 		if g.URL != "" && !validURL(g.URL) {
 			return fmt.Errorf("group %q: invalid test URL", g.Name)
 		}
-		if g.Region != "" && !knownRegion(g.Region) {
+		if g.Region != "" && !validRegionCode(g.Region) {
 			return fmt.Errorf("group %q: unknown region", g.Name)
 		}
 	}
@@ -196,6 +196,10 @@ func (d *Design) Validate() error {
 		for _, m := range g.Members {
 			switch {
 			case m == "@all", m == "DIRECT", m == "REJECT", names[m]:
+			case strings.HasPrefix(m, "@region:"):
+				if !validRegionCode(m[8:]) {
+					return fmt.Errorf("group %q: invalid region filter", g.Name)
+				}
 			case strings.HasPrefix(m, "@tag:"):
 				if len(m) > 512 || strings.TrimSpace(m[5:]) == "" || configurationControl(m) {
 					return fmt.Errorf("group %q: invalid tag filter", g.Name)
@@ -360,7 +364,7 @@ func withPolicy(expr, policy string) string {
 }
 
 func (d *Design) attribution() string {
-	claude := d.claudeAttribution()
+	claude := d.claudeAttribution() + d.regionalMetadata()
 	if d.Source == nil || (!strings.HasPrefix(d.Source.URL, "https://github.com/ACL4SSR/ACL4SSR/") && !strings.HasPrefix(d.Source.URL, "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/")) {
 		return claude
 	}

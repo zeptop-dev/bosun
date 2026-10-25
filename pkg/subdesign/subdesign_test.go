@@ -76,7 +76,7 @@ func TestPresetsRenderEverywhere(t *testing.T) {
 			for _, g := range doc.Groups {
 				if g.Name == "🇭🇰 香港" {
 					found = true
-					if len(g.Proxies) != 1 || g.Proxies[0] != "🇭🇰 HK-1" {
+					if len(g.Proxies) != 2 || g.Proxies[0] != "🇭🇰 香港 · 自动" || g.Proxies[1] != "🇭🇰 HK-1" {
 						t.Fatalf("HK group members: %v", g.Proxies)
 					}
 				}
