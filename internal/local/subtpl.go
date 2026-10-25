@@ -1,6 +1,9 @@
 package local
 
 import (
+	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/zeptop-dev/bosun/pkg/subdesign"
@@ -56,6 +59,39 @@ func (s *Store) SetSubDesign(d subdesign.Design) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cp := d
+	previous := s.st.SubDesign
 	s.st.SubDesign = &cp
-	return s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.st.SubDesign = previous
+		return err
+	}
+	return nil
+}
+
+// ApplySubDesign persists the draft and explicitly selected generated templates
+// in one state-file replacement. Unselected templates retain their current value.
+func (s *Store) ApplySubDesign(d subdesign.Design, generated map[string]string) error {
+	for format, body := range generated {
+		if !slices.Contains(subdesign.Formats, format) || strings.TrimSpace(body) == "" {
+			return fmt.Errorf("invalid generated template for %q", format)
+		}
+	}
+	if len(generated) == 0 {
+		return fmt.Errorf("no generated templates selected")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previousDesign, previousTemplates := s.st.SubDesign, s.st.SubTemplates
+	templates := maps.Clone(previousTemplates)
+	if templates == nil {
+		templates = make(map[string]string, len(generated))
+	}
+	maps.Copy(templates, generated)
+	cp := d
+	s.st.SubDesign, s.st.SubTemplates = &cp, templates
+	if err := s.saveLocked(); err != nil {
+		s.st.SubDesign, s.st.SubTemplates = previousDesign, previousTemplates
+		return err
+	}
+	return nil
 }
