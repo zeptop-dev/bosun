@@ -53,6 +53,11 @@ func (d *Design) regionalMetadata() string {
 			continue
 		}
 		selector := "@region:" + g.Region
+		if _, literalGroup := byName[selector]; literalGroup {
+			// A pre-existing group with the same name takes precedence over the
+			// new selector syntax. It provides no region-membership guarantee.
+			continue
+		}
 		managed := g.Type == "url-test" && len(g.Members) == 1 && g.Members[0] == selector
 		if g.Type == "select" && len(g.Members) == 2 && g.Members[1] == selector {
 			auto, found := byName[g.Members[0]]

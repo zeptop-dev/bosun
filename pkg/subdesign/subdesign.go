@@ -221,11 +221,18 @@ func (d *Design) RenderAll() (map[string]string, error) {
 }
 
 // member turns a designer member into the template token.
-func (g Group) member(m string) string {
+func (d *Design) member(g Group, m string) string {
 	switch {
 	case m == "@all":
 		return "{{proxy_names}}"
 	case strings.HasPrefix(m, "@region:"):
+		// This prefix was a legal group name before region selectors existed.
+		// Resolve old literal references first, matching Validate's precedence.
+		for _, other := range d.Groups {
+			if other.Name == m {
+				return m
+			}
+		}
 		return "{{proxy_names:region=" + m[8:] + "}}"
 	case strings.HasPrefix(m, "@tag:"):
 		return "{{proxy_names:tag64=" + base64.RawURLEncoding.EncodeToString([]byte(m[5:])) + "}}"
@@ -294,7 +301,7 @@ func (d *Design) clash(format string) string {
 		}
 		b.WriteString("    proxies:\n")
 		for _, m := range g.Members {
-			fmt.Fprintf(&b, "      - %s\n", yq(g.member(m)))
+			fmt.Fprintf(&b, "      - %s\n", yq(d.member(g, m)))
 		}
 	}
 	if used := d.rulesUsed(); len(used) > 0 {
@@ -325,10 +332,10 @@ func (d *Design) clash(format string) string {
 	return b.String()
 }
 
-func iniMembers(g Group) string {
+func (d *Design) iniMembers(g Group) string {
 	parts := make([]string, 0, len(g.Members))
 	for _, m := range g.Members {
-		parts = append(parts, g.member(m))
+		parts = append(parts, d.member(g, m))
 	}
 	return strings.Join(parts, ", ")
 }
@@ -348,7 +355,7 @@ func (d *Design) surge(format string) string {
 	}
 	b.WriteString("\n[Proxy]\n{{proxies}}\n\n[Proxy Group]\n")
 	for _, g := range d.Groups {
-		fmt.Fprintf(&b, "%s = %s, %s", g.Name, g.Type, iniMembers(g))
+		fmt.Fprintf(&b, "%s = %s, %s", g.Name, g.Type, d.iniMembers(g))
 		if g.Type != "select" {
 			if format == "surfboard" {
 				fmt.Fprintf(&b, ", url=%s", g.url())
@@ -389,7 +396,7 @@ func (d *Design) loon() string {
 	d.writeDNSGeneral(&b, "loon")
 	b.WriteString("\n[Proxy]\n{{proxies}}\n\n[Proxy Group]\n")
 	for _, g := range d.Groups {
-		fmt.Fprintf(&b, "%s = %s,%s", g.Name, g.Type, strings.ReplaceAll(iniMembers(g), ", ", ","))
+		fmt.Fprintf(&b, "%s = %s,%s", g.Name, g.Type, strings.ReplaceAll(d.iniMembers(g), ", ", ","))
 		fmt.Fprintf(&b, ",url = %s,interval = %d", g.url(), g.interval())
 		if g.Type == "url-test" {
 			fmt.Fprintf(&b, ",tolerance = %d", g.tolerance())
@@ -443,7 +450,7 @@ func (d *Design) qx() string {
 		kind := map[string]string{"select": "static", "url-test": "url-latency-benchmark", "fallback": "available", "load-balance": "round-robin"}[g.Type]
 		parts := make([]string, 0, len(g.Members))
 		for _, m := range g.Members {
-			parts = append(parts, qxPolicy(g.member(m)))
+			parts = append(parts, qxPolicy(d.member(g, m)))
 		}
 		fmt.Fprintf(&b, "%s=%s, %s", kind, g.Name, strings.Join(parts, ", "))
 		if g.Type == "url-test" {
@@ -485,7 +492,7 @@ func (d *Design) egern() string {
 		kind := map[string]string{"select": "select", "url-test": "auto_test", "fallback": "fallback", "load-balance": "load_balance"}[g.Type]
 		fmt.Fprintf(&b, "  - %s:\n      name: %s\n      policies:\n", kind, yq(g.Name))
 		for _, m := range g.Members {
-			fmt.Fprintf(&b, "        - %s\n", yq(g.member(m)))
+			fmt.Fprintf(&b, "        - %s\n", yq(d.member(g, m)))
 		}
 		if g.Type != "select" {
 			fmt.Fprintf(&b, "      latency_test_url: %s\n      interval: %d\n", yq(g.url()), g.interval())
