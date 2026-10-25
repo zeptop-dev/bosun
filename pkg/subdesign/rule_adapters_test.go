@@ -347,9 +347,14 @@ func TestQuantumultXRuleParserRuntime(t *testing.T) {
 	if err != nil {
 		t.Skip("node is required for the client JavaScript parser test")
 	}
-	run := func(input string) map[string]string {
+	run := func(input string, links ...string) map[string]string {
 		t.Helper()
-		script := "const $resource={content:require('fs').readFileSync(0,'utf8')}; let calls=0; function $done(r){ if(++calls!==1) throw Error('multiple completion');process.stdout.write(JSON.stringify(r)); }\n" + QuantumultXRuleParser()
+		link := "https://panel.example.com/sub-resources/inline/qx/example"
+		if len(links) > 0 {
+			link = links[0]
+		}
+		encodedLink, _ := json.Marshal(link)
+		script := "const $resource={content:require('fs').readFileSync(0,'utf8'),link:" + string(encodedLink) + "}; let calls=0; function $done(r){ if(++calls!==1) throw Error('multiple completion');process.stdout.write(JSON.stringify(r)); }\n" + QuantumultXRuleParser()
 		cmd := exec.Command(node, "-e", script)
 		cmd.Stdin = strings.NewReader(input)
 		out, err := cmd.CombinedOutput()
@@ -366,9 +371,21 @@ func TestQuantumultXRuleParserRuntime(t *testing.T) {
 	if valid["error"] != "" {
 		t.Fatal(valid)
 	}
-	lines := strings.Split(strings.TrimSpace(valid["content"]), "\n")
-	if !reflect.DeepEqual(lines[2:], []string{"host,example.com,reject", "host-suffix,service.example.com,reject", "host-keyword,ads,reject", "ip-cidr,192.0.2.0/24,reject,no-resolve", "ip6-cidr,2001:db8::/32,reject,no-resolve", "geoip,CN,reject"}) {
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSpace(valid["content"]), "\n") {
+		if !strings.HasPrefix(line, "#") {
+			lines = append(lines, line)
+		}
+	}
+	if !reflect.DeepEqual(lines, []string{"host,example.com,reject", "host-suffix,service.example.com,reject", "host-keyword,ads,reject", "ip-cidr,192.0.2.0/24,reject,no-resolve", "ip6-cidr,2001:db8::/32,reject,no-resolve", "geoip,CN,reject"}) {
 		t.Fatal(lines)
+	}
+	if strings.Contains(valid["content"], "ACL4SSR data license") {
+		t.Fatal("self-contained inline rules must not be attributed to ACL4SSR")
+	}
+	upstream := run("DOMAIN,example.com", acl+"LocalAreaNetwork.list")
+	if !strings.Contains(upstream["content"], "ACL4SSR data license: CC-BY-SA-4.0") {
+		t.Fatal("converted upstream rules lost their source attribution")
 	}
 	for _, bad := range []string{"DOMAIN,example.com\nPROCESS-NAME,app", "DOMAIN,example.com\nDOMAIN-SUFFIX,other.example.com,DIRECT", "DOMAIN,example.com\nIP-CIDR,999.0.0.1/32", "DOMAIN,example.com\nAND,((NETWORK,UDP),(DST-PORT,443))", "DOMAIN,example.com\nDOMAIN,example.net,no-resolve"} {
 		result := run(bad)
