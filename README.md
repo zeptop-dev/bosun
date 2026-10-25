@@ -1090,9 +1090,9 @@ still block a heavy user for a few days.
 ### Subscription templates on the standalone panel
 
 The "Sub templates" page is the same editor Captain has: a text template
-per client format (`{{proxies}}`, `{{proxy_names}}` with `:tag=` and
-`:match=` filters) and the visual designer (`pkg/subdesign`: proxy groups
-whose members are all servers, name patterns per region or other groups,
+per client format (`{{proxies}}`, `{{proxy_names}}` with `:tag=`, `:match=` and
+`:region=` filters) and the visual designer (`pkg/subdesign`: proxy groups
+whose members are all servers, regions, name patterns or other groups,
 plus an ordered ACL4SSR rule list with presets). Inspect client-specific
 restrictions, explicitly select supported formats, then save the draft and
 those templates together; unselected templates remain unchanged.
@@ -1109,8 +1109,12 @@ Loon/QX use local public rule resources to preserve remote-list order; QX also
 uses an embedded converter that rejects malformed or unsupported resources.
 Surge DNS-protected profiles require verifiable IP-address proxy candidates.
 The standalone editor retains its
-existing preset controls. Generated groups with no matching nodes reject traffic,
-and hand-written templates retain their existing behavior. These are subscription
+existing preset controls. New regional selectors include an automatic latency
+group and all matching nodes for manual selection. Registered regions take
+priority over name inference. Generated empty regional groups are omitted,
+except when a rule or final/DNS policy explicitly needs them; those and other
+empty generated groups reject traffic. Hand-written templates retain their
+existing behavior. These are subscription
 configuration features, not a guarantee of system-wide leak protection.
 
 Since bosun v0.79, Claude rules may be pinned into a design's
