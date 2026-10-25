@@ -1093,14 +1093,22 @@ The "Sub templates" page is the same editor Captain has: a text template
 per client format (`{{proxies}}`, `{{proxy_names}}` with `:tag=` and
 `:match=` filters) and the visual designer (`pkg/subdesign`: proxy groups
 whose members are all servers, name patterns per region or other groups,
-plus an ordered ACL4SSR rule list with presets) that generates every
-format at once. Under Captain the page is read-only and Captain's templates
+plus an ordered ACL4SSR rule list with presets). Inspect client-specific
+restrictions, explicitly select supported formats, then save the draft and
+those templates together; unselected templates remain unchanged.
+Under Captain the page is read-only and Captain's templates
 apply.
 
 bosun v0.78 adds shared compiler support for Captain's administrator-managed
 ACL4SSR preset library and optional regional, DNS, Claude, WebRTC and UDP-443
-enhancements. Official imports and protection options currently require Mihomo;
-unsupported formats are reported explicitly. The standalone editor retains its
+enhancements. Native rule adapters now cover all seven designer formats;
+unrepresentable rules or group options are reported explicitly instead of
+being dropped. DNS protection supports Mihomo, Stash, Surge and Egern with
+[client-specific constraints](docs/DESIGNER_DNS_ADAPTERS.md).
+Loon/QX use local public rule resources to preserve remote-list order; QX also
+uses an embedded converter that rejects malformed or unsupported resources.
+Surge DNS-protected profiles require verifiable IP-address proxy candidates.
+The standalone editor retains its
 existing preset controls. Generated groups with no matching nodes reject traffic,
 and hand-written templates retain their existing behavior. These are subscription
 configuration features, not a guarantee of system-wide leak protection.
