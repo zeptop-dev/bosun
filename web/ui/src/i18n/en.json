@@ -748,7 +748,7 @@
     "selectSupported": "Select all available formats",
     "warningRemoteProcessMacOS": "This rule resource includes process rules that only work on macOS; iOS/tvOS ignore them.",
     "warningRemoteNativeUnsupported": "The existing Mihomo rule resource is retained for compatibility, but it contains URL-REGEX, which Mihomo does not support; this resource is not fully equivalent.",
-    "regionMembersHint": "Region matching uses the subscription node’s registered region first, or its name when no region is set. Existing name-pattern conditions keep their original behavior.",
+    "regionMembersHint": "Region conditions recognize region names, codes, or flags in node names. Unidentified nodes stay in all servers without joining a region group. Existing name-pattern conditions keep their original behavior.",
     "nameMatchRegion": "{{region}} · name match",
     "regionGroupsHint": "The built-in regional preset offers automatic selection and every server in each region. Empty generated region groups are hidden unless a rule or default policy explicitly uses them; then they remain and reject connections.",
     "customMembers": "Other members in this preset"
