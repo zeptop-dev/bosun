@@ -105,7 +105,9 @@ func TestNFTApplyAndStatus(t *testing.T) {
 	}
 	// nft missing: the rule stays listed, down, with the error.
 	nftRun = func(context.Context, string) error { return errors.New("nftables not installed") }
-	_ = m.Apply([]spec.Forward{f})
+	if err := m.Apply([]spec.Forward{f}); err == nil {
+		t.Fatal("failed nft install was acknowledged")
+	}
 	snap := m.Snapshot()
 	if len(snap) != 1 || snap[0].Up || snap[0].LastError != "nftables not installed" {
 		t.Fatalf("snapshot: %+v", snap)
@@ -116,6 +118,76 @@ func TestNFTApplyAndStatus(t *testing.T) {
 	}
 	if err := m.Apply([]spec.Forward{{Tag: "x", Port: 1, Protocol: "tcp", Target: "203.0.113.30:443", PreserveSource: true}}); err == nil {
 		t.Fatal("preserve_source on the relay accepted")
+	}
+}
+
+func TestNFTFailedReplacementAndCleanupRemainRetryable(t *testing.T) {
+	oldRun, oldForward := nftRun, enableForwarding
+	t.Cleanup(func() { nftRun, enableForwarding = oldRun, oldForward })
+	failure := errors.New("nft operation failed")
+	fail, calls := false, 0
+	nftRun = func(context.Context, string) error {
+		calls++
+		if fail {
+			return failure
+		}
+		return nil
+	}
+	enableForwarding = func(context.Context) error { return nil }
+	m := NewManager(slog.Default())
+	t.Cleanup(m.Stop)
+	f := spec.Forward{Tag: "one", Port: 18443, Protocol: "udp", Target: "192.0.2.10:443", Backend: "nft"}
+	if err := m.Apply([]spec.Forward{f}); err != nil {
+		t.Fatal(err)
+	}
+	first := m.nftApplied
+	f.Target = "198.51.100.20:443"
+	fail = true
+	for i := 0; i < 2; i++ {
+		before := calls
+		if err := m.Apply([]spec.Forward{f}); !errors.Is(err, failure) || calls != before+1 {
+			t.Fatalf("replacement failure/retry lost: calls=%d error=%v", calls, err)
+		}
+		if m.nftApplied != first {
+			t.Fatal("failed replacement changed the applied script")
+		}
+	}
+	fail = false
+	if err := m.Apply([]spec.Forward{f}); err != nil || m.nftApplied == first {
+		t.Fatalf("replacement did not recover: %v", err)
+	}
+	before := calls
+	if err := m.Apply([]spec.Forward{f}); err != nil || calls != before {
+		t.Fatal("successful unchanged script was reinstalled", err)
+	}
+	fail = true
+	for i := 0; i < 2; i++ {
+		before := calls
+		if err := m.Apply(nil); !errors.Is(err, failure) || calls != before+1 || m.nftApplied == "" {
+			t.Fatalf("cleanup failure/retry lost: calls=%d error=%v", calls, err)
+		}
+		if len(m.Snapshot()) != 0 {
+			t.Fatal("expected removed rules: the apply error must survive without a per-rule report")
+		}
+	}
+	fail = false
+	if err := m.Apply(nil); err != nil || m.nftApplied != "" {
+		t.Fatal("cleanup did not recover", err)
+	}
+}
+
+func TestNFTUnresolvedRuleFailsApplyEvenWhenRenderedScriptIsUnchanged(t *testing.T) {
+	oldRun, oldForward := nftRun, enableForwarding
+	t.Cleanup(func() { nftRun, enableForwarding = oldRun, oldForward })
+	nftRun = func(context.Context, string) error { return nil }
+	enableForwarding = func(context.Context) error { return nil }
+	m := NewManager(slog.Default())
+	// Exercise resolution failure without a network-dependent DNS lookup.
+	f := spec.Forward{Tag: "unresolved", Port: 18443, Protocol: "udp", Target: "missing-port", Backend: "nft"}
+	for i := 0; i < 2; i++ {
+		if err := m.applyNFT(context.Background(), []spec.Forward{f}); err == nil {
+			t.Fatal("omitted unresolved rule was acknowledged as a complete apply")
+		}
 	}
 }
 

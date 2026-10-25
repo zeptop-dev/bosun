@@ -66,6 +66,10 @@ type Agent struct {
 	statusMu     sync.Mutex
 	appliedCores map[string][]string // guarded by statusMu; successful last apply only
 	status       Status
+	// The two apply paths run separately. Only matching, successful consumed
+	// revisions acknowledge the whole configuration; neither survives restart.
+	appliedCoreRevision    string // guarded by statusMu
+	appliedForwardRevision string // guarded by statusMu
 
 	// Upgrade is called (in its own goroutine, once per requested version)
 	// when the panel asks the node to move to another release.
@@ -125,8 +129,11 @@ type Agent struct {
 	// dirty is set when the last apply failed part-way; the next pull tick
 	// retries even though the panel revision did not move (with a floor
 	// between attempts so a broken core is not restarted every second).
-	dirty       bool
-	lastAttempt time.Time
+	dirty              bool
+	coreDirty          bool
+	forwardDirty       bool
+	lastAttempt        time.Time
+	lastForwardAttempt time.Time
 	// kernelNode/kernelByTag are what the last apply handed to the kernel
 	// helpers, so forwards applied afterwards can refresh the firewall.
 	privatePolicyKey    string
@@ -392,7 +399,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-pull.C:
 			if changed, err := a.pull(ctx); err != nil {
 				a.log.Warn("pull failed", "err", err)
-			} else if changed || (a.dirty && time.Since(a.lastAttempt) >= retryFloor) {
+			} else if changed || a.applyRetryDue(time.Now()) {
 				if a.dirty && !changed {
 					a.log.Info("retrying the last apply that failed")
 				}

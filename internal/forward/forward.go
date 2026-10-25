@@ -104,12 +104,8 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	nftChanged := false
 	for k, r := range m.rules {
 		if _, keep := want[k]; !keep {
-			if r.spec.Backend == "nft" {
-				nftChanged = true
-			}
 			m.log.Info("forward stopped", "tag", r.spec.Tag)
 			r.stop()
 			delete(m.rules, k)
@@ -130,7 +126,6 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 		if f.Backend == "nft" {
 			// The kernel does the relaying; bosun only keeps the target probe.
 			m.rules[k] = startProbeOnly(f, m.log)
-			nftChanged = true
 			m.log.Info("nft forward added", "tag", f.Tag, "port", f.Port, "protocol", f.Protocol, "target", f.Target, "preserve_source", f.PreserveSource)
 			continue
 		}
@@ -151,9 +146,14 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 		m.rules[k] = r
 		m.log.Info("forward started", "tag", f.Tag, "listen", f.Listen, "port", f.Port, "protocol", f.Protocol, "target", f.Target)
 	}
-	if nftChanged || (len(nftRules) == 0 && m.nftApplied != "") || (len(nftRules) > 0 && m.nftApplied == "") {
+	// Reconcile even when the requested rules have not changed: a previous
+	// install/resolve/delete may have failed. applyNFT skips an already
+	// installed identical script, retaining live connections.
+	if len(nftRules) > 0 || m.nftApplied != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		m.applyNFT(ctx, nftRules)
+		if err := m.applyNFT(ctx, nftRules); err != nil && firstErr == nil {
+			firstErr = err
+		}
 		cancel()
 	}
 	if len(realmRules) > 0 || (m.Realm != nil && m.Realm.applied != "") {
@@ -197,7 +197,7 @@ func (m *Manager) Stop() {
 	}
 	if m.nftApplied != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		m.applyNFT(ctx, nil)
+		_ = m.applyNFT(ctx, nil)
 		cancel()
 	}
 	if m.Realm != nil {

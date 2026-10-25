@@ -173,8 +173,9 @@ var enableIPv6Forwarding = func(ctx context.Context) error {
 }
 
 // applyNFT installs the table for the rules (or removes it when empty) and
-// reports the per-rule outcome.
-func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) {
+// reports the per-rule outcome. An incomplete installation or cleanup must
+// also fail the enclosing apply, including when no rules remain to report.
+func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) error {
 	targets := map[string]nftTarget{}
 	errs := map[string]error{}
 	for _, f := range rules {
@@ -231,4 +232,11 @@ func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) {
 		}
 		r.setBackendTarget(problem, resolved)
 	}
+	problems := []error{applyErr}
+	for _, f := range rules {
+		if err := errs[f.Tag]; err != nil {
+			problems = append(problems, fmt.Errorf("forward %q: %w", f.Tag, err))
+		}
+	}
+	return errors.Join(problems...)
 }

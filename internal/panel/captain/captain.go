@@ -335,6 +335,17 @@ func (c *Client) Forwards(ctx context.Context) ([]spec.Forward, bool, error) {
 	return fw, true, nil
 }
 
+// ConsumedRevisions deliberately uses accessor cursors, not c.state: watch()
+// may receive a newer revision while the agent is applying the previous one.
+func (c *Client) ConsumedRevisions() (nodeUsers, forwards string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.nodeSeen == c.usersSeen {
+		nodeUsers = c.nodeSeen
+	}
+	return nodeUsers, c.fwdSeen
+}
+
 // Report implements panel.Reporter: one combined POST per push interval.
 func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error) {
 	c.mu.Lock()
