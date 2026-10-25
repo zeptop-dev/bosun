@@ -3,6 +3,42 @@
 // Only designer rule resources enable this parser. It never handles credentials.
 (function () {
   "use strict";
+  function ipv4(address) {
+    var octets = address.split(".");
+    return octets.length === 4 && octets.every(function (x) {
+      return /^(0|[1-9][0-9]{0,2})$/.test(x) && Number(x) <= 255;
+    });
+  }
+  function ipv6(address) {
+    // An embedded IPv4 tail occupies two of the eight 16-bit groups.
+    if (address.indexOf(".") >= 0) {
+      var separator = address.lastIndexOf(":");
+      if (separator < 0 || !ipv4(address.slice(separator + 1))) return false;
+      address = address.slice(0, separator + 1) + "0:0";
+    }
+    var compression = address.indexOf("::");
+    var groups;
+    if (compression >= 0) {
+      if (compression !== address.lastIndexOf("::")) return false;
+      var left = address.slice(0, compression);
+      var right = address.slice(compression + 2);
+      groups = (left ? left.split(":") : []).concat(right ? right.split(":") : []);
+      if (groups.length >= 8) return false; // :: must replace at least one group.
+    } else {
+      groups = address.split(":");
+      if (groups.length !== 8) return false;
+    }
+    return groups.every(function (x) { return /^[0-9a-f]{1,4}$/i.test(x); });
+  }
+  function domain(value) {
+    if (value.length === 0 || value.length > 253) return false;
+    return value.split(".").every(function (label) {
+      // DNS service labels such as _ldap._tcp are valid. Empty labels,
+      // hyphens at label boundaries and oversized labels are not.
+      return label.length > 0 && label.length <= 63 &&
+        /^[a-zA-Z0-9_][a-zA-Z0-9_-]*$/.test(label) && label.slice(-1) !== "-";
+    });
+  }
   try {
     var source = $resource.content;
     if (typeof source !== "string" || source.length > 8 * 1024 * 1024) {
@@ -30,9 +66,10 @@
           /[\s\x00-\x1f\x7f\u2028\u2029]/.test(value)) {
         throw new Error("Unsupported rule or option on line " + (i + 1));
       }
-      if ((kind === "DOMAIN" || kind === "DOMAIN-SUFFIX") &&
-          (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/.test(value) || value.length > 253)) {
-        throw new Error("Invalid domain on line " + (i + 1));
+      if (kind === "DOMAIN" || kind === "DOMAIN-SUFFIX") {
+        // A single final DNS root dot does not change the matched hostname.
+        if (value.slice(-1) === ".") value = value.slice(0, -1);
+        if (!domain(value)) throw new Error("Invalid domain on line " + (i + 1));
       }
       if (kind === "DOMAIN-KEYWORD" && !/^[a-zA-Z0-9_.-]+$/.test(value)) {
         throw new Error("Unsupported domain keyword on line " + (i + 1));
@@ -43,15 +80,14 @@
       if (kind === "IP-CIDR" || kind === "IP-CIDR6") {
         var cidr = value.split("/");
         var maximum = kind === "IP-CIDR6" ? 128 : 32;
-        if (cidr.length !== 2 || !/^\d{1,3}$/.test(cidr[1]) || Number(cidr[1]) > maximum) {
+        if (cidr.length !== 2 || !/^(0|[1-9][0-9]{0,2})$/.test(cidr[1]) || Number(cidr[1]) > maximum) {
           throw new Error("Invalid IP prefix on line " + (i + 1));
         }
         if (kind === "IP-CIDR") {
-          var octets = cidr[0].split(".");
-          if (octets.length !== 4 || octets.some(function (x) { return !/^\d{1,3}$/.test(x) || Number(x) > 255; })) {
+          if (!ipv4(cidr[0])) {
             throw new Error("Invalid IPv4 prefix on line " + (i + 1));
           }
-        } else if (!/^[0-9a-f:.]+$/i.test(cidr[0]) || cidr[0].indexOf(":") < 0) {
+        } else if (!ipv6(cidr[0])) {
           throw new Error("Invalid IPv6 prefix on line " + (i + 1));
         }
       }
