@@ -1,6 +1,7 @@
 package subdesign
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -21,9 +22,15 @@ func TestPresetsRenderEverywhere(t *testing.T) {
 		if !ok {
 			t.Fatalf("preset %s missing", p.Key)
 		}
-		all, err := d.RenderAll()
+		all, support, err := d.RenderSupported()
 		if err != nil {
 			t.Fatalf("%s: %v", p.Key, err)
+		}
+		for _, s := range support {
+			want := s.Format != "qx" || p.Key == "basic"
+			if s.Supported != want {
+				t.Fatalf("unexpected capability for %s: %+v", p.Key, s)
+			}
 		}
 		for format, tpl := range all {
 			r := subscription.Pick(format, "")
@@ -32,9 +39,15 @@ func TestPresetsRenderEverywhere(t *testing.T) {
 			}
 			out, err := r.(interface {
 				RenderWith([]subscription.Line, subscription.Account, string) ([]byte, error)
-			}).RenderWith(lines, subscription.Account{}, tpl)
+			}).RenderWith(lines, subscription.Account{}, bindTestResources(t, tpl))
 			if err != nil {
 				t.Fatalf("%s/%s: %v\n%s", p.Key, format, err, tpl)
+			}
+			if format == "qx" {
+				out, err = base64.StdEncoding.DecodeString(string(out))
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 			s := string(out)
 			if strings.Contains(s, "{{") {
