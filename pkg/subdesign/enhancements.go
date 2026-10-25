@@ -16,16 +16,6 @@ var webRTCRules = []string{
 	"DOMAIN,stun.l.google.com", "DOMAIN,stun1.l.google.com", "DOMAIN,stun2.l.google.com", "DOMAIN,stun3.l.google.com", "DOMAIN,stun4.l.google.com",
 	"DOMAIN-SUFFIX,stun.services.mozilla.com",
 }
-var regionCodes = []string{"HK", "TW", "JP", "SG", "US", "KR"}
-
-func knownRegion(s string) bool {
-	for _, r := range regionCodes {
-		if r == s {
-			return true
-		}
-	}
-	return false
-}
 
 // Effective derives a render-only design. The base and its manual edits stay
 // unchanged; disabling an enhancement simply stops generating that layer.
@@ -78,26 +68,36 @@ func (d *Design) Effective() (Design, error) {
 		if target < 0 {
 			return Design{}, fmt.Errorf("regional groups require a selection group")
 		}
-		for i, r := range Regions {
-			role := regionCodes[i]
+		for _, r := range Regions {
+			role := r.Code
 			existing := ""
 			for _, g := range out.Groups {
 				if g.Region == role {
-					existing = g.Name
-					break
+					// Prefer a region's manual entry over its automatic child,
+					// even if an administrator reordered the saved groups.
+					if existing == "" || g.Type == "select" {
+						existing = g.Name
+					}
+					if g.Type == "select" {
+						break
+					}
 				}
-				if g.Name == r.Name && len(g.Members) == 1 && g.Members[0] == "@match:"+r.Match {
+				if existing == "" && g.Name == r.Name && len(g.Members) == 1 && g.Members[0] == "@match:"+r.Match {
 					existing = g.Name
-					break
 				}
 			}
 			if existing == "" {
-				if names[r.Name] {
-					return Design{}, fmt.Errorf("regional group %q conflicts with a base group", r.Name)
+				pair := regionalPair(r)
+				for _, g := range pair {
+					if names[g.Name] {
+						return Design{}, fmt.Errorf("regional group %q conflicts with a base group", g.Name)
+					}
 				}
 				existing = r.Name
-				out.Groups = append(out.Groups, Group{Name: r.Name, Type: "url-test", Members: []string{"@match:" + r.Match}, URL: testURL, Interval: 300, Region: role})
-				names[r.Name] = true
+				out.Groups = append(out.Groups, pair...)
+				for _, g := range pair {
+					names[g.Name] = true
+				}
 			}
 			if existing != out.Groups[target].Name {
 				found := false

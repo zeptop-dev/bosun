@@ -19,7 +19,8 @@ type Group struct {
 	// Type: select, url-test, fallback, load-balance.
 	Type string `json:"type"`
 	// Members: other group names, DIRECT, REJECT, "@all" (every server),
-	// "@tag:<tag>" (servers whose entry carries the tag) or "@match:<re>"
+	// "@tag:<tag>" (servers whose entry carries the tag), "@region:<CC>"
+	// (servers in a region, preferring explicit metadata), or "@match:<re>"
 	// (servers whose name matches the case-insensitive regexp).
 	Members            []string `json:"members"`
 	URL                string   `json:"url,omitempty"`
@@ -126,7 +127,7 @@ func Preset(key string) (Design, bool) {
 		groups = append(groups, Group{Name: "🚀 节点选择", Type: "select", Members: pick}, auto)
 		if key == "acl4ssr-regions" {
 			for _, r := range Regions {
-				groups = append(groups, Group{Name: r.Name, Type: "url-test", Members: []string{"@match:" + r.Match}, URL: testURL, Interval: 300})
+				groups = append(groups, regionalPair(r)...)
 			}
 		}
 		groups = append(groups,
@@ -156,20 +157,22 @@ func Preset(key string) (Design, bool) {
 	return Design{}, false
 }
 
-// Region is a name-match preset for the member picker.
+// Region is a region preset for the member picker. Match is retained for old
+// consumers and explicit name-based selectors; new consumers should use Code.
 type Region struct {
+	Code  string `json:"code"`
 	Name  string `json:"name"`
 	Match string `json:"match"`
 }
 
 // Regions are the common ones; the operator can type any regexp.
 var Regions = []Region{
-	{Name: "🇭🇰 香港", Match: "HK|香港|🇭🇰|Hong ?Kong"},
-	{Name: "🇹🇼 台湾", Match: "TW|台湾|台灣|🇹🇼|Taiwan"},
-	{Name: "🇯🇵 日本", Match: "JP|日本|🇯🇵|Japan"},
-	{Name: "🇸🇬 新加坡", Match: "SG|新加坡|🇸🇬|Singapore"},
-	{Name: "🇺🇸 美国", Match: "US|美国|美國|🇺🇸|United States|America"},
-	{Name: "🇰🇷 韩国", Match: "KR|韩国|韓國|🇰🇷|Korea"},
+	{Code: "HK", Name: "🇭🇰 香港", Match: "HK|香港|🇭🇰|Hong ?Kong"},
+	{Code: "TW", Name: "🇹🇼 台湾", Match: "TW|台湾|台灣|🇹🇼|Taiwan"},
+	{Code: "JP", Name: "🇯🇵 日本", Match: "JP|日本|🇯🇵|Japan"},
+	{Code: "SG", Name: "🇸🇬 新加坡", Match: "SG|新加坡|🇸🇬|Singapore"},
+	{Code: "US", Name: "🇺🇸 美国", Match: "US|美国|美國|🇺🇸|United States|America"},
+	{Code: "KR", Name: "🇰🇷 韩国", Match: "KR|韩国|韓國|🇰🇷|Korea"},
 }
 
 var groupTypes = map[string]bool{"select": true, "url-test": true, "fallback": true, "load-balance": true}
@@ -222,6 +225,8 @@ func (g Group) member(m string) string {
 	switch {
 	case m == "@all":
 		return "{{proxy_names}}"
+	case strings.HasPrefix(m, "@region:"):
+		return "{{proxy_names:region=" + m[8:] + "}}"
 	case strings.HasPrefix(m, "@tag:"):
 		return "{{proxy_names:tag64=" + base64.RawURLEncoding.EncodeToString([]byte(m[5:])) + "}}"
 	case strings.HasPrefix(m, "@match:"):
