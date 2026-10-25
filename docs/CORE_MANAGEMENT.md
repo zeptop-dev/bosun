@@ -33,12 +33,12 @@ No credentials, routes or customer accounting semantics change with the new fiel
 
 | Combination | Application confirmation |
 |---|---|
-| bosun v0.81.0 or newer with a Captain service-status release | Captain can compare `applied_revision` with the current desired revision, then evaluate fresh per-component runtime evidence. |
-| Older bosun with a Captain service-status release | Existing proxy operation remains supported; missing confirmation is unknown, not proof of health or failure. |
-| bosun v0.81.0 or newer with an older Captain | The older panel can ignore the additive field; `revision` retains its original received-state meaning. |
+| bosun v0.81.0 or newer with Captain v1.41.0 or newer | Captain can compare `applied_revision` with the current desired revision, then evaluate fresh per-component runtime evidence. |
+| Older bosun with Captain v1.41.0 or newer | Existing proxy operation remains supported; missing confirmation is unknown, not proof of health or failure. |
+| bosun v0.81.0 or newer with Captain older than v1.41.0 | The older panel can ignore the additive field; `revision` retains its original received-state meaning. |
 | Standalone or Xboard driver | No Captain application confirmation is manufactured; existing operation and reporting remain unchanged. |
 
-**中文说明：** bosun v0.81.0 新增 `applied_revision`，仅在本进程成功应用同一版本的代理配置和转发规则后确认；原 `revision` 仍只表示已收到的版本。失败、内核切换、模式切换或重启后须重新确认。新面板对缺少该字段的旧节点保持状态未知，旧节点仍可继续提供已有代理服务；旧面板可以忽略新字段。确认成功不代表端到端访问成功，也不代表暂无授权用户的入站正在监听。升级不改变配置键、默认内核或用户计费。
+**中文说明：** bosun v0.81.0 新增 `applied_revision`，仅在本进程成功应用同一版本的代理配置和转发规则后确认；原 `revision` 仍只表示已收到的版本。失败、内核切换、模式切换或重启后须重新确认。Captain v1.41.0 对缺少该字段的旧节点保持状态未知，旧节点仍可继续提供已有代理服务；旧面板可以忽略新字段。确认成功不代表端到端访问成功，也不代表暂无授权用户的入站正在监听。升级不改变配置键、默认内核或用户计费。
 
 Kernel nft forwarding reports installation, replacement and cleanup failures to
 the caller. Failed scripts are retried even when the desired rules are unchanged;
