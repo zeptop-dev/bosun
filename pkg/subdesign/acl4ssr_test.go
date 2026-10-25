@@ -215,19 +215,23 @@ func TestMihomoEnhancementOutputAndSupport(t *testing.T) {
 	if err != nil || !strings.Contains(text, quicRule) {
 		t.Fatal("QUIC option absent", err)
 	}
+	expected := 0
 	for _, s := range d.Support() {
 		if s.Format == "clash" && !s.Supported {
 			t.Fatal(s)
 		}
-		if s.Format != "clash" && (s.Supported || len(s.Reasons) == 0) {
-			t.Fatal("unsupported enhancements silently dropped", s)
+		_, renderErr := d.Render(s.Format)
+		if s.Supported {
+			expected++
+			if renderErr != nil {
+				t.Fatalf("%s declared support but failed: %v", s.Format, renderErr)
+			}
+		} else if renderErr == nil || len(s.Reasons) == 0 {
+			t.Fatalf("%s silently accepted an unsupported option", s.Format)
 		}
 	}
-	if _, err = d.Render("stash"); err == nil {
-		t.Fatal("unsupported render succeeded")
-	}
 	all, support, err := d.RenderSupported()
-	if err != nil || len(all) != 1 || len(support) != len(Formats) {
+	if err != nil || len(all) != expected || len(support) != len(Formats) {
 		t.Fatalf("supported report %v %v %v", all, support, err)
 	}
 }

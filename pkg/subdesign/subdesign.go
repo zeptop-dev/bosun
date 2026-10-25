@@ -296,14 +296,13 @@ func (d *Design) clash(format string) string {
 		b.WriteString("rule-providers:\n")
 		for _, rs := range used {
 			fmt.Fprintf(&b, "  %s:\n    type: http\n    behavior: classical\n", rs.Key)
-			if format == "clash" {
-				b.WriteString("    format: text\n")
-			}
+			b.WriteString("    format: text\n")
 			fmt.Fprintf(&b, "    url: %s\n    path: ./ruleset/%s.list\n    interval: 86400\n", yq(rs.URL), rs.Key)
 		}
 	}
 	d.writeDNS(&b, format)
 	b.WriteString("rules:\n")
+	d.writeDNSRules(&b, format)
 	for _, r := range d.Rules {
 		if r.Set == GeoIPCN {
 			fmt.Fprintf(&b, "  - %s\n", yq("GEOIP,CN,"+r.Policy))
@@ -311,7 +310,8 @@ func (d *Design) clash(format string) string {
 		}
 		rs, _ := d.ruleSet(r.Set)
 		if rs.Inline != "" {
-			fmt.Fprintf(&b, "  - %s\n", yq(withPolicy(rs.Inline, r.Policy)))
+			p, _ := parseRulePredicate(rs.Inline)
+			fmt.Fprintf(&b, "  - %s\n", yq(withPolicy(p.ini(format), r.Policy)))
 		} else {
 			fmt.Fprintf(&b, "  - %s\n", yq("RULE-SET,"+r.Set+","+r.Policy))
 		}
@@ -334,17 +334,24 @@ func (d *Design) surge(format string) string {
 	if format == "surfboard" {
 		b.WriteString("ipv6 = false\n")
 	}
-	b.WriteString("skip-proxy = localhost, *.local, 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4\ndns-server = 223.5.5.5, 119.29.29.29\ntest-timeout = 5\n")
+	b.WriteString("skip-proxy = localhost, *.local, 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4\ntest-timeout = 5\n")
+	d.writeDNSGeneral(&b, format)
 	if format == "surfboard" {
 		b.WriteString("internet-test-url = http://bing.com\nproxy-test-url = " + testURL + "\n")
 	} else {
-		b.WriteString("proxy-test-url = " + testURL + "\n")
+		b.WriteString("proxy-test-url = " + d.commonTestURL() + "\n")
 	}
 	b.WriteString("\n[Proxy]\n{{proxies}}\n\n[Proxy Group]\n")
 	for _, g := range d.Groups {
 		fmt.Fprintf(&b, "%s = %s, %s", g.Name, g.Type, iniMembers(g))
 		if g.Type != "select" {
-			fmt.Fprintf(&b, ", url=%s, interval=%d", g.url(), g.interval())
+			if format == "surfboard" {
+				fmt.Fprintf(&b, ", url=%s", g.url())
+				if g.Timeout > 0 {
+					fmt.Fprintf(&b, ", timeout=%d", g.Timeout)
+				}
+			}
+			fmt.Fprintf(&b, ", interval=%d", g.interval())
 			if g.Type == "url-test" {
 				fmt.Fprintf(&b, ", tolerance=%d", g.tolerance())
 			}
@@ -352,21 +359,30 @@ func (d *Design) surge(format string) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n[Rule]\n")
+	d.writeDNSRules(&b, format)
 	for _, r := range d.Rules {
 		if r.Set == GeoIPCN {
 			fmt.Fprintf(&b, "GEOIP,CN,%s\n", r.Policy)
 			continue
 		}
 		rs, _ := d.ruleSet(r.Set)
-		fmt.Fprintf(&b, "RULE-SET,%s,%s\n", rs.URL, r.Policy)
+		if rs.Inline != "" {
+			p, _ := parseRulePredicate(rs.Inline)
+			fmt.Fprintln(&b, withPolicy(p.ini(format), r.Policy))
+		} else {
+			fmt.Fprintf(&b, "RULE-SET,%s,%s\n", rs.URL, r.Policy)
+		}
 	}
 	fmt.Fprintf(&b, "FINAL,%s,dns-failed\n", d.Final)
+	d.writeDNS(&b, format)
 	return b.String()
 }
 
 func (d *Design) loon() string {
 	var b strings.Builder
-	b.WriteString(designerMarker + "\n[General]\nskip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local, e.crashlytics.com\nbypass-tun = 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.88.99.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 255.255.255.255/32\ndns-server = system\n\n[Proxy]\n{{proxies}}\n\n[Proxy Group]\n")
+	b.WriteString(designerMarker + "\n[General]\nskip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local, e.crashlytics.com\nbypass-tun = 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.88.99.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 255.255.255.255/32\n")
+	d.writeDNSGeneral(&b, "loon")
+	b.WriteString("\n[Proxy]\n{{proxies}}\n\n[Proxy Group]\n")
 	for _, g := range d.Groups {
 		fmt.Fprintf(&b, "%s = %s,%s", g.Name, g.Type, strings.ReplaceAll(iniMembers(g), ", ", ","))
 		fmt.Fprintf(&b, ",url = %s,interval = %d", g.url(), g.interval())
@@ -375,23 +391,27 @@ func (d *Design) loon() string {
 		}
 		b.WriteString("\n")
 	}
-	if used := d.rulesUsed(); len(used) > 0 {
+	if rules := d.remoteRules("loon"); len(rules) > 0 {
 		b.WriteString("\n[Remote Rule]\n")
-		for _, r := range d.Rules {
-			rs, _ := d.ruleSet(r.Set)
-			if rs.URL == "" {
-				continue
-			}
-			fmt.Fprintf(&b, "%s, policy=%s, tag=%s, enabled=true\n", rs.URL, r.Policy, rs.Key)
+		for _, r := range rules {
+			fmt.Fprintf(&b, "%s, policy=%s, tag=%s, enabled=true\n", r.url, r.policy, r.key)
 		}
 	}
 	b.WriteString("\n[Rule]\n")
-	for _, r := range d.Rules {
+	d.writeDNSRules(&b, "loon")
+	for _, r := range d.localRules() {
 		if r.Set == GeoIPCN {
 			fmt.Fprintf(&b, "GEOIP,CN,%s\n", r.Policy)
+			continue
+		}
+		rs, _ := d.ruleSet(r.Set)
+		if rs.Inline != "" {
+			p, _ := parseRulePredicate(rs.Inline)
+			fmt.Fprintln(&b, withPolicy(p.ini("loon"), r.Policy))
 		}
 	}
 	fmt.Fprintf(&b, "FINAL,%s\n", d.Final)
+	d.writeDNS(&b, "loon")
 	return b.String()
 }
 
@@ -407,7 +427,13 @@ func qxPolicy(p string) string {
 
 func (d *Design) qx() string {
 	var b strings.Builder
-	b.WriteString(designerMarker + "\n[general]\nserver_check_url=" + testURL + "\n\n[policy]\n")
+	b.WriteString(designerMarker + "\n[general]\nserver_check_url=" + d.commonTestURL() + "\n")
+	if len(d.rulesUsed()) > 0 {
+		b.WriteString("resource_parser_url={{resource_parser_url}}\n")
+	}
+	d.writeQXUDPDrop(&b)
+	d.writeDNSGeneral(&b, "qx")
+	b.WriteString("\n[policy]\n")
 	for _, g := range d.Groups {
 		kind := map[string]string{"select": "static", "url-test": "url-latency-benchmark", "fallback": "available", "load-balance": "round-robin"}[g.Type]
 		parts := make([]string, 0, len(g.Members))
@@ -421,23 +447,29 @@ func (d *Design) qx() string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n[server_local]\n{{proxies}}\n")
-	if used := d.rulesUsed(); len(used) > 0 {
+	if rules := d.remoteRules("qx"); len(rules) > 0 {
 		b.WriteString("\n[filter_remote]\n")
-		for _, r := range d.Rules {
-			rs, _ := d.ruleSet(r.Set)
-			if rs.URL == "" {
-				continue
-			}
-			fmt.Fprintf(&b, "%s, tag=%s, force-policy=%s, update-interval=86400, opt-parser=true, enabled=true\n", rs.URL, rs.Key, qxPolicy(r.Policy))
+		for _, r := range rules {
+			fmt.Fprintf(&b, "%s, tag=%s, force-policy=%s, update-interval=86400, opt-parser=true, enabled=true\n", r.url, r.key, qxPolicy(r.policy))
 		}
 	}
 	b.WriteString("\n[filter_local]\n")
-	for _, r := range d.Rules {
+	d.writeDNSRules(&b, "qx")
+	for _, r := range d.localRules() {
 		if r.Set == GeoIPCN {
 			fmt.Fprintf(&b, "geoip, cn, %s\n", qxPolicy(r.Policy))
+			continue
+		}
+		rs, _ := d.ruleSet(r.Set)
+		if rs.Inline != "" {
+			p, _ := parseRulePredicate(rs.Inline)
+			if _, ok := p.udpPort(); !ok {
+				fmt.Fprintln(&b, withPolicy(p.ini("qx"), qxPolicy(r.Policy)))
+			}
 		}
 	}
 	fmt.Fprintf(&b, "final, %s\n", qxPolicy(d.Final))
+	d.writeDNS(&b, "qx")
 	return b.String()
 }
 
@@ -451,20 +483,30 @@ func (d *Design) egern() string {
 			fmt.Fprintf(&b, "        - %s\n", yq(g.member(m)))
 		}
 		if g.Type != "select" {
-			fmt.Fprintf(&b, "      url: %s\n      interval: %d\n", g.url(), g.interval())
+			fmt.Fprintf(&b, "      latency_test_url: %s\n      interval: %d\n", yq(g.url()), g.interval())
+			if g.Timeout > 0 {
+				fmt.Fprintf(&b, "      timeout: %d\n", g.Timeout)
+			}
 			if g.Type == "url-test" {
 				fmt.Fprintf(&b, "      tolerance: %d\n", g.tolerance())
 			}
 		}
 	}
+	d.writeDNS(&b, "egern")
 	b.WriteString("rules:\n")
+	d.writeDNSRules(&b, "egern")
 	for _, r := range d.Rules {
 		if r.Set == GeoIPCN {
 			fmt.Fprintf(&b, "  - geoip:\n      match: CN\n      policy: %s\n", yq(r.Policy))
 			continue
 		}
 		rs, _ := d.ruleSet(r.Set)
-		fmt.Fprintf(&b, "  - rule_set:\n      match: %s\n      policy: %s\n      update_interval: 86400\n", rs.URL, yq(r.Policy))
+		if rs.Inline != "" {
+			p, _ := parseRulePredicate(rs.Inline)
+			p.egern(&b, "  ", r.Policy)
+		} else {
+			fmt.Fprintf(&b, "  - rule_set:\n      match: %s\n      policy: %s\n      update_interval: 86400\n", yq(rs.URL), yq(r.Policy))
+		}
 	}
 	fmt.Fprintf(&b, "  - default:\n      policy: %s\n", yq(d.Final))
 	return b.String()

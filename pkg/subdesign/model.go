@@ -35,47 +35,48 @@ type Enhancements struct {
 
 // FormatSupport is explicit: unsupported options never silently disappear.
 type FormatSupport struct {
-	Format      string   `json:"format"`
-	Supported   bool     `json:"supported"`
-	Reasons     []string `json:"reasons"`
-	ReasonCodes []string `json:"reason_codes"`
+	Format       string   `json:"format"`
+	Supported    bool     `json:"supported"`
+	Reasons      []string `json:"reasons"`
+	ReasonCodes  []string `json:"reason_codes"`
+	Warnings     []string `json:"warnings"`
+	WarningCodes []string `json:"warning_codes"`
 }
 
 func (d *Design) Support() []FormatSupport {
+	effective, err := d.Effective()
 	out := make([]FormatSupport, 0, len(Formats))
 	for _, format := range Formats {
-		s := FormatSupport{Format: format, Supported: true, Reasons: []string{}, ReasonCodes: []string{}}
-		addReason := func(code, message string) {
-			s.ReasonCodes = append(s.ReasonCodes, code)
-			s.Reasons = append(s.Reasons, message)
-		}
-		if format != "clash" {
-			if len(d.RuleSets) > 0 {
-				addReason("imported_rules_mihomo", "Imported rule sets and inline rules currently require mihomo")
-			}
-			if d.Enhancements.DNSProtection {
-				addReason("dns_mihomo", "DNS protection currently requires mihomo")
-			}
-			if d.Enhancements.Claude {
-				addReason("claude_mihomo", "Claude rule priority currently requires mihomo")
-			}
-			if d.Enhancements.WebRTC {
-				addReason("webrtc_mihomo", "WebRTC mitigation currently requires mihomo")
-			}
-			if d.Enhancements.QUIC {
-				addReason("quic_mihomo", "UDP 443 restriction currently requires mihomo")
-			}
-			for _, g := range d.Groups {
-				if g.Timeout > 0 {
-					addReason("timeout_mihomo", "Explicit group timeout currently requires mihomo")
-					break
-				}
-			}
+		s := FormatSupport{Format: format, Reasons: []string{}, ReasonCodes: []string{}, Warnings: []string{}, WarningCodes: []string{}}
+		if err != nil {
+			s.addReason("invalid_design", err.Error())
+		} else {
+			effective.ruleFormatSupport(format, &s)
+			codes, reasons, warningCodes, warnings := effective.dnsFormatSupport(format)
+			s.ReasonCodes = append(s.ReasonCodes, codes...)
+			s.Reasons = append(s.Reasons, reasons...)
+			s.WarningCodes = append(s.WarningCodes, warningCodes...)
+			s.Warnings = append(s.Warnings, warnings...)
 		}
 		s.Supported = len(s.Reasons) == 0
 		out = append(out, s)
 	}
 	return out
+}
+
+func (s *FormatSupport) addReason(code, message string) {
+	s.ReasonCodes = append(s.ReasonCodes, code)
+	s.Reasons = append(s.Reasons, message)
+}
+
+func (s *FormatSupport) addWarning(code, message string) {
+	for _, existing := range s.WarningCodes {
+		if existing == code {
+			return
+		}
+	}
+	s.WarningCodes = append(s.WarningCodes, code)
+	s.Warnings = append(s.Warnings, message)
 }
 
 // RenderSupported returns both generated templates and a report of formats not
