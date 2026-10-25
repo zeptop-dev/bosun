@@ -81,6 +81,7 @@ type regionalGroupPlan struct {
 	active bool
 	remove map[string]bool
 	reject map[string]bool
+	groups map[string]regionalGroup
 }
 
 // regionalGroups is evaluated only after a renderer has removed unsupported
@@ -132,8 +133,9 @@ func regionalGroups(tpl string, names []Named) regionalGroupPlan {
 	for _, name := range names {
 		available[namedRegion(name)] = true
 	}
-	plan := regionalGroupPlan{active: true, remove: map[string]bool{}, reject: map[string]bool{}}
+	plan := regionalGroupPlan{active: true, remove: map[string]bool{}, reject: map[string]bool{}, groups: map[string]regionalGroup{}}
 	for _, group := range groups {
+		plan.groups[group.Name] = group
 		if !available[group.Region] {
 			if group.Protected {
 				plan.reject[group.Name] = true
@@ -157,6 +159,50 @@ func pruneRegionalYAML(doc map[string]any, egern bool, plan regionalGroupPlan) {
 	if !ok {
 		return
 	}
+	definitions := map[string]regionalDefinition{}
+	for _, item := range groups {
+		group, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		body := group
+		kind, _ := group["type"].(string)
+		if egern {
+			if len(group) != 1 {
+				continue
+			}
+			for key, value := range group {
+				kind = key
+				body, _ = value.(map[string]any)
+			}
+			if body == nil {
+				continue
+			}
+		}
+		name, _ := body["name"].(string)
+		definition := regionalDefinition{kind: kind}
+		for key := range body {
+			switch key {
+			case "name", "type", "proxies", "policies", "url", "latency_test_url", "interval", "tolerance", "timeout":
+			default:
+				definition.changed = true
+			}
+		}
+		if members, ok := body[memberKey].([]any); ok {
+			for _, item := range members {
+				if member, ok := item.(string); ok {
+					definition.members = append(definition.members, member)
+				} else {
+					definition.changed = true
+				}
+			}
+		}
+		if _, duplicate := definitions[name]; duplicate {
+			definition.changed = true
+		}
+		definitions[name] = definition
+	}
+	validateRegionalDefinitions(plan, definitions)
 	// A saved text template may have gained a direct rule, DNS or dialer
 	// reference after the designer emitted its marker. Retain such empty
 	// targets rather than producing a dangling reference or a different route.
@@ -224,6 +270,46 @@ func pruneRegionalINI(tpl, format string, plan regionalGroupPlan) string {
 	}
 	lines := strings.Split(tpl, "\n")
 	section := ""
+	definitions := map[string]regionalDefinition{}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") {
+			section = strings.ToLower(trimmed)
+		}
+		if section != "[proxy group]" && section != "[policy]" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+			continue
+		}
+		left, right, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		parts := strings.Split(right, ",")
+		name, kind := strings.TrimSpace(left), strings.TrimSpace(parts[0])
+		if format == "qx" {
+			name, kind = kind, name
+		}
+		definition := regionalDefinition{kind: kind}
+		for _, member := range parts[1:] {
+			member = strings.TrimSpace(member)
+			if match := namesPH.FindString(member); match == member && match != "" {
+				definition.members = append(definition.members, member)
+			} else if key, _, ok := strings.Cut(member, "="); ok {
+				switch strings.TrimSpace(key) {
+				case "url", "interval", "check-interval", "tolerance", "timeout":
+				default:
+					definition.changed = true
+				}
+			} else if member != "" {
+				definition.members = append(definition.members, member)
+			}
+		}
+		if _, duplicate := definitions[name]; duplicate {
+			definition.changed = true
+		}
+		definitions[name] = definition
+	}
+	validateRegionalDefinitions(plan, definitions)
+	section = ""
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
@@ -322,10 +408,48 @@ func regionalReference(value, name string) bool {
 		}
 	}
 	if _, fragment, ok := strings.Cut(value, "#"); ok {
-		fragment = strings.SplitN(fragment, "&", 2)[0]
-		if decoded, err := url.QueryUnescape(fragment); err == nil && decoded == name {
+		// URL fragments use path escaping: a literal '+' stays '+'. Mihomo
+		// decodes the complete fragment before splitting its '&' options.
+		if decoded, err := url.PathUnescape(fragment); err == nil && strings.SplitN(decoded, "&", 2)[0] == name {
 			return true
 		}
 	}
 	return false
+}
+
+type regionalDefinition struct {
+	kind    string
+	members []string
+	changed bool
+}
+
+// Validate the unexpanded group definition against the marker before claiming
+// ownership. A later text edit can broaden candidates or add a remote source;
+// stale comments must not delete or replace that administrator-owned content.
+// Protect the whole regional pair when either side has changed so one stale
+// half cannot leave the other half pointing at a removed group.
+func validateRegionalDefinitions(plan regionalGroupPlan, definitions map[string]regionalDefinition) {
+	validAuto := func(definition regionalDefinition, region string) bool {
+		return !definition.changed && (definition.kind == "url-test" || definition.kind == "auto_test" || definition.kind == "url-latency-benchmark") &&
+			len(definition.members) == 1 && definition.members[0] == "{{proxy_names:region="+region+"}}"
+	}
+	changedRegions := map[string]bool{}
+	for name, metadata := range plan.groups {
+		definition := definitions[name]
+		valid := validAuto(definition, metadata.Region)
+		if !definition.changed && (definition.kind == "select" || definition.kind == "static") && len(definition.members) == 2 &&
+			definition.members[1] == "{{proxy_names:region="+metadata.Region+"}}" {
+			child, exists := plan.groups[definition.members[0]]
+			valid = exists && child.Region == metadata.Region && validAuto(definitions[child.Name], child.Region)
+		}
+		if !valid {
+			changedRegions[metadata.Region] = true
+		}
+	}
+	for name, metadata := range plan.groups {
+		if changedRegions[metadata.Region] {
+			delete(plan.remove, name)
+			delete(plan.reject, name)
+		}
+	}
 }
