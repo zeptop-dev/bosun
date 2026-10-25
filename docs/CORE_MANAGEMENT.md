@@ -17,9 +17,9 @@ The agent's catalog is the source of available packages. Extending it requires r
 ## Received and successfully applied revisions
 
 Captain-managed reports retain `revision` as the latest state received by the
-watcher. The additive `applied_revision` field confirms that this process has
-successfully applied both proxy configuration and forwarding from that exact
-revision. It uses the revisions actually consumed by the agent, not a newer
+watcher. Since bosun v0.81.0, the additive `applied_revision` field confirms that
+this process has successfully applied both proxy configuration and forwarding
+from that exact revision. It uses the revisions actually consumed by the agent, not a newer
 watcher snapshot. Partial failure, early checkpoint failure, activation/rollback,
 mode transitions and process restart clear the relevant confirmation; core-only
 reconciliation cannot acknowledge or suppress retries of failed forwards.
@@ -27,8 +27,18 @@ reconciliation cannot acknowledge or suppress retries of failed forwards.
 An application acknowledgement is still not a connectivity test. Captain must
 also check the reported running inbound, forwarding observations and reverse
 connection evidence. Agents predating this field omit it and cannot provide this
-stronger status confirmation. No credentials, routes or customer accounting
-semantics change with the new field.
+stronger status confirmation. A userless inbound can be successfully configured
+while waiting for authorization; this does not claim that its listener is running.
+No credentials, routes or customer accounting semantics change with the new field.
+
+| Combination | Application confirmation |
+|---|---|
+| bosun v0.81.0 or newer with a Captain service-status release | Captain can compare `applied_revision` with the current desired revision, then evaluate fresh per-component runtime evidence. |
+| Older bosun with a Captain service-status release | Existing proxy operation remains supported; missing confirmation is unknown, not proof of health or failure. |
+| bosun v0.81.0 or newer with an older Captain | The older panel can ignore the additive field; `revision` retains its original received-state meaning. |
+| Standalone or Xboard driver | No Captain application confirmation is manufactured; existing operation and reporting remain unchanged. |
+
+**中文说明：** bosun v0.81.0 新增 `applied_revision`，仅在本进程成功应用同一版本的代理配置和转发规则后确认；原 `revision` 仍只表示已收到的版本。失败、内核切换、模式切换或重启后须重新确认。新面板对缺少该字段的旧节点保持状态未知，旧节点仍可继续提供已有代理服务；旧面板可以忽略新字段。确认成功不代表端到端访问成功，也不代表暂无授权用户的入站正在监听。升级不改变配置键、默认内核或用户计费。
 
 Kernel nft forwarding reports installation, replacement and cleanup failures to
 the caller. Failed scripts are retried even when the desired rules are unchanged;
