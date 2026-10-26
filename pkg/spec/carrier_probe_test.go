@@ -86,6 +86,11 @@ func TestCarrierProbeValidationAndClone(t *testing.T) {
 			t.Fatal("invalid task accepted", task)
 		}
 	}
+	for _, kind := range []string{"http", "download"} {
+		if (PingTask{Type: kind, Target: "https://example.com/", Family: "ipv6"}).Validate() == nil {
+			t.Fatal("unsupported HTTP family accepted", kind)
+		}
+	}
 }
 
 func TestLegacyCarrierFamilies(t *testing.T) {
