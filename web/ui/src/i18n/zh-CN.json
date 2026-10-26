@@ -388,7 +388,7 @@
     "enabled": "启用探针",
     "enabledHint": "关闭时什么都不跑。",
     "carrier": "三网延迟",
-    "carrierHint": "每 10 秒对电信/联通/移动探测点做一次 TCP 连接计时，连接被拒绝也算一次往返。",
+    "carrierHint": "每 10 秒按选定方式和 IP 版本探测三网延迟；TCP 拒绝连接仍视为目标可达。",
     "carriers": "延迟探测目标",
     "carriersHint": "每行一个：名称 地址:端口。留空用默认的三网探测点；填了就整体替换。",
     "tasks": "探测任务",
@@ -404,7 +404,11 @@
       "carriers": "三网",
       "lines": "专线",
       "tasks": "任务"
-    }
+    },
+    "carrierProtocol": "探测方式",
+    "carrierFamily": "IP 版本",
+    "carriersTCPHint": "每行一个：名称 地址:端口。留空使用 NextTrace 北京三网默认目标。TCP、ICMP 与 IPv4、IPv6 的目标分别保存。",
+    "carriersICMPHint": "每行一个：名称 域名或 IP，不填端口。留空使用 NextTrace 北京三网默认目标。ICMP 需要探测权限及目标响应。"
   },
   "users": {
     "title": "用户",

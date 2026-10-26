@@ -388,7 +388,7 @@
     "enabled": "Enable probing",
     "enabledHint": "Nothing runs while this is off.",
     "carrier": "Carrier latency",
-    "carrierHint": "TCP-connect time to the CT/CU/CM probe points every 10 seconds; a refused connection still counts.",
+    "carrierHint": "Measure carrier latency every 10 seconds using the selected protocol and IP version. A refused TCP connection still counts as reachable.",
     "carriers": "Latency targets",
     "carriersHint": "One per line: name host:port. Blank = the default carrier points; anything here replaces the whole set.",
     "tasks": "Tasks",
@@ -404,7 +404,11 @@
       "carriers": "Carriers",
       "lines": "Lines",
       "tasks": "Tasks"
-    }
+    },
+    "carrierProtocol": "Probe protocol",
+    "carrierFamily": "IP version",
+    "carriersTCPHint": "One target per line: name host:port. Leave empty for NextTrace Beijing defaults. TCP and ICMP / IPv4 and IPv6 targets are saved separately.",
+    "carriersICMPHint": "One target per line: name host-or-IP, without a port. Leave empty for NextTrace Beijing defaults. ICMP requires permission and a response from the target."
   },
   "users": {
     "title": "Users",

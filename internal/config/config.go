@@ -225,6 +225,11 @@ func Load(path string) (*Config, error) {
 	if err := spec.ValidateEgressUpstreams(c.Cores.EgressUpstreams); err != nil {
 		return nil, fmt.Errorf("config: cores.egress_upstreams: %w", err)
 	}
+	if c.Probe != nil && c.Probe.CarrierProbe != nil {
+		if err := c.Probe.CarrierProbe.Validate(); err != nil {
+			return nil, fmt.Errorf("config: probe.carrier_probe: %w", err)
+		}
+	}
 	if c.Probe != nil && c.Probe.Resources != nil {
 		if err := c.Probe.Resources.Validate(); err != nil {
 			return nil, fmt.Errorf("config: probe.resources: %w", err)
@@ -332,11 +337,12 @@ func (c *Config) CertFor(serverName string) (certPath, keyPath string, ok bool) 
 
 // ProbeConfig is the standalone probe section.
 type ProbeConfig struct {
-	Resources   *spec.ResourceOptions `yaml:"resources"`
-	Enabled     bool                  `yaml:"enabled"`
-	CarrierPing *bool                 `yaml:"carrier_ping"` // default true
-	Carriers    []spec.Carrier        `yaml:"carriers"`     // empty = the default CT/CU/CM points
-	Tasks       []spec.PingTask       `yaml:"tasks"`
+	CarrierProbe *spec.CarrierProbeConfig `yaml:"carrier_probe"`
+	Resources    *spec.ResourceOptions    `yaml:"resources"`
+	Enabled      bool                     `yaml:"enabled"`
+	CarrierPing  *bool                    `yaml:"carrier_ping"` // default true
+	Carriers     []spec.Carrier           `yaml:"carriers"`     // empty = the default CT/CU/CM points
+	Tasks        []spec.PingTask          `yaml:"tasks"`
 }
 
 // Spec converts the section into what the probe runner takes.
@@ -350,7 +356,7 @@ func (p *ProbeConfig) Spec() *spec.Probe {
 		}
 		return nil
 	}
-	out := &spec.Probe{Resources: p.Resources, Enabled: true, CarrierPing: p.CarrierPing == nil || *p.CarrierPing, Carriers: p.Carriers}
+	out := &spec.Probe{CarrierProbe: p.CarrierProbe.Clone(), Resources: p.Resources, Enabled: true, CarrierPing: p.CarrierPing == nil || *p.CarrierPing, Carriers: p.Carriers}
 	for i, t := range p.Tasks {
 		if t.ID == 0 {
 			t.ID = int64(i + 1)

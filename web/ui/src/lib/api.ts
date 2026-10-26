@@ -99,5 +99,6 @@ export interface Certificate { domain: string; names: string[]; not_after: strin
 export type Ping = NetworkSample
 export interface Carrier { name: string; addr: string }
 export interface ProbeTask { id: number; name: string; type: string; target: string; interval_seconds: number; source_ip: string }
-export interface ProbeSettings { resources?: ResourceOptions; enabled: boolean; carrier_ping: boolean; carriers: Carrier[]; tasks: ProbeTask[] }
+export interface CarrierProbeConfig { protocol: 'tcp' | 'icmp'; family: 'ipv4' | 'ipv6' | 'dual'; tcp_ipv4?: Carrier[]; tcp_ipv6?: Carrier[]; icmp_ipv4?: Carrier[]; icmp_ipv6?: Carrier[] }
+export interface ProbeSettings { carrier_probe?: CarrierProbeConfig; resources?: ResourceOptions; enabled: boolean; carrier_ping: boolean; carriers: Carrier[]; tasks: ProbeTask[] }
 export interface ProbeInfo { settings: ProbeSettings; results: Ping[]; defaults: Carrier[] }

@@ -230,6 +230,12 @@ func (a *Agent) registerMetrics() {
 		var out []metrics.Sample
 		for _, p := range a.probes.Results() {
 			l := map[string]string{"name": p.Name}
+			if p.Family != "" {
+				l["family"] = p.Family
+			}
+			if p.Series != "" {
+				l["series"] = p.Series
+			}
 			lat := p.LatencyMs / 1000
 			if p.LatencyMs < 0 {
 				lat = -1

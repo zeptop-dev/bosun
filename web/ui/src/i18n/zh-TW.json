@@ -388,7 +388,7 @@
     "enabled": "啟用探針",
     "enabledHint": "關閉時什麼都不跑。",
     "carrier": "三大電信延遲",
-    "carrierHint": "每 10 秒對電信/聯通/移動探測點做一次 TCP 連線計時，連線被拒絕也算一次往返。",
+    "carrierHint": "每 10 秒按選定方式與 IP 版本探測三網延遲；TCP 拒絕連線仍視為目標可達。",
     "carriers": "延遲探測目標",
     "carriersHint": "每行一個：名稱 位址:連接埠。留空用預設的三大電信探測點；填了就整體取代。",
     "tasks": "探測任務",
@@ -404,7 +404,11 @@
       "carriers": "三大電信",
       "lines": "專線",
       "tasks": "任務"
-    }
+    },
+    "carrierProtocol": "探測方式",
+    "carrierFamily": "IP 版本",
+    "carriersTCPHint": "每行一個：名稱 位址:連接埠。留空使用 NextTrace 北京三網預設目標。TCP、ICMP 與 IPv4、IPv6 的目標分別儲存。",
+    "carriersICMPHint": "每行一個：名稱 網域或 IP，不填連接埠。留空使用 NextTrace 北京三網預設目標。ICMP 需要探測權限及目標回應。"
   },
   "users": {
     "title": "使用者",

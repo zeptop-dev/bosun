@@ -359,6 +359,11 @@ func (s *Store) ProbeSettings() ProbeSettings {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := s.st.Probe
+	p.CarrierProbe = p.CarrierProbe.Clone()
+	if p.CarrierProbe == nil {
+		c := spec.LegacyCarrierProbe(p.Carriers)
+		p.CarrierProbe = &c
+	}
 	p.Carriers = append([]spec.Carrier{}, p.Carriers...)
 	p.Tasks = append([]spec.PingTask{}, p.Tasks...)
 	return p
@@ -366,6 +371,13 @@ func (s *Store) ProbeSettings() ProbeSettings {
 
 // ValidateProbe checks carriers and tasks and numbers the tasks.
 func ValidateProbe(p *ProbeSettings) error {
+	if p.CarrierProbe != nil {
+		c := p.CarrierProbe.Normalize()
+		if err := c.Validate(); err != nil {
+			return err
+		}
+		p.CarrierProbe = &c
+	}
 	if p.Resources != nil {
 		if err := p.Resources.Validate(); err != nil {
 			return err
@@ -390,6 +402,9 @@ func ValidateProbe(p *ProbeSettings) error {
 	p.Carriers = carriers
 	tasks := []spec.PingTask{}
 	for i, t := range p.Tasks {
+		if t.Series != "" {
+			return fmt.Errorf("task %d: carrier series is reserved", i+1)
+		}
 		t.Name, t.Target, t.SourceIP = strings.TrimSpace(t.Name), strings.TrimSpace(t.Target), strings.TrimSpace(t.SourceIP)
 		t.Type = strings.ToLower(strings.TrimSpace(t.Type))
 		switch t.Type {
@@ -426,6 +441,9 @@ func (s *Store) SetProbe(p ProbeSettings) error {
 	if p.Resources == nil {
 		p.Resources = s.st.Probe.Resources
 	}
+	if p.CarrierProbe == nil {
+		p.CarrierProbe = s.st.Probe.CarrierProbe.Clone()
+	}
 	s.st.Probe = p
 	return s.commit()
 }
@@ -442,7 +460,11 @@ func (s *Store) Probe() *spec.Probe {
 		}
 		return nil
 	}
-	p := &spec.Probe{Resources: s.st.Probe.Resources, Enabled: true, CarrierPing: s.st.Probe.CarrierPing, Carriers: append([]spec.Carrier(nil), s.st.Probe.Carriers...), Tasks: append([]spec.PingTask(nil), s.st.Probe.Tasks...)}
+	p := &spec.Probe{CarrierProbe: s.st.Probe.CarrierProbe.Clone(), Resources: s.st.Probe.Resources, Enabled: true, CarrierPing: s.st.Probe.CarrierPing, Carriers: append([]spec.Carrier(nil), s.st.Probe.Carriers...), Tasks: append([]spec.PingTask(nil), s.st.Probe.Tasks...)}
+	if !s.st.Probe.CarrierPing {
+		p.CarrierProbe = nil
+	}
+
 	for i, g := range s.st.Ingresses {
 		if g.BindIP == "" || g.LineIP == "" {
 			continue

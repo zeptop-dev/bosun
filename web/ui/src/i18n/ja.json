@@ -388,7 +388,7 @@
     "enabled": "プローブを有効化",
     "enabledHint": "無効の間は何も実行されません。",
     "carrier": "キャリア遅延",
-    "carrierHint": "CT/CU/CM の測定点へ 10 秒ごとに TCP 接続時間を計測。接続拒否も往復としてカウントします。",
+    "carrierHint": "選択した方式と IP バージョンで 10 秒ごとに測定します。TCP 接続拒否は到達可能と判定します。",
     "carriers": "遅延測定先",
     "carriersHint": "1 行に 1 つ：名前 host:port。空欄ならデフォルトのキャリア測定点。記入すると全体を置き換えます。",
     "tasks": "タスク",
@@ -404,7 +404,11 @@
       "carriers": "キャリア",
       "lines": "専用線",
       "tasks": "タスク"
-    }
+    },
+    "carrierProtocol": "プローブ方式",
+    "carrierFamily": "IP バージョン",
+    "carriersTCPHint": "1 行に名前とホスト:ポートを指定。空欄は NextTrace 北京の既定ターゲット。TCP・ICMP と IPv4・IPv6 の設定は個別に保存されます。",
+    "carriersICMPHint": "1 行に名前とホストまたは IP を指定（ポートなし）。空欄は NextTrace 北京の既定ターゲット。ICMP には権限とターゲットの応答が必要です。"
   },
   "users": {
     "title": "ユーザー",

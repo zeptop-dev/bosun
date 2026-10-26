@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type Carrier, type ProbeInfo, type ProbeSettings, type ProbeTask } from '../lib/api'
+import { api, type Carrier, type CarrierProbeConfig, type ProbeInfo, type ProbeSettings, type ProbeTask } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
@@ -13,6 +13,10 @@ import { NetworkDiagnosticsCard } from '../components/NetworkDiagnosticsCard'
 
 const parseCarriers = (text: string): Carrier[] => text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const [name, ...rest] = l.split(/[\s,=]+/); return { name, addr: rest.join('') } })
 const carriersText = (c: Carrier[]) => c.map((x) => `${x.name} ${x.addr}`).join('\n')
+type TargetKey = 'tcp_ipv4' | 'tcp_ipv6' | 'icmp_ipv4' | 'icmp_ipv6'
+const targetKeys: TargetKey[] = ['tcp_ipv4', 'tcp_ipv6', 'icmp_ipv4', 'icmp_ipv6']
+const emptyTargets = { tcp_ipv4: '', tcp_ipv6: '', icmp_ipv4: '', icmp_ipv6: '' }
+const defaultTargets = (protocol: string, family: string) => [['CT','4134'],['CU','4837'],['CM','9808']].map(([name, asn]) => `${name} ${family}.pek-${asn}.endpoint.nxtrace.org${protocol === 'tcp' ? ':80' : ''}`).join('\n')
 const emptySettings: ProbeSettings = { enabled: false, carrier_ping: true, carriers: [], tasks: [] }
 
 // Latency probing on this node: carrier points, custom tasks and line RTT.
@@ -24,16 +28,24 @@ export default function ProbePage() {
   const readOnly = me?.mode !== 'local' || !!me?.fixed
   const q = useQuery({ queryKey: ['probe'], queryFn: () => api.get<ProbeInfo>('/api/probe'), refetchInterval: 10_000 })
   const [s, setS] = useState<ProbeSettings>(emptySettings)
-  const [carriers, setCarriers] = useState('')
+  const [targets, setTargets] = useState(emptyTargets)
   const [loaded, setLoaded] = useState(false)
   useEffect(() => {
     // Only the first load seeds the form; later refetches must not clobber edits.
-    if (q.data && !loaded) { setS({ ...emptySettings, ...q.data.settings, carriers: q.data.settings.carriers ?? [], tasks: q.data.settings.tasks ?? [] }); setCarriers(carriersText(q.data.settings.carriers ?? [])); setLoaded(true) }
+    if (q.data && !loaded) {
+      const settings = q.data.settings
+      const carrier_probe: CarrierProbeConfig = settings.carrier_probe ?? { protocol: 'tcp', family: 'ipv4', tcp_ipv4: settings.carriers ?? [] }
+      setS({ ...emptySettings, ...settings, carrier_probe, carriers: settings.carriers ?? [], tasks: settings.tasks ?? [] })
+      setTargets(Object.fromEntries(targetKeys.map((key) => [key, carriersText(carrier_probe[key] ?? [])])) as typeof emptyTargets)
+      setLoaded(true)
+    }
   }, [q.data, loaded])
-  const save = useMutation({ mutationFn: (v: ProbeSettings) => api.put('/api/probe', { ...v, carriers: parseCarriers(carriers) }), onSuccess: () => { toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey: ['probe'] }); qc.invalidateQueries({ queryKey: ['status'] }) }, onError: toast.err })
+  const save = useMutation({ mutationFn: (v: ProbeSettings) => api.put('/api/probe', { ...v, carrier_probe: { ...v.carrier_probe, ...Object.fromEntries(targetKeys.map((key) => [key, parseCarriers(targets[key])])) } }), onSuccess: () => { toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey: ['probe'] }); qc.invalidateQueries({ queryKey: ['status'] }) }, onError: toast.err })
   const setTask = (i: number, patch: Partial<ProbeTask>) => setS((cur) => ({ ...cur, tasks: cur.tasks.map((x, j) => (j === i ? { ...x, ...patch } : x)) }))
   const addTask = () => setS((cur) => ({ ...cur, tasks: [...cur.tasks, { id: Math.max(0, ...cur.tasks.map((x) => x.id)) + 1, name: '', type: 'tcp', target: '', interval_seconds: 30, source_ip: '' }] }))
-  const defaults = (q.data?.defaults ?? []).map((c) => `${c.name} ${c.addr}`).join('\n')
+  const mode = s.carrier_probe ?? { protocol: 'tcp', family: 'ipv4' }
+  const setMode = (patch: Partial<CarrierProbeConfig>) => setS((cur) => ({ ...cur, carrier_probe: { ...mode, ...patch } }))
+  const families = mode.family === 'dual' ? ['ipv4', 'ipv6'] : [mode.family]
   return (
     <>
       <PageHeader title={t('probe.title')} subtitle={t('probe.subtitle')} />
@@ -52,7 +64,16 @@ export default function ProbePage() {
             <Switch label={t('probe.enabled')} description={t('probe.enabledHint')} disabled={readOnly} checked={s.enabled} onChange={(e) => setS({ ...s, enabled: e.currentTarget.checked })} />
             <Switch label={t('probe.carrier')} description={t('probe.carrierHint')} disabled={readOnly} checked={s.carrier_ping} onChange={(e) => setS({ ...s, carrier_ping: e.currentTarget.checked })} />
           </Group>
-          {s.carrier_ping && <Textarea label={t('probe.carriers')} description={t('probe.carriersHint')} autosize minRows={2} placeholder={defaults} disabled={readOnly} styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }} value={carriers} onChange={(e) => setCarriers(e.currentTarget.value)} />}
+          {s.carrier_ping && <>
+            <Group grow>
+              <Select label={t('probe.carrierProtocol')} disabled={readOnly} data={['TCP', 'ICMP'].map((label) => ({ value: label.toLowerCase(), label }))} value={mode.protocol} allowDeselect={false} onChange={(value) => setMode({ protocol: value as 'tcp' | 'icmp' })} />
+              <Select label={t('probe.carrierFamily')} disabled={readOnly} data={[{ value: 'ipv4', label: 'IPv4' }, { value: 'ipv6', label: 'IPv6' }, { value: 'dual', label: 'IPv4 + IPv6' }]} value={mode.family} allowDeselect={false} onChange={(value) => setMode({ family: value as CarrierProbeConfig['family'] })} />
+            </Group>
+            {families.map((family) => {
+              const key = `${mode.protocol}_${family}` as TargetKey
+              return <Textarea key={key} label={`${t('probe.carriers')} · ${family === 'ipv6' ? 'IPv6' : 'IPv4'}`} description={t(mode.protocol === 'icmp' ? 'probe.carriersICMPHint' : 'probe.carriersTCPHint')} autosize minRows={3} placeholder={defaultTargets(mode.protocol, family)} disabled={readOnly} styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }} value={targets[key]} onChange={(e) => setTargets({ ...targets, [key]: e.currentTarget.value })} />
+            })}
+          </>}
           <Text size="sm" fw={600} mt="xs">{t('probe.tasks')}</Text>
           <Text size="xs" c="dimmed">{t('probe.tasksHint')}</Text>
           {s.tasks.length > 0 && (
@@ -75,7 +96,7 @@ export default function ProbePage() {
           {!readOnly && (
             <Group justify="space-between">
               <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={addTask}>{t('probe.addTask')}</Button>
-              <Button size="xs" loading={save.isPending} onClick={() => save.mutate(s)}>{t('common.save')}</Button>
+              <Button size="xs" disabled={!loaded} loading={save.isPending} onClick={() => save.mutate(s)}>{t('common.save')}</Button>
             </Group>
           )}
         </Stack>
