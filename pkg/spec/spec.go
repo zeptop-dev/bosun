@@ -625,15 +625,16 @@ func SplitInboundUser(s string) (name, tag string) {
 
 // SystemStatus is a host resource snapshot.
 type SystemStatus struct {
-	Valid      *MetricValidity `json:"valid,omitempty"`
-	Resources  *Resources      `json:"resources,omitempty"`
-	CPUPercent float64         `json:"cpu_percent,omitempty"`
-	MemTotal   uint64          `json:"mem_total,omitempty"`
-	MemUsed    uint64          `json:"mem_used,omitempty"`
-	SwapTotal  uint64          `json:"swap_total,omitempty"`
-	SwapUsed   uint64          `json:"swap_used,omitempty"`
-	DiskTotal  uint64          `json:"disk_total,omitempty"`
-	DiskUsed   uint64          `json:"disk_used,omitempty"`
+	CarrierProbeVersion int             `json:"carrier_probe_version,omitempty"` // 1 = explicit TCP/ICMP and IPv4/IPv6 carrier series
+	Valid               *MetricValidity `json:"valid,omitempty"`
+	Resources           *Resources      `json:"resources,omitempty"`
+	CPUPercent          float64         `json:"cpu_percent,omitempty"`
+	MemTotal            uint64          `json:"mem_total,omitempty"`
+	MemUsed             uint64          `json:"mem_used,omitempty"`
+	SwapTotal           uint64          `json:"swap_total,omitempty"`
+	SwapUsed            uint64          `json:"swap_used,omitempty"`
+	DiskTotal           uint64          `json:"disk_total,omitempty"`
+	DiskUsed            uint64          `json:"disk_used,omitempty"`
 
 	// Probe fields (bosun >= 0.11); zero when the agent is older.
 	Load1        float64      `json:"load1,omitempty"`
@@ -669,6 +670,8 @@ type HostInfo struct {
 
 // PingResult is the latest measurement of one probe target.
 type PingResult struct {
+	Family    string       `json:"family,omitempty"`
+	Series    string       `json:"series,omitempty"`
 	Quality   *PingQuality `json:"quality,omitempty"`
 	TaskID    int64        `json:"task_id"`        // 0 = built-in carrier probe
 	Name      string       `json:"name"`           // "CT", "CU", "CM" or the task name
@@ -680,12 +683,13 @@ type PingResult struct {
 
 // Probe is the panel's monitoring configuration for a node.
 type Probe struct {
-	Resources   *ResourceOptions `json:"resources,omitempty"`
-	Enabled     bool             `json:"enabled"`
-	BeatSeconds int              `json:"beat_seconds,omitempty"` // default 10
-	CarrierPing bool             `json:"carrier_ping,omitempty"` // TCP-connect latency to the carrier probe points
-	Carriers    []Carrier        `json:"carriers,omitempty"`     // empty = DefaultCarriers
-	Tasks       []PingTask       `json:"tasks,omitempty"`
+	CarrierProbe *CarrierProbeConfig `json:"carrier_probe,omitempty"`
+	Resources    *ResourceOptions    `json:"resources,omitempty"`
+	Enabled      bool                `json:"enabled"`
+	BeatSeconds  int                 `json:"beat_seconds,omitempty"` // default 10
+	CarrierPing  bool                `json:"carrier_ping,omitempty"` // TCP-connect latency to the carrier probe points
+	Carriers     []Carrier           `json:"carriers,omitempty"`     // empty = DefaultCarriers
+	Tasks        []PingTask          `json:"tasks,omitempty"`
 }
 
 // Deprecated: retained only for decoding old configuration; ignored by bosun.
@@ -730,21 +734,23 @@ func (d DStatus) Active() bool { return d.Mode == DStatusActive }
 // DStatusListen is where the neko-status agent listens by default.
 const DStatusListen = ":9999"
 
-// Carrier is one always-on TCP-connect latency target, named after the
+// Carrier is one carrier latency target, named after the
 // network it represents (CT/CU/CM by default).
 type Carrier struct {
 	Name string `json:"name" yaml:"name"`
-	Addr string `json:"addr" yaml:"addr"` // host:port
+	Addr string `json:"addr" yaml:"addr"` // TCP: host:port; ICMP: host or IP
 }
 
 // DefaultCarriers are the three Chinese carriers' probe points used by
 // ServerStatus-style monitors; a refused connection still yields an RTT.
 func DefaultCarriers() []Carrier {
-	return []Carrier{{"CT", "ct.tz.cloudcpp.com:80"}, {"CU", "cu.tz.cloudcpp.com:80"}, {"CM", "cm.tz.cloudcpp.com:80"}}
+	return DefaultCarrierTargets("tcp", "ipv4")
 }
 
 // PingTask is a panel-defined latency check the node runs.
 type PingTask struct {
+	Family          string `json:"family,omitempty" yaml:"family,omitempty"` // empty = legacy automatic selection
+	Series          string `json:"series,omitempty" yaml:"series,omitempty"` // generated carrier identity only
 	ID              int64  `json:"id" yaml:"id"`
 	Name            string `json:"name" yaml:"name"`
 	Type            string `json:"type" yaml:"type"`     // icmp | tcp | http | download
