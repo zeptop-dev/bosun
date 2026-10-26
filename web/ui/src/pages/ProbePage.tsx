@@ -71,7 +71,7 @@ export default function ProbePage() {
             </Group>
             {families.map((family) => {
               const key = `${mode.protocol}_${family}` as TargetKey
-              return <Textarea key={key} label={`${t('probe.carriers')} · ${family === 'ipv6' ? 'IPv6' : 'IPv4'}`} description={t(mode.protocol === 'icmp' ? 'probe.carriersICMPHint' : 'probe.carriersTCPHint')} autosize minRows={3} placeholder={defaultTargets(mode.protocol, family)} disabled={readOnly} styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }} value={targets[key]} onChange={(e) => setTargets({ ...targets, [key]: e.currentTarget.value })} />
+              return <Textarea key={key} label={`${t('probe.carriers')} · ${family === 'ipv6' ? 'IPv6' : 'IPv4'}`} description={mode.protocol === 'icmp' ? t('probe.carriersICMPHint') : t('probe.carriersTCPHint')} autosize minRows={3} placeholder={defaultTargets(mode.protocol, family)} disabled={readOnly} styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }} value={targets[key]} onChange={(e) => setTargets({ ...targets, [key]: e.currentTarget.value })} />
             })}
           </>}
           <Text size="sm" fw={600} mt="xs">{t('probe.tasks')}</Text>
