@@ -24,6 +24,7 @@ Verified end to end against the manifest's tested releases (sing-box
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
 - Captain configuration-application confirmation (v0.81): report the exact revision successfully applied by both proxy and forwarding paths, separately from the latest received revision. Preserve unknown state across failures/restarts and retry failed nft changes; confirmation still requires runtime observations before it can support a service-status result. [Semantics and version compatibility](docs/CORE_MANAGEMENT.md#received-and-successfully-applied-revisions).
+- Carrier monitoring (bosun v0.82 / Captain v1.43): select TCP/ICMP and IPv4/IPv6/dual independently, preserve four target lists, and keep per-family measurements and Prometheus series separate. Permission and routing failures stay explicit without a protocol/family fallback. [Configuration and compatibility](#carrier-monitoring-compatibility).
 - Automatic private-access enforcement (v0.74): independent adapter/runtime capability reports, prerequisite checks, and acknowledged core-only authorization for sing-box/Extended exits. Existing dual-layer policies remain compatible. [Details](#automatic-private-access-enforcement).
 - Default-off per-inbound private destination access for supported sing-box/Xray configurations, with CIDR/protocol/port scopes, UID/socket-mark nft enforcement and independent managed Reverse exit permissions. Existing user tc classes are retained; unsupported proxy chains and overrides are rejected. [Usage and support boundaries](#per-inbound-private-access-bosun-063--captain-114).
 - Per-inbound user lists (`spec.Inbound.ScopedUsers`): an inbound restricted to a user group only provisions that group; the mita adapter runs one instance per inbound because mita users are global to a process.
@@ -399,6 +400,30 @@ The legacy `carrier_ping` / `carriers` settings remain readable; without an
 explicit `carrier_probe`, omitted targets use NextTrace TCP IPv4 defaults.
 An explicit `carrier_probe` supersedes those legacy runtime settings. The local
 UI keeps its carrier enable switch and preserves all four target lists.
+
+### Carrier monitoring compatibility
+
+Managed protocol/family selection requires bosun v0.82.0 and Captain v1.43.0
+or newer. The new panel suppresses legacy carrier checks on older agents rather
+than presenting old TCP measurements as the requested ICMP or IPv6 series;
+their proxy services and ordinary monitoring tasks continue. An older Captain
+can keep using the legacy carrier fields with a new agent, but cannot select or
+interpret the new independent modes.
+
+Legacy custom IPv6 literals retain IPv6; legacy custom hostnames have no stored
+family and use IPv4. Select IPv6 explicitly for an IPv6-only hostname. TCP
+connection refusal counts as host reachability under the existing carrier
+policy, not as an open service port. The default target may answer ICMP while
+timing out on TCP, so compare the selected protocol and family when interpreting
+readings. No subscriber routing, traffic accounting or proxy cores are changed.
+
+**中文说明：** bosun v0.82.0 / Captain v1.43.0 支持三网 TCP/ICMP 与
+IPv4/IPv6/双栈选择，四套目标分别保存，双栈结果独立统计；无权限、不可达和超时
+保持各自含义，不自动换协议或地址族。新面板对旧节点提示升级，不会把旧 TCP
+结果当成 ICMP 或 IPv6；代理服务和普通监控任务继续运行。旧配置中的 IPv6
+字面地址保持原地址族，自定义域名默认 IPv4，只有 IPv6 的域名需明确选择 IPv6。
+TCP 拒绝连接仅证明目标主机有响应，不证明端口开放；ICMP 可达也不代表 TCP 可达。
+本次不改变用户代理路由、计费、订阅或默认内核。
 
 ## Network quality (v0.56)
 
