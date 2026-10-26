@@ -433,6 +433,9 @@ func ValidateProbe(p *ProbeSettings) error {
 
 // SetProbe validates and stores the probe configuration.
 func (s *Store) SetProbe(p ProbeSettings) error {
+	// ValidateProbe normalizes nil slices into empty slices. Keep the request's
+	// presence bit so an older client can omit targets without clearing them.
+	legacyCarriersProvided := p.Carriers != nil
 	if err := ValidateProbe(&p); err != nil {
 		return err
 	}
@@ -443,7 +446,36 @@ func (s *Store) SetProbe(p ProbeSettings) error {
 	}
 	if p.CarrierProbe == nil {
 		p.CarrierProbe = s.st.Probe.CarrierProbe.Clone()
+		if p.CarrierProbe == nil {
+			// Before migration the legacy list described every target. The first
+			// explicit replacement/clear must also replace its inferred family.
+			carriers := s.st.Probe.Carriers
+			if legacyCarriersProvided {
+				carriers = p.Carriers
+			}
+			migrated := spec.LegacyCarrierProbe(carriers)
+			p.CarrierProbe = &migrated
+		} else if legacyCarriersProvided {
+			// Older clients edit the TCP draft without erasing independent ICMP
+			// choices. IPv6 literals remain valid in the legacy target list.
+			legacy := spec.LegacyCarrierProbe(p.Carriers)
+			p.CarrierProbe.TCPIPv4 = legacy.TCPIPv4
+			if len(legacy.TCPIPv6) > 0 {
+				p.CarrierProbe.TCPIPv6 = legacy.TCPIPv6
+				if p.CarrierProbe.Protocol == "tcp" {
+					p.CarrierProbe.Family = legacy.Family
+				}
+			}
+		}
 	}
+	carrier := p.CarrierProbe.Normalize()
+	if err := carrier.Validate(); err != nil {
+		return err
+	}
+	p.CarrierProbe = &carrier
+	// Match Captain's legacy projection; the modern object retains the other
+	// three drafts even when an old settings client only sends this list back.
+	p.Carriers = append([]spec.Carrier{}, carrier.TCPIPv4...)
 	s.st.Probe = p
 	return s.commit()
 }
