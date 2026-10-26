@@ -83,6 +83,28 @@ func (t PingTask) Validate() error {
 	if len(t.Name) > 128 || len(t.Target) > 2048 || !PublicLabel(t.Name) || !Plain(t.Target) || strings.ContainsAny(t.Target, " \t\"'") || t.Target == "" {
 		return fmt.Errorf("invalid probe name or target")
 	}
+	if t.Family != "" && t.Family != "ipv4" && t.Family != "ipv6" {
+		return fmt.Errorf("probe family must be ipv4 or ipv6")
+	}
+	if t.Series != "" && (t.ID != 0 || !ValidCarrierSeries(t.Series)) {
+		return fmt.Errorf("invalid carrier series")
+	}
+	if t.Family != "" {
+		if t.Type != "tcp" && t.Type != "icmp" {
+			return fmt.Errorf("explicit family requires TCP or ICMP")
+		}
+		host := t.Target
+		if t.Type == "tcp" {
+			if v, _, err := net.SplitHostPort(host); err == nil {
+				host = v
+			}
+		}
+		for _, address := range []string{host, t.SourceIP} {
+			if ip := net.ParseIP(address); ip != nil && (ip.To4() != nil) != (t.Family == "ipv4") {
+				return fmt.Errorf("probe address does not match requested family")
+			}
+		}
+	}
 	if t.SourceIP != "" && net.ParseIP(t.SourceIP) == nil {
 		return fmt.Errorf("source must be an IP")
 	}
