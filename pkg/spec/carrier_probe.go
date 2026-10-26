@@ -20,6 +20,28 @@ type CarrierProbeConfig struct {
 	ICMPIPv6 []Carrier `json:"icmp_ipv6,omitempty" yaml:"icmp_ipv6,omitempty"`
 }
 
+// LegacyCarrierProbe preserves explicitly configured IPv6 literals while moving
+// the old single target list into independent family lists. Hostnames retain the
+// new default IPv4 policy; no DNS lookup is made while normalizing configuration.
+func LegacyCarrierProbe(carriers []Carrier) CarrierProbeConfig {
+	c := CarrierProbeConfig{Protocol: "tcp", Family: "ipv4"}
+	for _, target := range carriers {
+		host, _, _ := net.SplitHostPort(target.Addr)
+		if IsIPv6(host) {
+			c.TCPIPv6 = append(c.TCPIPv6, target)
+		} else {
+			c.TCPIPv4 = append(c.TCPIPv4, target)
+		}
+	}
+	if len(c.TCPIPv6) > 0 {
+		c.Family = "ipv6"
+		if len(c.TCPIPv4) > 0 {
+			c.Family = "dual"
+		}
+	}
+	return c
+}
+
 func (c *CarrierProbeConfig) Clone() *CarrierProbeConfig {
 	if c == nil {
 		return nil

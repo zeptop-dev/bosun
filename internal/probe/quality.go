@@ -67,7 +67,7 @@ func (r *Runner) scheduled(ctx context.Context, t spec.PingTask, reachability bo
 		case "tcp":
 			m = r.tcpQuality(ctx, t, reachability)
 		case "icmp":
-			m = icmpQuality(ctx, t)
+			m = r.icmpQuality(ctx, t)
 		case "http", "download":
 			m = r.httpQuality(ctx, t)
 		}
@@ -93,7 +93,7 @@ func (r *Runner) tcpQuality(ctx context.Context, t spec.PingTask, reachability b
 	} else {
 		host, port, _ := net.SplitHostPort(addr)
 		start := time.Now()
-		ips, e := net.DefaultResolver.LookupIPAddr(ctx, host)
+		ips, e := r.resolve(ctx, taskNetwork(t), host)
 		if e == nil && net.ParseIP(host) == nil {
 			m.Timings.DNS = duration(start)
 		}
@@ -110,7 +110,7 @@ func (r *Runner) tcpQuality(ctx context.Context, t spec.PingTask, reachability b
 		for _, ip := range ips {
 			start = time.Now()
 			var c net.Conn
-			c, err = d.DialContext(ctx, "tcp", net.JoinHostPort(ip.String(), port))
+			c, err = d.DialContext(ctx, tcpNetwork(t), net.JoinHostPort(ip.String(), port))
 			elapsed = time.Since(start)
 			if err == nil {
 				c.Close()
@@ -130,21 +130,13 @@ func (r *Runner) tcpQuality(ctx context.Context, t spec.PingTask, reachability b
 	return m
 }
 
-func icmpQuality(ctx context.Context, t spec.PingTask) spec.ProbeMeasurement {
+func (r *Runner) icmpQuality(ctx context.Context, t spec.PingTask) spec.ProbeMeasurement {
 	m := spec.ProbeMeasurement{LatencyMs: -1, Timings: &spec.ProbeTimings{}}
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	start := time.Now()
-	network := "ip"
-	if source := net.ParseIP(t.SourceIP); source != nil {
-		network = "ip6"
-		if source.To4() != nil {
-			network = "ip4"
-		}
-	}
-	// A source-bound check must choose a destination of the same family, even
-	// when DNS puts the other family first.
-	ips, err := net.DefaultResolver.LookupIP(ctx, network, t.Target)
+	// DNS and sockets use the requested family, never the other family.
+	ips, err := r.resolve(ctx, taskNetwork(t), t.Target)
 	if err == nil && net.ParseIP(t.Target) == nil {
 		m.Timings.DNS = duration(start)
 	}
@@ -152,7 +144,20 @@ func icmpQuality(ctx context.Context, t spec.PingTask) spec.ProbeMeasurement {
 		m.Outcome = "dns"
 		return m
 	}
+	if r.ICMP != nil {
+		elapsed, err := r.ICMP(ctx, ips[0].String(), t.SourceIP)
+		m.Outcome = outcome(err)
+		if err == nil {
+			m.LatencyMs = millis(elapsed)
+		}
+		return m
+	}
 	p := probing.New(ips[0].String())
+	if ips[0].To4() == nil {
+		p.SetNetwork("ip6")
+	} else {
+		p.SetNetwork("ip4")
+	}
 	p.Count = 1
 	p.Timeout = dialTimeout
 	p.Source = t.SourceIP
@@ -361,4 +366,50 @@ func windowStats(samples []spec.ProbeMeasurement) spec.ProbeWindow {
 		w.Jitter = &v
 	}
 	return w
+}
+
+// taskNetwork also preserves source-bound legacy checks without mixing families.
+func taskNetwork(t spec.PingTask) string {
+	if t.Family == "ipv4" {
+		return "ip4"
+	}
+	if t.Family == "ipv6" {
+		return "ip6"
+	}
+	if source := net.ParseIP(t.SourceIP); source != nil {
+		if source.To4() != nil {
+			return "ip4"
+		}
+		return "ip6"
+	}
+	return "ip"
+}
+func tcpNetwork(t spec.PingTask) string {
+	switch taskNetwork(t) {
+	case "ip4":
+		return "tcp4"
+	case "ip6":
+		return "tcp6"
+	}
+	return "tcp"
+}
+func (r *Runner) resolve(ctx context.Context, network, host string) ([]net.IP, error) {
+	lookup := net.DefaultResolver.LookupIP
+	if r.LookupIP != nil {
+		lookup = r.LookupIP
+	}
+	ips, err := lookup(ctx, network, host)
+	if err != nil {
+		return nil, err
+	}
+	out := []net.IP{}
+	for _, ip := range ips {
+		if ip != nil && (network == "ip" || (ip.To4() != nil) == (network == "ip4")) {
+			out = append(out, ip)
+		}
+	}
+	if len(out) == 0 {
+		return nil, &net.DNSError{Err: "no address in requested family", Name: host}
+	}
+	return out, nil
 }

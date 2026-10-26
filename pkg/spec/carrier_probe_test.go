@@ -87,3 +87,20 @@ func TestCarrierProbeValidationAndClone(t *testing.T) {
 		}
 	}
 }
+
+func TestLegacyCarrierFamilies(t *testing.T) {
+	for _, tc := range []struct {
+		targets []Carrier
+		family  string
+		v4, v6  int
+	}{
+		{nil, "ipv4", 0, 0},
+		{[]Carrier{{"CT", "[2001:db8::1]:80"}}, "ipv6", 0, 1},
+		{[]Carrier{{"CT", "[2001:db8::1]:80"}, {"CU", "example.com:80"}}, "dual", 1, 1},
+	} {
+		c := LegacyCarrierProbe(tc.targets)
+		if c.Validate() != nil || c.Family != tc.family || len(c.TCPIPv4) != tc.v4 || len(c.TCPIPv6) != tc.v6 {
+			t.Fatal(c)
+		}
+	}
+}

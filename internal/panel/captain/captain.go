@@ -389,6 +389,9 @@ func (c *Client) Probe() *spec.Probe {
 		return nil
 	}
 	p := *c.state.Probe
+	p.CarrierProbe = p.CarrierProbe.Clone()
+	p.Carriers = append([]spec.Carrier(nil), p.Carriers...)
+	p.Tasks = append([]spec.PingTask(nil), p.Tasks...)
 	return &p
 }
 

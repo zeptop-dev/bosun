@@ -17,8 +17,8 @@ export function NetworkQualityTable({ samples }: { samples: NetworkSample[] }) {
     const q = p.quality, w = q?.window
     const stale = !!p.at && now / 1000 - p.at > Math.max(60, (q?.interval_seconds ?? 30) * 2)
     const detail = q?.timings
-    return <Fragment key={`${p.task_id}:${p.name}`}>
-     <Table.Tr><Table.Td><Text fw={600} size="xs">{p.name}</Text><Text size="xs" c="dimmed">{p.at ? new Date(p.at * 1000).toLocaleString() : '—'}</Text></Table.Td>
+    return <Fragment key={`${p.task_id}:${p.name}:${p.series ?? ''}`}>
+     <Table.Tr><Table.Td><Text fw={600} size="xs">{p.name}{p.family && ` · ${p.family === 'ipv6' ? 'IPv6' : 'IPv4'}`}</Text><Text size="xs" c="dimmed">{p.at ? new Date(p.at * 1000).toLocaleString() : '—'}</Text></Table.Td>
       <Table.Td>{t(`networkQuality.types.${q?.type ?? 'legacy'}`)}</Table.Td>
       <Table.Td><Badge size="xs" color={stale ? 'gray' : p.latency_ms < 0 ? 'red' : q?.outcome === 'refused' ? 'orange' : 'teal'}>{stale ? t('networkQuality.stale') : q ? t(`networkQuality.outcomes.${q.outcome}`) : p.latency_ms < 0 ? t('networkQuality.failed') : t('networkQuality.outcomes.ok')}</Badge>{q?.http_status ? <Text size="xs" mt={2}>HTTP {q.http_status}</Text> : null}</Table.Td>
       <Table.Td>{ms(p.latency_ms)}{p.mbps != null && p.mbps > 0 && <Text size="xs">{p.mbps.toFixed(1)} Mbps</Text>}</Table.Td>

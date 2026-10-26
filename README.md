@@ -360,9 +360,9 @@ standalone bosun shows current readings. GPU process enumeration is not enabled.
 When Captain's probe collection is on, the node sends a light host sample every
 few seconds (`POST /api/agent/beat`): CPU, memory, swap, disk, load, network
 rate and totals, TCP/UDP/process counts, uptime, IPv4/IPv6 reachability,
-static host facts, plus latency results: TCP-connect checks against the
-carrier probe points (CT/CU/CM by default; Captain can name its own; no
-ICMP privileges needed) and panel-defined tasks (icmp, tcp, http,
+static host facts, plus latency results: TCP or ICMP checks against the
+carrier probe points (NextTrace Beijing CT/CU/CM by default; Captain can name its
+own), with independent IPv4 and IPv6 series, and panel-defined tasks (icmp, tcp, http,
 download). High-frequency beats and latency tasks stop when collection is off;
 minute host reports continue. Captain can disable its public page separately.
 
@@ -373,14 +373,32 @@ runs the same checks and exposes them on `/metrics` as
 ```yaml
 probe:
   enabled: true
-  carriers:                      # omit for the default CT/CU/CM points
-    - { name: CT, addr: ct.tz.cloudcpp.com:80 }
-    - { name: HK, addr: www.hkix.net:443 }
+  carrier_probe:
+    protocol: icmp                # tcp or icmp; default tcp
+    family: dual                  # ipv4, ipv6 or dual; default ipv4
+    # Omit lists to use NextTrace Beijing CT AS4134 / CU AS4837 / CM AS9808.
+    # All four lists are saved independently: tcp_ipv4, tcp_ipv6,
+    # icmp_ipv4 and icmp_ipv6. TCP targets require a port.
+    icmp_ipv4:
+      - { name: example, addr: 192.0.2.10 }
+    icmp_ipv6:
+      - { name: example, addr: "2001:db8::10" }
   tasks:
     - { name: cf, type: tcp, target: 1.1.1.1:443, interval_seconds: 30 }
     # a dedicated line measured from its own NIC (all task types honour source_ip)
     - { name: IPLC, type: tcp, target: 198.51.100.20:17701, source_ip: 10.10.0.2 }
 ```
+
+Carrier probes run every 10 seconds. ICMP requires raw ICMP permission or an
+available unprivileged ping socket; failures never fall back to TCP or another IP
+family. IPv4 and IPv6 records have independent windows and opaque series IDs,
+which change when protocol, family, label or target changes. Prometheus carrier
+metrics include `family` and `series` labels so dual-stack targets cannot collide.
+These checks follow the server route to the selected target, not a proxy chain.
+The legacy `carrier_ping` / `carriers` settings remain readable; without an
+explicit `carrier_probe`, omitted targets use NextTrace TCP IPv4 defaults.
+An explicit `carrier_probe` supersedes those legacy runtime settings. The local
+UI keeps its carrier enable switch and preserves all four target lists.
 
 ## Network quality (v0.56)
 

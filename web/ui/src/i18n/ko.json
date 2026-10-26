@@ -388,7 +388,7 @@
     "enabled": "프로브 사용",
     "enabledHint": "끄면 아무것도 실행되지 않습니다.",
     "carrier": "통신사 지연",
-    "carrierHint": "10 초마다 CT/CU/CM 측정점에 TCP 연결 시간을 잽니다. 연결 거부도 왕복으로 계산합니다.",
+    "carrierHint": "선택한 방식과 IP 버전으로 10초마다 측정합니다. TCP 연결 거부도 대상 도달로 간주합니다.",
     "carriers": "지연 측정 대상",
     "carriersHint": "한 줄에 하나: 이름 host:port. 비우면 기본 통신사 측정점. 입력하면 전체를 대체합니다.",
     "tasks": "작업",
@@ -404,7 +404,11 @@
       "carriers": "통신사",
       "lines": "전용선",
       "tasks": "작업"
-    }
+    },
+    "carrierProtocol": "측정 방식",
+    "carrierFamily": "IP 버전",
+    "carriersTCPHint": "한 줄에 이름과 호스트:포트를 입력하세요. 비워 두면 NextTrace 베이징 기본 대상을 사용합니다. TCP·ICMP 및 IPv4·IPv6 대상은 따로 저장됩니다.",
+    "carriersICMPHint": "한 줄에 이름과 도메인 또는 IP를 입력하세요(포트 제외). 비워 두면 NextTrace 베이징 기본 대상을 사용합니다. ICMP 권한과 대상 응답이 필요합니다."
   },
   "users": {
     "title": "사용자",

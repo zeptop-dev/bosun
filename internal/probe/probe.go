@@ -1,7 +1,5 @@
-// Package probe measures latency for the panel's status page: TCP-connect
-// checks against the three Chinese carriers' probe points (the ServerStatus
-// technique: unprivileged, ICMP-free) and panel-defined tasks (icmp, tcp,
-// http). Results are kept in memory and attached to every beat.
+// Package probe measures carrier latency using explicit TCP/ICMP and IP-family
+// choices, plus panel-defined tasks. Results are attached to every beat.
 package probe
 
 import (
@@ -9,6 +7,7 @@ import (
 	"crypto/rand"
 	"net"
 	"net/http"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -29,6 +28,27 @@ func carriersOf(cfg spec.Probe) []spec.Carrier {
 	return spec.DefaultCarriers()
 }
 
+// New configurations suppress the legacy switches even when invalid. Never
+// silently measure TCP/IPv4 when the caller explicitly requested another mode.
+func carrierTasks(cfg spec.Probe) []spec.PingTask {
+	if cfg.CarrierProbe != nil {
+		return cfg.CarrierProbe.Tasks()
+	}
+	if !cfg.CarrierPing {
+		return nil
+	}
+	out := []spec.PingTask{}
+	for _, c := range carriersOf(cfg) {
+		family := "ipv4"
+		host, _, _ := net.SplitHostPort(c.Addr)
+		if spec.IsIPv6(host) {
+			family = "ipv6"
+		}
+		out = append(out, spec.PingTask{Name: c.Name, Type: "tcp", Target: c.Addr, Family: family, Series: spec.CarrierSeries("tcp", family, c.Name, c.Addr), IntervalSeconds: 10, TCPReachability: true})
+	}
+	return out
+}
+
 const (
 	ringSize       = 30 // 5 minutes of carrier samples
 	dialTimeout    = 3 * time.Second
@@ -37,6 +57,9 @@ const (
 
 // Runner owns the probe goroutines.
 type Runner struct {
+	// LookupIP and ICMP are injectable transports for protocol/family tests.
+	LookupIP func(context.Context, string, string) ([]net.IP, error)
+	ICMP     func(context.Context, string, string) (time.Duration, error)
 	// Dial overrides TCP dialing (tests).
 	Dial func(ctx context.Context, addr string) (time.Duration, error)
 	// DialFrom is Dial with a bound source address (tests).
@@ -63,6 +86,7 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 		next = *cfg
 		next.Tasks = append([]spec.PingTask(nil), cfg.Tasks...)
 		next.Carriers = append([]spec.Carrier(nil), cfg.Carriers...)
+		next.CarrierProbe = cfg.CarrierProbe.Clone()
 	}
 	if sameConfig(r.cfg, next) && (r.cancel != nil || !next.Enabled) {
 		return
@@ -79,10 +103,8 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 	}
 	ctx, cancel := context.WithCancel(parent)
 	r.cancel = cancel
-	if next.CarrierPing {
-		for _, c := range carriersOf(next) {
-			go r.qualityLoop(ctx, spec.PingTask{Name: c.Name, Type: "tcp", Target: c.Addr, IntervalSeconds: 10}, true, r.epoch)
-		}
+	for _, t := range carrierTasks(next) {
+		go r.qualityLoop(ctx, t, t.TCPReachability, r.epoch)
 	}
 	for _, t := range next.Tasks {
 		// Older Captains identify automatic line checks by negative ingress ID.
@@ -93,7 +115,7 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 }
 
 func sameConfig(a, b spec.Probe) bool {
-	if a.Enabled != b.Enabled || a.CarrierPing != b.CarrierPing || len(a.Tasks) != len(b.Tasks) || len(a.Carriers) != len(b.Carriers) {
+	if !reflect.DeepEqual(a.CarrierProbe, b.CarrierProbe) || a.Enabled != b.Enabled || a.CarrierPing != b.CarrierPing || len(a.Tasks) != len(b.Tasks) || len(a.Carriers) != len(b.Carriers) {
 		return false
 	}
 	for i := range a.Carriers {
@@ -123,8 +145,9 @@ func (r *Runner) Stop() {
 }
 
 type probeKey struct {
-	id   int64
-	name string
+	id     int64
+	name   string
+	series string
 }
 type probeRecord struct {
 	result       spec.PingResult
@@ -155,7 +178,7 @@ func (r *Runner) qualityLoop(ctx context.Context, t spec.PingTask, reachability 
 			r.mu.Unlock()
 			return
 		}
-		key := probeKey{t.ID, t.Name}
+		key := probeKey{t.ID, t.Name, t.Series}
 		rec := r.records[key]
 		if rec == nil {
 			rec = &probeRecord{}
@@ -170,7 +193,7 @@ func (r *Runner) qualityLoop(ctx context.Context, t spec.PingTask, reachability 
 			kind = "tcp_reachability"
 		}
 		w := windowStats(rec.samples)
-		rec.result = spec.PingResult{TaskID: t.ID, Name: t.Name, At: m.At, LatencyMs: m.LatencyMs, Mbps: m.Mbps, Loss: float64(w.Failed) * 100 / float64(w.Attempts), Quality: &spec.PingQuality{ProbeMeasurement: m, Epoch: epoch, Type: kind, IntervalSeconds: int(iv / time.Second), Window: w}}
+		rec.result = spec.PingResult{TaskID: t.ID, Name: t.Name, Family: t.Family, Series: t.Series, At: m.At, LatencyMs: m.LatencyMs, Mbps: m.Mbps, Loss: float64(w.Failed) * 100 / float64(w.Attempts), Quality: &spec.PingQuality{ProbeMeasurement: m, Epoch: epoch, Type: kind, IntervalSeconds: int(iv / time.Second), Window: w}}
 		r.mu.Unlock()
 		select {
 		case <-ctx.Done():
@@ -324,13 +347,11 @@ func (r *Runner) results(batch bool) []spec.PingResult {
 		}
 		return keys[i].name < keys[j].name
 	})
-	if r.cfg.CarrierPing {
-		carriers := []probeKey{}
-		for _, c := range carriersOf(r.cfg) {
-			carriers = append(carriers, probeKey{0, c.Name})
-		}
-		keys = append(carriers, keys...)
+	carriers := []probeKey{}
+	for _, t := range carrierTasks(r.cfg) {
+		carriers = append(carriers, probeKey{0, t.Name, t.Series})
 	}
+	keys = append(carriers, keys...)
 	for _, key := range keys {
 		rec := r.records[key]
 		if rec == nil {
@@ -360,7 +381,7 @@ func (r *Runner) Acknowledge(batch []spec.PingResult) {
 		if p.Quality == nil || p.Quality.Epoch != r.epoch {
 			continue
 		}
-		if rec := r.records[probeKey{p.TaskID, p.Name}]; rec != nil {
+		if rec := r.records[probeKey{p.TaskID, p.Name, p.Series}]; rec != nil {
 			rec.acknowledged = max(rec.acknowledged, p.Quality.Sequence)
 		}
 	}
