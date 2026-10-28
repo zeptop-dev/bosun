@@ -34,6 +34,9 @@ func ValidateMonitorState(n *Node, users []User, forwards []Forward) error {
 	if n == nil {
 		return nil
 	}
+	if n.ServiceControl != nil && n.ServiceControl.Mode != ServiceControlNormal {
+		return ErrMonitorOnly
+	}
 	if len(n.WireGuardLinks)+len(n.Inbounds)+len(n.Outbounds)+len(n.Routes)+len(n.Forwards)+len(n.ReverseClients)+len(n.Overrides)+len(n.EgressUpstreams)+len(n.Certificates)+len(users)+len(forwards) > 0 || n.Decoy != nil || n.ACME != nil || n.DefaultOutbound != "" || n.UserSpeedLimitMbps != 0 || n.AllowPrivateDest || len(n.PrivateDestAllow) > 0 || n.EgressByIngress || len(n.AuditRules) > 0 || len(n.DNS) > 0 || n.ConnLog {
 		return ErrMonitorOnly
 	}

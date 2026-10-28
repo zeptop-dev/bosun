@@ -151,8 +151,20 @@ func withSkip(m map[string]string, tag, reason string) map[string]string {
 func (a *Agent) applyInner(ctx context.Context) error {
 	a.shaperMu.Lock()
 	defer a.shaperMu.Unlock()
+	if err := a.reconcileServiceControl(ctx); err != nil {
+		if a.serviceControlActive() {
+			return errors.Join(err, a.stopControlledServices(ctx))
+		}
+		return err
+	}
+	if a.serviceControlPaused() {
+		return a.stopControlledServices(ctx)
+	}
 	if handled, err := a.applyNodeMode(ctx); handled {
 		return err
+	}
+	if a.serviceControlActive() {
+		a.resolveCerts(ctx, a.node)
 	}
 	if err := a.prepareWireGuard(ctx); err != nil {
 		return err
@@ -545,6 +557,16 @@ func (a *Agent) applyForwards(ctx context.Context) (err error) {
 		}
 		rules = append(rules, a.node.Forwards...)
 		_, revision = a.consumedRevisions()
+	}
+	// A forward-only pull can change the owned NAT scope without a core apply.
+	if err = a.reconcileServiceControl(ctx); err != nil {
+		if a.serviceControlActive() {
+			return errors.Join(err, a.fwd.Apply(nil))
+		}
+		return err
+	}
+	if a.serviceControlPaused() {
+		return a.fwd.Apply(nil)
 	}
 	err = a.fwd.Apply(rules)
 	if a.kernelNode != nil {

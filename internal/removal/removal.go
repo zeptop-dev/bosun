@@ -415,7 +415,7 @@ func cleanNetwork(ctx context.Context, paths installation) error {
 	if _, err := exec.LookPath("nft"); err != nil {
 		return nil
 	}
-	for _, table := range []string{"bosun_fwd", "bosun_ingress", "bosun_egress", "bosun_shaper"} {
+	for _, table := range []string{"bosun_fwd", "bosun_ingress", "bosun_egress", "bosun_shaper", "bosun_service_control"} {
 		// Create-if-absent followed by delete avoids mistaking an absent table
 		// for a permission failure. Table names are fixed, never panel input.
 		cmd := exec.CommandContext(ctx, "nft", "-f", "-")
@@ -423,6 +423,9 @@ func cleanNetwork(ctx context.Context, paths installation) error {
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("remove bosun network rules: %w", err)
 		}
+	}
+	if err := os.Remove(filepath.Join(paths.data, "service-control", "service-control-owned.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	return nil
 }

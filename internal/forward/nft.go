@@ -179,7 +179,11 @@ func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) error {
 	targets := map[string]nftTarget{}
 	errs := map[string]error{}
 	for _, f := range rules {
-		t, err := resolveNFTFamily(ctx, f.Target, f.Listen)
+		t, ready := m.preparedNFT[f.Tag]
+		var err error
+		if !ready || m.preparedNFTKeys[f.Tag] != key(f) {
+			t, err = resolveNFTFamily(ctx, f.Target, f.Listen)
+		}
 		if err != nil {
 			errs[f.Tag] = err
 			continue
@@ -239,4 +243,35 @@ func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) error {
 		}
 	}
 	return errors.Join(problems...)
+}
+
+// ServiceControlScope pins the same resolved NAT family for the guard and the
+// ensuing NFT apply. Resolving twice can produce different DNS families and
+// either miss managed traffic or block a foreign same-port DNAT rule.
+func (m *Manager) ServiceControlScope(ctx context.Context, rules []spec.Forward) ([]spec.Forward, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.preparedNFT = map[string]nftTarget{}
+	m.preparedNFTKeys = map[string]string{}
+	var out []spec.Forward
+	for _, f := range rules {
+		if f.Backend != "nft" {
+			continue
+		}
+		target, err := resolveNFTFamily(ctx, f.Target, f.Listen)
+		if err != nil {
+			return nil, err
+		}
+		m.preparedNFT[f.Tag] = target
+		m.preparedNFTKeys[f.Tag] = key(f)
+		listen := f.Listen
+		if listen == "" || listen == "0.0.0.0" || listen == "::" {
+			listen = "0.0.0.0"
+			if spec.IsIPv6(target.IP) {
+				listen = "::"
+			}
+		}
+		out = append(out, spec.Forward{Listen: listen, Port: f.Port, Protocol: f.Protocol, Backend: "nft"})
+	}
+	return out, nil
 }

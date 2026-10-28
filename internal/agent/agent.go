@@ -31,6 +31,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/ingressguard"
 	"github.com/zeptop-dev/bosun/internal/metrics"
 	"github.com/zeptop-dev/bosun/internal/panel"
+	"github.com/zeptop-dev/bosun/internal/servicecontrol"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/internal/sysinfo"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
@@ -89,6 +90,7 @@ type Agent struct {
 	// Alert delivers an operator notification (Telegram); nil = none.
 	Alert func(text string)
 	// Shaper enforces per-user speed limits in the kernel; nil = none.
+	ServiceControl  *servicecontrol.Manager
 	Shaper          *shaper.Shaper
 	wireGuard       *wireGuardRuntime
 	wireGuardActive atomic.Bool
@@ -429,6 +431,13 @@ func (a *Agent) Run(ctx context.Context) error {
 				}
 			}
 		case <-firewallTick.C:
+			if a.node != nil && !a.modeChanging.Load() {
+				if err := a.reconcileServiceControl(ctx); err != nil {
+					a.coreDirty = true
+					a.dirty = true
+					a.log.Warn("service control reconcile", "err", err)
+				}
+			}
 			if a.Firewall != nil && !a.modeChanging.Load() {
 				if err := a.Firewall.Refresh(ctx); err != nil {
 					a.log.Warn("firewall reconcile", "err", err)
@@ -518,7 +527,7 @@ func (a *Agent) pull(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("node: %w", err)
 	}
 	if nodeChanged {
-		if a.proxyModeReady(node) {
+		if a.proxyModeReady(node) && (node.ServiceControl == nil || node.ServiceControl.Mode == spec.ServiceControlNormal) {
 			a.resolveCerts(ctx, node)
 		}
 		a.node = node

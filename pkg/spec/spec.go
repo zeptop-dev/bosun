@@ -507,6 +507,7 @@ func (f Forward) BalanceMode() string {
 
 // Node is the complete desired state for this server.
 type Node struct {
+	ServiceControl  *ServiceControl  `json:"service_control,omitempty"`
 	WireGuardLinks  []WireGuardLink  `json:"wireguard_links,omitempty"`
 	ModeRevision    uint64           `json:"mode_revision,omitempty"`
 	Mode            NodeMode         `json:"mode,omitempty"`

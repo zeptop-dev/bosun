@@ -68,10 +68,11 @@ type CertState struct {
 // Deps is everything Run looks at. Zero fields make the related check a
 // skip, so an agent-less CLI run can still use the package.
 type Deps struct {
-	MonitorOnly bool
-	Node        *spec.Node
-	Users       []spec.User
-	Cores       []CoreState
+	ServiceControl *agentproto.ServiceControlReport
+	MonitorOnly    bool
+	Node           *spec.Node
+	Users          []spec.User
+	Cores          []CoreState
 	// Skipped lists inbounds the agent left out of the last apply, by tag,
 	// with the reason (missing certificate, no core, waiting for users).
 	Skipped map[string]string
@@ -133,8 +134,13 @@ func Run(ctx context.Context, d Deps) Report {
 	}
 	rep := Report{At: now(), Checks: []Check{}}
 	checks := []func(context.Context, *Deps) []Check{
-		checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
+		checkServiceControl, checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
 		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen, checkIsolation, checkRules,
+	}
+	// Intentionally paused services are not failed listeners. Keep host,
+	// panel and control checks, without probing deliberately closed ports.
+	if d.Node != nil && d.Node.ServiceControl != nil && d.Node.ServiceControl.Mode == spec.ServiceControlPause && d.ServiceControl != nil && d.ServiceControl.Error == "" && d.ServiceControl.AppliedRevision == d.Node.ServiceControl.Revision && d.ServiceControl.Mode == spec.ServiceControlPause {
+		checks = []func(context.Context, *Deps) []Check{checkServiceControl, checkDisk, checkMemory, checkPanel, checkPublic, checkTime}
 	}
 	for _, fn := range checks {
 		cctx, cancel := context.WithTimeout(ctx, perCheck)
@@ -674,4 +680,30 @@ func joinPorts(ports []int) string {
 		out = append(out, strconv.Itoa(p))
 	}
 	return strings.Join(out, ", ")
+}
+
+func checkServiceControl(_ context.Context, d *Deps) []Check {
+	if d.Node == nil || d.Node.ServiceControl == nil {
+		return nil
+	}
+	want := d.Node.ServiceControl
+	c := Check{ID: "service_control", Name: "Managed proxy service control", Status: Fail, Detail: "service control has no runtime confirmation"}
+	if d.ServiceControl == nil {
+		return []Check{c}
+	}
+	got := d.ServiceControl
+	if got.Error != "" {
+		c.Detail = got.Error
+	} else if got.AppliedRevision != want.Revision {
+		c.Detail = "service control is waiting for the requested revision"
+	} else if got.Mode != want.Mode || got.LimitMbps != want.LimitMbps {
+		c.Detail = "service control runtime does not match requested policy"
+	} else {
+		c.Status = OK
+		c.Detail = "managed proxy mode: " + got.Mode
+		if got.Mode == spec.ServiceControlLimit {
+			c.Detail += fmt.Sprintf("; aggregate upload plus download %d Mbps (packet policing)", got.LimitMbps)
+		}
+	}
+	return []Check{c}
 }

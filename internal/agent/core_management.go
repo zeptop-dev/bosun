@@ -67,6 +67,9 @@ func (a *Agent) ManageCore(ctx context.Context, r spec.CoreRequest) error {
 
 func (a *Agent) activateCore(runCtx, ctx context.Context, r spec.CoreRequest) error {
 	m := a.CoreManager
+	if a.serviceControlPaused() {
+		return errors.New("resume proxy services before activating a core")
+	}
 	if a.dirty {
 		return errors.New("resolve the failed configuration apply before switching cores")
 	}

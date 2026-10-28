@@ -50,10 +50,11 @@ type Stats struct {
 
 // rule is one running forward with its listeners.
 type rule struct {
-	spec   spec.Forward
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	log    *slog.Logger
+	controlled bool
+	spec       spec.Forward
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	log        *slog.Logger
 
 	active   atomic.Int64
 	total    atomic.Int64
@@ -78,9 +79,12 @@ type Manager struct {
 	mu    sync.Mutex
 	rules map[string]*rule
 	// nftApplied is the nft script currently installed ("" = no table).
-	nftApplied string
+	nftApplied      string
+	preparedNFT     map[string]nftTarget
+	preparedNFTKeys map[string]string
 	// Realm runs the rules with Backend "realm"; nil rejects them.
-	Realm *Realm
+	Realm      *Realm
+	controlled bool
 }
 
 // NewManager returns an empty manager.
@@ -135,7 +139,7 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 			m.log.Info("realm forward added", "tag", f.Tag, "port", f.Port, "protocol", f.Protocol, "target", f.Target)
 			continue
 		}
-		r, err := start(f, m.log)
+		r, err := startControlled(f, m.log, m.controlled)
 		if err != nil {
 			m.log.Error("forward failed to start", "tag", f.Tag, "err", err)
 			if firstErr == nil {
@@ -173,6 +177,25 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 		cancel()
 	}
 	return firstErr
+}
+
+// SetServiceControl transitions relay socket ownership before applying a guard.
+// Existing sockets cannot acquire a listener mark retroactively; stop those
+// relays once when enabling control, then recreate only marked sockets. Other
+// backends and unchanged controlled policies retain their live connections.
+func (m *Manager) SetServiceControl(enabled bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.controlled == enabled {
+		return
+	}
+	m.controlled = enabled
+	for k, r := range m.rules {
+		if r.spec.Backend == "" || r.spec.Backend == "relay" {
+			r.stop()
+			delete(m.rules, k)
+		}
+	}
 }
 
 // startProbeOnly builds a rule that opens no listener (the kernel forwards)
@@ -311,14 +334,22 @@ func protocols(f spec.Forward) []string {
 }
 
 func start(f spec.Forward, log *slog.Logger) (*rule, error) {
+	return startControlled(f, log, false)
+}
+
+func startControlled(f spec.Forward, log *slog.Logger, controlled bool) (*rule, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &rule{spec: f, cancel: cancel, log: log.With("tag", f.Tag), hops: newHops(f)}
+	r := &rule{controlled: controlled, spec: f, cancel: cancel, log: log.With("tag", f.Tag), hops: newHops(f)}
 	addr := net.JoinHostPort(f.Listen, strconv.Itoa(f.Port))
 	var closers []func()
 	for _, p := range protocols(f) {
 		switch p {
 		case "tcp":
-			ln, err := net.Listen("tcp", addr)
+			lc := net.ListenConfig{}
+			if controlled {
+				lc.Control = serviceSocketControl
+			}
+			ln, err := lc.Listen(ctx, "tcp", addr)
 			if err != nil {
 				cancel()
 				for _, c := range closers {
@@ -332,7 +363,11 @@ func start(f spec.Forward, log *slog.Logger) (*rule, error) {
 			r.wg.Add(1)
 			go r.probeLoop(ctx)
 		case "udp":
-			pc, err := net.ListenPacket("udp", addr)
+			lc := net.ListenConfig{}
+			if controlled {
+				lc.Control = serviceSocketControl
+			}
+			pc, err := lc.ListenPacket(ctx, "udp", addr)
 			if err != nil {
 				cancel()
 				for _, c := range closers {

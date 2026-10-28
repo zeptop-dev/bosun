@@ -148,6 +148,9 @@ func (r *rule) dialTCP(ctx context.Context) (net.Conn, *hop) {
 		}
 		dctx, cancel := context.WithTimeout(ctx, timeout)
 		var d net.Dialer
+		if r.controlled {
+			d.Control = serviceSocketControl
+		}
 		c, err := d.DialContext(dctx, "tcp", h.target)
 		cancel()
 		if err == nil {

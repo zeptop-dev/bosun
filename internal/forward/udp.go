@@ -18,7 +18,11 @@ type udpSession struct {
 // (for UDP that only fails on resolution or routing).
 func (r *rule) dialUDP() (net.Conn, *hop) {
 	for _, h := range r.candidatesFor("udp") {
-		t, err := net.DialTimeout("udp", h.target, dialTimeout)
+		d := net.Dialer{Timeout: dialTimeout}
+		if r.controlled {
+			d.Control = serviceSocketControl
+		}
+		t, err := d.Dial("udp", h.target)
 		if err == nil {
 			return t, h
 		}

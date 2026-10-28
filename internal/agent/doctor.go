@@ -57,7 +57,7 @@ func (a *Agent) Doctor(ctx context.Context) doctor.Report {
 		cp := *node
 		n = &cp
 	}
-	return doctor.Run(ctx, doctor.Deps{MonitorOnly: a.MonitorOnly(),
+	return doctor.Run(ctx, doctor.Deps{ServiceControl: a.serviceControlReport(), MonitorOnly: a.MonitorOnly(),
 		Node: n, Users: users, Cores: cores, CoresKnown: true, Forwards: fwds, Certs: certs, Host: host,
 		Managed: managed, LastReport: lastReport, LastError: lastErr, PushInterval: a.driver.Intervals().Push, Started: a.started,
 		Assign: assign, Shaper: a.Status().Shaper,

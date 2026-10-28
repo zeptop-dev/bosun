@@ -76,6 +76,7 @@ type Beat struct {
 
 // Report is what bosun pushes every push interval.
 type Report struct {
+	ServiceControl *ServiceControlReport `json:"service_control,omitempty"`
 	// Hostname is freshly read for each report; omitted on lookup failure.
 	Hostname         string           `json:"hostname,omitempty"`
 	PublicAddresses  *PublicAddresses `json:"public_addresses,omitempty"`

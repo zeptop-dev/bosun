@@ -141,7 +141,7 @@ func (a *Agent) collectTagged(ctx context.Context, pending map[string]spec.Traff
 func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) agentproto.Report {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	rep := agentproto.Report{WireGuard: a.wireGuardReport(ctx), NodeMode: a.cfg.NodeMode.Effective(), NodeModeRevision: a.modeRevision(), CoreInventory: a.CoreInventory(), Traffic: traffic, Host: host, Cores: a.CoreStatus(), Online: map[string][]string{}}
+	rep := agentproto.Report{ServiceControl: a.serviceControlReport(), WireGuard: a.wireGuardReport(ctx), NodeMode: a.cfg.NodeMode.Effective(), NodeModeRevision: a.modeRevision(), CoreInventory: a.CoreInventory(), Traffic: traffic, Host: host, Cores: a.CoreStatus(), Online: map[string][]string{}}
 	a.statusMu.Lock()
 	if a.appliedCoreRevision != "" && a.appliedCoreRevision == a.appliedForwardRevision {
 		rep.AppliedRevision = a.appliedCoreRevision
