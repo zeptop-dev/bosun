@@ -25,7 +25,9 @@ func render(ib spec.Inbound) ([]byte, error) {
 	}
 	listen := ib.Listen
 	if listen == "" {
-		listen = "0.0.0.0"
+		// Like the other cores, an omitted address means any address, not
+		// IPv4-only. Keep explicit binds unchanged.
+		listen = "::"
 	}
 	if strings.Contains(listen, ":") && !strings.HasPrefix(listen, "[") {
 		listen = "[" + listen + "]"

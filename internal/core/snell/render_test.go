@@ -12,7 +12,7 @@ func TestRender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "[snell-server]\nlisten = 0.0.0.0:6160\npsk = secret\nipv6 = false\nobfs = http\nobfs-host = www.bing.com\n"
+	want := "[snell-server]\nlisten = [::]:6160\npsk = secret\nipv6 = false\nobfs = http\nobfs-host = www.bing.com\n"
 	if string(out) != want {
 		t.Fatalf("got\n%s", out)
 	}
@@ -28,5 +28,19 @@ func TestRender(t *testing.T) {
 		if _, err := render(bad); err == nil {
 			t.Fatalf("expected error for %+v", bad)
 		}
+	}
+}
+
+func TestExplicitListenFamiliesArePreserved(t *testing.T) {
+	for listen, want := range map[string]string{
+		"0.0.0.0": "0.0.0.0:6160", "::": "[::]:6160",
+		"198.51.100.20": "198.51.100.20:6160", "2001:db8::20": "[2001:db8::20]:6160",
+	} {
+		t.Run(listen, func(t *testing.T) {
+			out, err := render(spec.Inbound{Tag: "s", Protocol: spec.Snell, Port: 6160, Listen: listen, SnellPSK: "test-key"})
+			if err != nil || !strings.Contains(string(out), "listen = "+want+"\n") {
+				t.Fatalf("explicit listener changed: %s, %v", out, err)
+			}
+		})
 	}
 }

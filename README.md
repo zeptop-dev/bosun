@@ -1171,6 +1171,13 @@ empty generated groups reject traffic. Hand-written templates retain their
 existing behavior. These are subscription
 configuration features, not a guarantee of system-wide leak protection.
 
+The optional node dual-stack enhancement generates Mihomo's IPv6 and concurrent
+dialer settings. It keeps explicit per-node address-family overrides and the
+client-facing DNS AAAA policy independent. It applies to compatible TCP
+protocols and supported QUIC adapters, not only VLESS; WireGuard and Mieru do
+not gain a guaranteed peer/connection race. See the
+[protocol matrix and prerequisites](docs/DESIGNER_DUAL_STACK.md).
+
 Since bosun v0.79, Claude rules may be pinned into a design's
 `enhancements.claude_rules` snapshot.
 The compiler uses that saved version for both routing and protected DNS, keeping
