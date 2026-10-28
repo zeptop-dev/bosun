@@ -64,10 +64,13 @@ authentication; the race is not an end-to-end health check.
 
 Xray and sing-box already render the omitted listener as `::`; the native
 Hysteria adapter renders an all-address `:port`, and Mieru omits the address
-when listening everywhere. The standalone Snell adapter now renders an omitted
-listener as `[::]:port`, matching the shared inbound specification's
-all-address meaning. Explicit addresses, including `0.0.0.0`, remain unchanged.
-Snell's separate `ipv6 = false` outbound DNS policy remains unchanged.
+when listening everywhere. The standalone Snell adapter retains its existing
+omitted-listener default, `0.0.0.0:port`. It does not automatically rebind an
+existing IPv4 service. An administrator who wants both address families must
+explicitly choose `::` and verify that the actual host and Snell core accept
+both IPv4 and IPv6 connections. Hosts with IPv6 disabled or IPv6-only wildcard
+sockets cannot be assumed to provide this behavior. Explicit addresses and
+Snell's separate `ipv6 = false` outbound DNS policy remain unchanged.
 
 IPv4-mapped listening on an IPv6 wildcard still depends on the host network
 stack and the core. Explicit single-family binds, NAT mappings, container port
@@ -80,8 +83,15 @@ as a substitute for testing the IPv6 listener.
 Automated tests cover saved-design JSON round trips, opt-in/opt-out behavior,
 format gating, DNS-policy independence, and final subscription delivery for
 all 12 currently exported protocols, including preservation of explicit
-single-family overrides. Snell render tests cover omitted, IPv4-only and
-IPv6-only addresses.
+single-family overrides. Snell render tests cover the existing omitted IPv4
+default and explicit IPv4, IPv6 and `::` wildcard addresses.
+
+`TestSnellListenerFamiliesLive` is an opt-in listener check using
+`BOSUN_SNELL_TEST_BINARY` in an isolated Linux network namespace. It checks the
+unchanged default IPv4 listener, explicit `::` dual-family wildcard, and
+explicit IPv4/IPv6 listeners. The dual-family case requires the host and core
+to support IPv4-mapped IPv6 sockets. This Linux Snell check has not been run in
+this change; generated configuration tests are not proof of live connectivity.
 
 `TestMihomoNodeDualStackConnectivityLive` can run with
 `BOSUN_MIHOMO_TEST_BINARY` set to an installed Mihomo binary. It starts an

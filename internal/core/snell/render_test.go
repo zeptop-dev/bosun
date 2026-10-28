@@ -12,7 +12,7 @@ func TestRender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "[snell-server]\nlisten = [::]:6160\npsk = secret\nipv6 = false\nobfs = http\nobfs-host = www.bing.com\n"
+	want := "[snell-server]\nlisten = 0.0.0.0:6160\npsk = secret\nipv6 = false\nobfs = http\nobfs-host = www.bing.com\n"
 	if string(out) != want {
 		t.Fatalf("got\n%s", out)
 	}

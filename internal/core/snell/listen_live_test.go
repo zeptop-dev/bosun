@@ -15,6 +15,9 @@ import (
 
 // Run with a pinned official snell-server binary in an isolated Linux network
 // namespace. This checks actual listeners, not proxy authentication or egress.
+// The explicit :: case requires IPv6 and IPv4-mapped socket support; a failure
+// means that host/core combination cannot provide both families from this bind.
+// This opt-in test has not yet been executed against a Linux Snell server.
 func TestSnellListenerFamiliesLive(t *testing.T) {
 	binary := os.Getenv("BOSUN_SNELL_TEST_BINARY")
 	if binary == "" {
@@ -24,7 +27,8 @@ func TestSnellListenerFamiliesLive(t *testing.T) {
 		name, listen string
 		v4, v6       bool
 	}{
-		{"default-dual", "", true, true},
+		{"default-ipv4", "", true, false},
+		{"explicit-dual-wildcard", "::", true, true},
 		{"explicit-ipv4", "0.0.0.0", true, false},
 		{"explicit-ipv6", "::1", false, true},
 	} {

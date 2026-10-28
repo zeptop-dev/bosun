@@ -25,9 +25,9 @@ func render(ib spec.Inbound) ([]byte, error) {
 	}
 	listen := ib.Listen
 	if listen == "" {
-		// Like the other cores, an omitted address means any address, not
-		// IPv4-only. Keep explicit binds unchanged.
-		listen = "::"
+		// Preserve the existing IPv4 default: rebinding to :: may fail on
+		// IPv6-disabled hosts or exclude IPv4 when IPV6_V6ONLY is enabled.
+		listen = "0.0.0.0"
 	}
 	if strings.Contains(listen, ":") && !strings.HasPrefix(listen, "[") {
 		listen = "[" + listen + "]"

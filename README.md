@@ -1177,6 +1177,10 @@ client-facing DNS AAAA policy independent. It applies to compatible TCP
 protocols and supported QUIC adapters, not only VLESS; WireGuard and Mieru do
 not gain a guaranteed peer/connection race. See the
 [protocol matrix and prerequisites](docs/DESIGNER_DUAL_STACK.md).
+The standalone Snell server keeps its existing IPv4 default when the listen
+address is omitted. To use both families, explicitly configure `::` and verify
+IPv4 and IPv6 reachability on the actual host; the subscription enhancement
+does not automatically rebind server listeners.
 
 Since bosun v0.79, Claude rules may be pinned into a design's
 `enhancements.claude_rules` snapshot.
