@@ -47,7 +47,7 @@ func TestMihomoDesignerConfigurationsLive(t *testing.T) {
 					mode = "empty"
 				}
 				t.Run(mode, func(t *testing.T) {
-					d.Enhancements = Enhancements{Regions: true, DNSProtection: true, Claude: true, WebRTC: true, QUIC: true, ClaudeRules: d.Enhancements.ClaudeRules}
+					d.Enhancements = Enhancements{Regions: true, NodeDualStack: true, DNSProtection: true, Claude: true, WebRTC: true, QUIC: true, ClaudeRules: d.Enhancements.ClaudeRules}
 					tpl, err := d.Render("clash")
 					if err != nil {
 						t.Fatal(err)

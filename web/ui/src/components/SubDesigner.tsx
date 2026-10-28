@@ -10,7 +10,7 @@ import { toast } from '../lib/notify'
 
 interface DGroup { name: string; type: string; members: string[]; url?: string; interval?: number }
 interface DRule { set: string; policy: string }
-interface Design { groups: DGroup[]; rules: DRule[]; final: string }
+interface Design { groups: DGroup[]; rules: DRule[]; final: string; enhancements?: { node_dual_stack?: boolean; [key: string]: unknown } }
 interface Data { design: Design; catalogue: { key: string; name: string; url?: string }[]; presets: { key: string; name: string }[]; regions: { code?: string; name: string; match: string }[]; tags: string[]; formats: string[] }
 interface FormatSupport { format: string; supported: boolean; reasons: string[]; reason_codes: string[]; warnings: string[]; warning_codes: string[] }
 interface Inspection { formats: FormatSupport[] }
@@ -64,6 +64,7 @@ export function SubDesigner() {
       'dns-direct-only': t('subDesign.supportDNSDirectOnly'),
       'dns-loon-policy-unverified': t('subDesign.supportDNSLoonPolicy'),
       'dns-qx-policy-unavailable': t('subDesign.supportDNSQXPolicy'),
+      node_dual_stack_mihomo: t('subDesign.supportNodeDualStack'),
       invalid_design: t('subDesign.supportInvalidDesign', { detail }),
       inline_rule_unsupported: t('subDesign.supportInlineRule', { detail }),
       remote_rules_unsupported: t('subDesign.supportRemoteRules', { detail }),
@@ -114,6 +115,7 @@ export function SubDesigner() {
           </div>
           <Select size="xs" placeholder={t('subDesign.loadPreset')} data={(q.data?.presets ?? []).map((p) => ({ value: p.key, label: p.name }))} value={null} onChange={(v) => v && modals.openConfirmModal({ title: t('subDesign.loadPreset'), children: <Text size="sm">{t('subDesign.presetConfirm')}</Text>, labels: { confirm: t('common.confirm'), cancel: t('common.cancel') }, onConfirm: () => loadPreset.mutate(v) })} w={360} />
         </Group>
+        <Checkbox mt="md" label={t('subDesign.nodeDualStack')} description={t('subDesign.nodeDualStackHint')} checked={!!d.enhancements?.node_dual_stack} disabled={!q.data || save.isPending || apply.isPending} onChange={event => { const checked = event.currentTarget.checked; edit(x => ({ ...x, enhancements: { ...x.enhancements, node_dual_stack: checked } })) }} />
       </Card>
 
       <Card>

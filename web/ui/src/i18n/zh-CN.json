@@ -755,7 +755,10 @@
     "regionMembersHint": "地区条件按节点名称中的地区名称、代码或国旗识别；无法确定时不归入地区组，仍保留在全部节点中。原有名称匹配条件保持不变。",
     "nameMatchRegion": "{{region}} · 名称匹配",
     "regionGroupsHint": "内置地区预设为每个地区提供自动选择和全部节点。自动生成的空地区组默认隐藏；被规则或默认策略明确指定时保留并拒绝连接。",
-    "customMembers": "此预设中的其他成员"
+    "customMembers": "此预设中的其他成员",
+    "nodeDualStack": "节点双栈连接优选（Mihomo）",
+    "nodeDualStackHint": "启用 IPv6 与并发连接。节点连接地址需为域名，且 A、AAAA 地址均可达。保留明确指定的 IP 版本；WireGuard、Mieru 不保证双栈竞速。客户端 DNS 是否返回 AAAA 仍独立设置。",
+    "supportNodeDualStack": "此增强仅适用于 Mihomo，关闭后可生成其他客户端格式。"
   },
   "accountID": {
     "label": "账号 ID",

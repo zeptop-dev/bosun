@@ -24,6 +24,7 @@ type PresetSource struct {
 // Enhancements are applied to a copy of the base design on every render.
 type Enhancements struct {
 	Regions       bool                `json:"regions,omitempty"`
+	NodeDualStack bool                `json:"node_dual_stack,omitempty"`
 	DNSProtection bool                `json:"dns_protection,omitempty"`
 	Claude        bool                `json:"claude,omitempty"`
 	WebRTC        bool                `json:"webrtc,omitempty"`
@@ -51,6 +52,9 @@ func (d *Design) Support() []FormatSupport {
 		if err != nil {
 			s.addReason("invalid_design", err.Error())
 		} else {
+			if effective.Enhancements.NodeDualStack && format != "clash" {
+				s.addReason("node_dual_stack_mihomo", "node dual-stack connection selection requires Mihomo; disable this enhancement to generate other formats")
+			}
 			effective.ruleFormatSupport(format, &s)
 			codes, reasons, warningCodes, warnings := effective.dnsFormatSupport(format)
 			s.ReasonCodes = append(s.ReasonCodes, codes...)

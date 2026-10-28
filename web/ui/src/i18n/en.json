@@ -755,7 +755,10 @@
     "regionMembersHint": "Region conditions recognize region names, codes, or flags in node names. Unidentified nodes stay in all servers without joining a region group. Existing name-pattern conditions keep their original behavior.",
     "nameMatchRegion": "{{region}} · name match",
     "regionGroupsHint": "The built-in regional preset offers automatic selection and every server in each region. Empty generated region groups are hidden unless a rule or default policy explicitly uses them; then they remain and reject connections.",
-    "customMembers": "Other members in this preset"
+    "customMembers": "Other members in this preset",
+    "nodeDualStack": "Node dual-stack connection selection (Mihomo)",
+    "nodeDualStackHint": "Enables IPv6 and concurrent connection attempts. Use a node domain with reachable A and AAAA records. Keeps explicit IP-version overrides; WireGuard and Mieru do not guarantee dual-stack racing. Client DNS AAAA responses remain independent.",
+    "supportNodeDualStack": "This enhancement requires Mihomo. Disable it to generate other client formats."
   },
   "accountID": {
     "label": "Account ID",

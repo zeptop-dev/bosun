@@ -755,7 +755,10 @@
     "regionMembersHint": "地區條件按節點名稱中的地區名稱、代碼或國旗識別；無法確定時不歸入地區群組，仍保留在全部節點中。原有名稱比對條件保持不變。",
     "nameMatchRegion": "{{region}} · 名稱比對",
     "regionGroupsHint": "內建地區預設為每個地區提供自動選擇和全部節點。自動產生的空地區組預設隱藏；被規則或預設策略明確指定時保留並拒絕連線。",
-    "customMembers": "此預設中的其他成員"
+    "customMembers": "此預設中的其他成員",
+    "nodeDualStack": "節點雙棧連線優選（Mihomo）",
+    "nodeDualStackHint": "啟用 IPv6 與並行連線。節點連線位址須為網域，且 A、AAAA 位址均可連線。保留明確指定的 IP 版本；WireGuard、Mieru 不保證雙棧競速。用戶端 DNS 是否傳回 AAAA 仍獨立設定。",
+    "supportNodeDualStack": "此增強僅適用於 Mihomo，關閉後可產生其他用戶端格式。"
   },
   "accountID": {
     "label": "帳號 ID",
