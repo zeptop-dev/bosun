@@ -15,11 +15,14 @@ results must not be interpreted as success or an unlock guarantee.
 
 The optional checker is [GeoCheck](https://github.com/remnawave/geocheck),
 version 0.3.0, under MIT. It remains a separate process. The source tag is
-rebuilt unmodified with this repository's pinned Go toolchain and
-`CGO_ENABLED=0`; see `scripts/build-geocheck.sh` and
+rebuilt with unchanged application source, this repository's pinned Go
+toolchain and `CGO_ENABLED=0`. The build updates `golang.org/x/net` to
+v0.62.0 for HTTP/2 and HTML parser/renderer security fixes; see
+`scripts/build-geocheck.sh` and
 `licenses/geocheck-MIT.txt`. No AGPL panel/node implementation is linked or
 copied. The release includes amd64/arm64 checker binaries, its license and
-checksums. Rebuilds use the `0.3.0-r1` tool directory.
+checksums. This dependency update affects newly built release attachments;
+it does not change the pinned download or replace an already installed tool.
 
 On the first Linux exit check, bosun downloads its fixed release artifact,
 verifies SHA-256 and installs it into
