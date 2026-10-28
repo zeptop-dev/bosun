@@ -1,5 +1,14 @@
 # Node dual-stack connection selection
 
+Available in bosun v0.83.0's standalone designer and Captain v1.48.0, which
+runs the shared compiler in the panel. This subscription feature itself does
+not require upgrading managed agents or changing their listeners.
+
+**中文说明：** 双栈连接选择是可选的 Mihomo 客户端设置，由 bosun v0.83.0
+独立设计器或 Captain v1.48.0 生成；只有重新应用设计才改变订阅。它不自动配置
+DNS 记录、不修改服务端监听，也不改变客户端 `dns.ipv6`。Snell 未填写监听地址
+时仍使用原 IPv4 默认值；要使用双栈需显式配置并验证实际服务端和网络支持。
+
 The subscription designer's optional `enhancements.node_dual_stack` setting
 generates these top-level Mihomo settings:
 
