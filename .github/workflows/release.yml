@@ -44,6 +44,10 @@ jobs:
           sudo apt-get install -y nftables iproute2 util-linux python3 openssl wireguard-tools
           go test -c ./internal/privateintegration -o /tmp/bosun-private.test
           sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m
+      - name: Isolated aggregate service control and real WireGuard
+        run: |
+          go test -c ./internal/servicecontrol -o /tmp/bosun-service-control.test
+          sudo env BOSUN_SERVICE_CONTROL_TEST=1 /tmp/bosun-service-control.test -test.run '^TestServiceControlLinux$' -test.v -test.timeout 2m
       - name: Isolated UFW forwarding ownership and packet flow
         run: |
           sudo apt-get install -y ufw

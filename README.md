@@ -889,6 +889,15 @@ route, a node with a default landing outbound ignores the option (traffic
 leaves through the landing), and speed-limited users keep their marking
 exit on sing-box and xray. mita has no per-inbound egress control.
 
+### Server-wide managed service control
+
+Captain can request normal operation, an aggregate rate limit, or pause for
+one server. This controls managed proxies and forwards while keeping bosun's
+management connection and SSH available. The rate is an upload-plus-download
+packet policer, separate from user quotas and per-user shaping. See
+[service control](docs/SERVICE_CONTROL.md) for scope, prerequisites, recovery,
+and the isolated Linux integration test.
+
 ### Per-user speed limits, beside someone else's shaping
 
 A limit becomes an HTB class per user on the egress interface (upload) and

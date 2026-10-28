@@ -167,19 +167,11 @@ func (m *Manager) Apply(ctx context.Context, desired *spec.ServiceControl, uid i
 	if !usable {
 		return fail(errors.New("cannot remove existing service control guard: Linux root and nftables are required"))
 	}
-	if !m.loaded {
-		var err error
-		m.scope, err = readScope(m.Dir)
-		if err != nil {
-			return fail(err)
-		}
-		m.loaded = true
-	}
 	if mode == spec.ServiceControlNormal {
 		if _, err := m.run(ctx, []string{"-f", "-"}, "table inet "+table+"\ndelete table inet "+table+"\n"); err != nil {
 			return fail(err)
 		}
-		if err := saveScope(m.Dir, Scope{}); err != nil {
+		if err := clearScope(m.Dir); err != nil {
 			return fail(err)
 		}
 		m.scope = Scope{}
@@ -189,6 +181,14 @@ func (m *Manager) Apply(ctx context.Context, desired *spec.ServiceControl, uid i
 		m.status.Mode = mode
 		m.status.LimitMbps = 0
 	} else {
+		if !m.loaded {
+			var err error
+			m.scope, err = readScope(m.Dir)
+			if err != nil {
+				return fail(err)
+			}
+			m.loaded = true
+		}
 		merged := mergeScope(m.scope, scope)
 		// Persist ownership before creating rules. No credentials/remote targets
 		// are retained. A restart can still cover an old established NAT mapping.
@@ -345,7 +345,7 @@ func render(uid int, scope Scope, c *spec.ServiceControl, digest string) string 
 		fmt.Fprintf(&b, "comment %q\n", digest)
 	}
 	if c.Mode == spec.ServiceControlLimit {
-		fmt.Fprintf(&b, "limit aggregate { rate over %d bytes/second; burst 65536 bytes; }\n", int64(c.LimitMbps)*125000)
+		fmt.Fprintf(&b, "limit aggregate { rate over %d bytes/second burst 65536 bytes; }\n", int64(c.LimitMbps)*125000)
 	}
 	b.WriteString("chain controlled {\n")
 	if c.Mode == spec.ServiceControlPause {

@@ -113,7 +113,9 @@ if os.environ.get('CORE')=='1': os.setgid(65534);os.setuid(65534)
 def serve(sock,udp):
  while True:
   if udp:
-   data,addr=sock.recvfrom(65535);sock.sendto(data,addr)
+   data,addr=sock.recvfrom(65535)
+   try:sock.sendto(data,addr)
+   except OSError:pass # a pause may synchronously reject this send; retain the listener
   else:
    conn,_=sock.accept()
    def work(c):
@@ -154,18 +156,25 @@ ports=[21081,21082,21083] if kind=='normal' else [1081]
 addrs=[(socket.AF_INET,'192.0.2.1'),(socket.AF_INET6,'2001:db8:1::1')] if kind=='normal' else [(socket.AF_INET,'198.51.100.20'),(socket.AF_INET6,'2001:db8:2::20')]
 if kind=='foreign':ports=[21090];addrs=[(socket.AF_INET,'192.0.2.1')]
 if mode=='bulk':
- results=[];errors=[]
- def download(port):
+ results=[];errors=[];connections=[];start_transfer=threading.Event()
+ for port in ports:
+  c=socket.socket();c.settimeout(3);c.connect(('192.0.2.1',port));connections.append(c)
+ def download(c):
   try:
-   c=socket.socket();c.settimeout(3);c.connect(('192.0.2.1',port));c.sendall(b'bulk');c.settimeout(.2)
-  except Exception as e:errors.append(str(e));return
-  start=time.monotonic();n=0
-  while time.monotonic()-start<4:
-   try:n+=len(c.recv(65535))
-   except socket.timeout:pass
-  c.close();results.append(n)
- ts=[threading.Thread(target=download,args=(port,)) for port in ports]
+   start_transfer.wait();c.sendall(b'bulk');c.settimeout(.2)
+   start=time.monotonic();n=0
+   while time.monotonic()-start<4:
+    try:
+     data=c.recv(65535)
+     if not data:raise ConnectionError('bulk server closed early')
+     n+=len(data)
+    except socket.timeout:pass
+   results.append(n)
+  except Exception as e:errors.append(str(e))
+  finally:c.close()
+ ts=[threading.Thread(target=download,args=(c,)) for c in connections]
  for t in ts:t.start()
+ start_transfer.set()
  for t in ts:t.join()
  assert not errors,errors
  assert len(results)==len(ports),results

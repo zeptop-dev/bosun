@@ -91,3 +91,41 @@ func ownedByProcess(info os.FileInfo) bool {
 	st, ok := info.Sys().(*syscall.Stat_t)
 	return ok && int(st.Uid) == os.Geteuid()
 }
+
+// Only normal operation releases ownership. Active pause/limit may have an
+// empty kernel-forward scope while still controlling UID/marked proxy traffic.
+func clearScope(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	st, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !st.IsDir() || st.Mode().Perm()&0022 != 0 || !ownedByProcess(st) {
+		return errors.New("invalid service control directory")
+	}
+	p := filepath.Join(dir, "service-control-owned.json")
+	st, err = os.Lstat(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !st.Mode().IsRegular() || !ownedByProcess(st) {
+		return errors.New("invalid service control ownership path")
+	}
+	if err = os.Remove(p); err != nil {
+		return err
+	}
+	f, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
+}

@@ -226,3 +226,47 @@ func TestExistingOwnershipCannotResumeWithoutRuntime(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestNamedLimitRateAndBurstAreOneNFTExpression(t *testing.T) {
+	script := render(65534, Scope{}, &spec.ServiceControl{Mode: "limit", LimitMbps: 1}, "")
+	if !strings.Contains(script, "limit aggregate { rate over 125000 bytes/second burst 65536 bytes; }") {
+		t.Fatal(script)
+	}
+}
+
+func TestNormalReleasesOwnershipAfterMalformedJournal(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "service-control-owned.json")
+	if err := os.WriteFile(path, []byte("truncated journal"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	nft := &fakeNFT{}
+	m := Manager{Dir: dir, Run: nft.run}
+	if err := m.Apply(context.Background(), &spec.ServiceControl{Revision: "normal", Mode: "normal"}, 998, false, Scope{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("normal retained ownership evidence", err)
+	}
+	if !strings.Contains(nft.script, "delete table inet "+table) {
+		t.Fatal("normal failed to remove own guard")
+	}
+	// No historical evidence remains: losing nft after a completed release
+	// must not prevent normal proxies from starting after restart.
+	restarted := Manager{Dir: dir, Run: (&fakeNFT{fail: true}).run}
+	if err := restarted.Apply(context.Background(), nil, 998, false, Scope{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEmptyActiveScopeStillPersistsOwnership(t *testing.T) {
+	dir := t.TempDir()
+	nft := &fakeNFT{}
+	m := Manager{Dir: dir, Run: nft.run}
+	if err := m.Apply(context.Background(), &spec.ServiceControl{Revision: "pause", Mode: "pause"}, 998, false, Scope{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "service-control-owned.json")); err != nil {
+		t.Fatal("UID-only protection lost restart evidence", err)
+	}
+}
