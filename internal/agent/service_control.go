@@ -36,7 +36,11 @@ func (a *Agent) reconcileServiceControl(ctx context.Context) error {
 	} // injectable nft runner owns the test namespace
 	desired := a.node.ServiceControl
 	if a.serviceControlActive() {
-		for _, u := range a.users {
+		users := append([]spec.User(nil), a.users...)
+		for _, ib := range a.node.Inbounds {
+			users = append(users, ib.Users...)
+		}
+		for _, u := range users {
 			if spec.SpeedMark(u.ID) == spec.ServiceControlSocketMark {
 				return errors.New("service control relay mark collides with a legacy user speed mark")
 			}
@@ -91,12 +95,37 @@ func (a *Agent) stopControlledServices(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// Recheck independently of panel connectivity. A lost guard must stop managed
+// services immediately; waiting for a successful pull could leave traffic
+// unprotected indefinitely while the panel is unreachable.
+func (a *Agent) refreshServiceControl(ctx context.Context) error {
+	a.shaperMu.Lock()
+	defer a.shaperMu.Unlock()
+	err := a.reconcileServiceControl(ctx)
+	if err == nil {
+		return nil
+	}
+	a.coreDirty, a.forwardDirty, a.dirty = true, true, true
+	a.serviceControlPending.Store(true)
+	a.setAppliedCoreRevision("")
+	a.setAppliedForwardRevision("")
+	if a.serviceControlActive() {
+		err = errors.Join(err, a.stopControlledServices(ctx))
+	}
+	return err
+}
+
 func (a *Agent) serviceControlReport() *agentproto.ServiceControlReport {
 	if a.ServiceControl == nil {
 		return nil
 	}
 	s := a.ServiceControl.Status()
-	if a.coreDirty || a.forwardDirty || a.modeChanging.Load() {
+	coreRevision, forwardRevision := a.consumedRevisions()
+	a.statusMu.Lock()
+	pendingRevision := coreRevision != "" && coreRevision != a.appliedCoreRevision ||
+		forwardRevision != "" && forwardRevision != a.appliedForwardRevision
+	a.statusMu.Unlock()
+	if a.serviceControlPending.Load() || a.modeChanging.Load() || pendingRevision {
 		s.AppliedRevision = ""
 		if s.Error == "" {
 			s.Error = "proxy service reconciliation is incomplete"

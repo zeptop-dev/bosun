@@ -190,6 +190,10 @@ func (m *Manager) SetServiceControl(enabled bool) {
 		return
 	}
 	m.controlled = enabled
+	if !enabled {
+		m.preparedNFT = nil
+		m.preparedNFTKeys = nil
+	}
 	for k, r := range m.rules {
 		if r.spec.Backend == "" || r.spec.Backend == "relay" {
 			r.stop()

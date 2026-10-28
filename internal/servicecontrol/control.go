@@ -165,15 +165,7 @@ func (m *Manager) Apply(ctx context.Context, desired *spec.ServiceControl, uid i
 		usable = usable && err == nil
 	}
 	if !usable {
-		if mode == spec.ServiceControlNormal {
-			m.status.Mode = mode
-			m.status.LimitMbps = 0
-			if desired != nil {
-				m.status.AppliedRevision = desired.Revision
-			}
-			return nil
-		}
-		return fail(supportedErr)
+		return fail(errors.New("cannot remove existing service control guard: Linux root and nftables are required"))
 	}
 	if !m.loaded {
 		var err error

@@ -108,12 +108,14 @@ func (a *Agent) resolveCerts(ctx context.Context, node *spec.Node) {
 // apply renders the current state onto each core and starts, restarts or
 // stops cores as their assignment changes.
 func (a *Agent) apply(ctx context.Context) (err error) {
+	a.serviceControlPending.Store(true)
 	revision, _ := a.consumedRevisions()
 	a.setAppliedCoreRevision("")
 	defer func() {
 		if err == nil && !a.modeChanging.Load() {
 			a.setAppliedCoreRevision(revision)
 		}
+		a.serviceControlPending.Store(a.coreDirty || a.forwardDirty || a.modeChanging.Load())
 	}()
 	a.lastAttempt = time.Now()
 	err = a.wireGuardFailure(ctx, a.applyInner(ctx))
@@ -525,12 +527,14 @@ func listenPorts(ib spec.Inbound) []firewall.Port {
 // applyForwards reconciles relay rules: the panel's if it manages them,
 // otherwise the local config's.
 func (a *Agent) applyForwards(ctx context.Context) (err error) {
+	a.serviceControlPending.Store(true)
 	// Revoke confirmation even on early mode/read/validation failures.
 	a.setAppliedForwardRevision("")
 	a.lastForwardAttempt = time.Now()
 	revision := ""
 	defer func() {
 		a.forwardDirty = err != nil
+		a.serviceControlPending.Store(a.coreDirty || a.forwardDirty || a.modeChanging.Load())
 		a.dirty = a.coreDirty || a.forwardDirty
 		if err == nil && !a.modeChanging.Load() {
 			a.setAppliedForwardRevision(revision)

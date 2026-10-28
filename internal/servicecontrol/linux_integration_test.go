@@ -143,7 +143,9 @@ print('ready',flush=True);time.sleep(110)
  helper=child(os.environ['CONTROL_TEST_BIN'],'-test.run','^TestServiceControlLinuxHelper$','-test.timeout','110s',env=env,stdin=s.PIPE,stdout=s.PIPE,text=True)
  assert helper.stdout.readline().strip()=='ready'
  def control(mode):
-  helper.stdin.write(mode+'\n');helper.stdin.flush();line=helper.stdout.readline().strip();assert line=='applied '+mode,line
+  helper.stdin.write(mode+'\n');helper.stdin.flush();line=helper.stdout.readline().strip()
+  if line!='applied '+mode:
+   helper.stdin.close();helper.wait(timeout=5);raise AssertionError(line+'\n'+helper.stdout.read())
  run('nft','-f','-',input='table inet foreign {\n chain pre {\n type nat hook prerouting priority -99; policy accept;\n ip daddr 192.0.2.1 tcp dport 21090 dnat ip to 198.51.100.20:1081\n }\n}\n')
  clientcode=r'''
 import socket,sys,time,threading,json

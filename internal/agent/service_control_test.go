@@ -119,3 +119,71 @@ func TestServiceControlNoPerUserLimitMutation(t *testing.T) {
 		t.Fatal("legacy speed mark collision accepted")
 	}
 }
+
+func TestServiceControlPeriodicFailureStopsWithoutPanelPull(t *testing.T) {
+	a, c, _ := checkpointRig(t)
+	var script string
+	fail := false
+	a.ServiceControl = &servicecontrol.Manager{Dir: t.TempDir(), Run: serviceControlTestRunner(&script, &fail)}
+	a.node.ServiceControl = &spec.ServiceControl{Revision: "limit-offline", Mode: "limit", LimitMbps: 10}
+	if err := a.apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.applyForwards(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !c.running {
+		t.Fatal("core did not start")
+	}
+	fail = true
+	c.statsErr = errors.New("counter unavailable during outage")
+	if err := a.refreshServiceControl(context.Background()); err == nil {
+		t.Fatal("lost guard not reported")
+	}
+	if c.running {
+		t.Fatal("periodic guard failure kept proxy running while panel could be offline")
+	}
+	if !a.coreDirty || !a.forwardDirty || !a.dirty {
+		t.Fatal("failure did not schedule full retry")
+	}
+	if got := a.serviceControlReport(); got.AppliedRevision != "" || got.Error == "" {
+		t.Fatal(got)
+	}
+	fail = false
+	c.statsErr = nil
+	if err := a.refreshServiceControl(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.serviceControlReport(); got.AppliedRevision != "" {
+		t.Fatal("guard repair falsely confirmed stopped service", got)
+	}
+	if err := a.apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.applyForwards(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.serviceControlReport(); got.AppliedRevision != "limit-offline" || got.Error != "" || !c.running {
+		t.Fatal(got)
+	}
+	// Existing periodic WireGuard reconciliation only applies the core half.
+	// It must not leave an otherwise fully applied control permanently pending.
+	if err := a.apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.serviceControlReport(); got.AppliedRevision != "limit-offline" {
+		t.Fatal(got)
+	}
+}
+
+func TestServiceControlScopedLegacyMarkCollision(t *testing.T) {
+	a, _, _ := checkpointRig(t)
+	var script string
+	fail := false
+	a.ServiceControl = &servicecontrol.Manager{Run: serviceControlTestRunner(&script, &fail)}
+	a.node.ServiceControl = &spec.ServiceControl{Revision: "limit", Mode: "limit", LimitMbps: 10}
+	a.node.Inbounds[0].Users = []spec.User{{ID: spec.ServiceControlSocketMark - 0x10000}}
+	if err := a.reconcileServiceControl(context.Background()); err == nil {
+		t.Fatal("scoped legacy mark collision accepted")
+	}
+}

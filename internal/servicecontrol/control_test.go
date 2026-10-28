@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -201,5 +203,26 @@ func TestScopeRejectsInjectionAndSymlink(t *testing.T) {
 	}
 	if saveScope(dir, Scope{}) == nil {
 		t.Fatal("write accepted symlink")
+	}
+}
+
+func TestExistingOwnershipCannotResumeWithoutRuntime(t *testing.T) {
+	// The unit runner deliberately uses the actual unsupported local platform
+	// rather than a fake nft runner, which implies kernel support to Manager.
+	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
+		if _, err := exec.LookPath("nft"); err == nil {
+			t.Skip("requires an unsupported runtime")
+		}
+	}
+	dir := t.TempDir()
+	if err := saveScope(dir, testScope()); err != nil {
+		t.Fatal(err)
+	}
+	m := Manager{Dir: dir}
+	if err := m.Apply(context.Background(), &spec.ServiceControl{Revision: "resume", Mode: "normal"}, 998, false, Scope{}); err == nil {
+		t.Fatal("unremovable old guard accepted as normal")
+	}
+	if got := m.Status(); got.Mode == "normal" || got.AppliedRevision != "" || got.Error == "" {
+		t.Fatal(got)
 	}
 }

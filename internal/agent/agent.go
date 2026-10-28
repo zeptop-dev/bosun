@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sync/atomic"
 
 	"github.com/zeptop-dev/bosun/internal/audit"
@@ -90,11 +91,12 @@ type Agent struct {
 	// Alert delivers an operator notification (Telegram); nil = none.
 	Alert func(text string)
 	// Shaper enforces per-user speed limits in the kernel; nil = none.
-	ServiceControl  *servicecontrol.Manager
-	Shaper          *shaper.Shaper
-	wireGuard       *wireGuardRuntime
-	wireGuardActive atomic.Bool
-	shaperMu        sync.Mutex
+	ServiceControl        *servicecontrol.Manager
+	serviceControlPending atomic.Bool
+	Shaper                *shaper.Shaper
+	wireGuard             *wireGuardRuntime
+	wireGuardActive       atomic.Bool
+	shaperMu              sync.Mutex
 	// Realm runs forward rules with the realm backend; nil rejects them.
 	Realm *forward.Realm
 	// Guard drops packets for mita ports that arrive on the wrong local
@@ -259,6 +261,12 @@ func (a *Agent) ForwardStats() []forward.Stats { return a.fwd.Snapshot() }
 // New builds an agent. metrics may be nil.
 func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metrics.Registry, log *slog.Logger) *Agent {
 	a := &Agent{coreChanges: make(chan coreChange), cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), started: time.Now(), kick: make(chan struct{}, 1), reportNow: make(chan struct{}, 1), doctorNow: make(chan struct{}, 1), jobsDone: map[string]bool{}, jobsRunning: map[string]bool{}}
+	dir := ""
+	if cfg != nil && cfg.DataDir != "" {
+		dir = filepath.Join(cfg.DataDir, "service-control")
+	}
+	a.ServiceControl = &servicecontrol.Manager{Dir: dir}
+	a.serviceControlPending.Store(true)
 	if mreg != nil {
 		a.registerMetrics()
 	}
@@ -432,9 +440,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			}
 		case <-firewallTick.C:
 			if a.node != nil && !a.modeChanging.Load() {
-				if err := a.reconcileServiceControl(ctx); err != nil {
-					a.coreDirty = true
-					a.dirty = true
+				if err := a.refreshServiceControl(ctx); err != nil {
 					a.log.Warn("service control reconcile", "err", err)
 				}
 			}
