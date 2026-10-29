@@ -136,3 +136,25 @@ func TestOfflineServiceControlStaleRecoveryCannotDeleteNewerProtection(t *testin
 		})
 	}
 }
+
+func TestExpiredLeaseCannotRemoveServiceGuard(t *testing.T) {
+	a, c, _ := checkpointRig(t)
+	p := &leasePanel{Driver: a.driver}
+	a.driver = p
+	var script string
+	fail := false
+	a.ServiceControl = &servicecontrol.Manager{Dir: t.TempDir(), Run: serviceControlTestRunner(&script, &fail)}
+	a.node.ServiceControl = &spec.ServiceControl{Revision: "paused", Mode: "pause"}
+	if err := a.apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	guarded := script
+	a.node.ServiceControl = &spec.ServiceControl{Revision: "resume", Mode: "normal"}
+	p.expired = true
+	if err := a.refreshServiceControl(context.Background()); err == nil {
+		t.Fatal("expired lease allowed local resume")
+	}
+	if script != guarded || c.running {
+		t.Fatal("expired lease removed guard or restarted proxy")
+	}
+}

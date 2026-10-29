@@ -461,6 +461,11 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-leaseTick.C:
 			_ = a.expireOfflineLease(ctx)
 		case <-wgTick.C:
+			if a.node != nil && !a.modeChanging.Load() && (a.node.ServiceControl != nil && a.node.ServiceControl.Offline != nil || a.offlineRecoveryGuard) {
+				if err := a.refreshOfflineServiceControl(ctx); err != nil {
+					a.log.Warn("offline traffic protection reconcile", "err", err)
+				}
+			}
 			if a.wireGuardActive.Load() && a.node != nil && !a.modeChanging.Load() {
 				if err := a.apply(ctx); err != nil {
 					a.log.Error("WireGuard health reconcile", "err", err)

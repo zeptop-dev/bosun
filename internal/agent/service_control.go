@@ -132,6 +132,11 @@ func (a *Agent) stopControlledServices(ctx context.Context) error {
 // services immediately; waiting for a successful pull could leave traffic
 // unprotected indefinitely while the panel is unreachable.
 func (a *Agent) refreshServiceControl(ctx context.Context) error {
+	// Check before taking shaperMu: expiry checkpoints and stops under that lock.
+	// A local period rollover cannot release a guard using expired authorization.
+	if err := a.expireOfflineLease(ctx); err != nil {
+		return err
+	}
 	wasPaused, wasActive := a.serviceControlPaused(), a.serviceControlActive()
 	a.shaperMu.Lock()
 	err := a.reconcileServiceControl(ctx)
