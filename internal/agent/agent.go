@@ -157,6 +157,7 @@ type Agent struct {
 	lastApplyOK, lastReportOK   atomic.Int64 // unix seconds
 	// reportNow asks the run loop for an out-of-band report (job results).
 	reportNow chan struct{}
+	delivery  *reportTransport // owned by Run; workers only send frozen values
 	// doctorNow asks the run loop for a self-check a few seconds after an
 	// apply, so the panel does not show the previous state for up to ten
 	// minutes after inbounds change.
@@ -204,6 +205,7 @@ func (a *Agent) ReloadCerts(string) {
 
 // Status is what the agent is doing, for the local UI.
 type Status struct {
+	Delivery    DeliveryStatus    `json:"delivery"`
 	Panel       string            `json:"panel"`
 	Ready       bool              `json:"ready"` // bootstrap done, first apply attempted
 	Inbounds    int               `json:"inbounds"`
@@ -369,6 +371,10 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	reconfigureBeat()
 
+	transport := newReportTransport(ctx)
+	a.delivery = transport
+	defer func() { transport.close(); a.delivery = nil }()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -382,7 +388,25 @@ func (a *Agent) Run(ctx context.Context) error {
 		case change := <-a.coreChanges:
 			change.done <- a.activateCore(ctx, change.ctx, change.request)
 		case <-a.reportNow:
-			a.report(ctx)
+			a.requestReport(ctx)
+		case result := <-transport.reports:
+			transport.reportBusy = false
+			if a.finishDurableReport(result.report, result.changed, result.err) {
+				a.pullApply(ctx)
+				a.runJobs(ctx)
+				reconfigureBeat()
+			}
+			if transport.reportAgain {
+				transport.reportAgain = false
+				a.requestReport(ctx)
+			}
+		case result := <-transport.beats:
+			transport.beatBusy = false
+			if result.err != nil {
+				a.log.Warn("beat failed", "err", result.err)
+			} else {
+				a.probes.Acknowledge(result.beat.Host.Pings)
+			}
 		case <-a.doctorNow:
 			a.runDoctor(ctx)
 		case <-a.kick:
@@ -395,16 +419,12 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.scheduleDoctor()
 			}
 		case <-beat.C:
-			if beater != nil {
+			if beater != nil && !transport.beatBusy {
 				bctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 				host := a.sampler.Sample(bctx)
 				host.Pings = a.probes.Batch()
-				if err := beater.Beat(bctx, agentproto.Beat{Host: host}); err != nil {
-					a.log.Warn("beat failed", "err", err)
-				} else {
-					a.probes.Acknowledge(host.Pings)
-				}
 				cancel()
+				transport.sendBeat(beater, agentproto.Beat{Host: host})
 			}
 		case <-pull.C:
 			if changed, err := a.pull(ctx); err != nil {
@@ -454,7 +474,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-doctorTick.C:
 			a.runDoctor(ctx)
 		case <-push.C:
-			if a.report(ctx) {
+			if a.requestReport(ctx) {
 				// The panel says newer state exists: pull now instead of
 				// waiting for the next tick.
 				if changed, err := a.pull(ctx); err != nil {

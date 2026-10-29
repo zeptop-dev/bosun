@@ -1056,5 +1056,13 @@
     "sshHint": "SSH proxy supports TCP forwarding only, with per-user passwords and a generated host key. Use sing-box subscriptions for host key verification; no shell, SFTP or UDP.",
     "timeout": "Operation timed out. Refresh to check the node before retrying.",
     "listenAddress": "This Mieru build cannot bind a specific listening IP. Use mita."
+  },
+  "delivery": {
+    "title": "Traffic delivery",
+    "hint": "Collected traffic awaiting acknowledgement. Unread core counters are not included; a missing timestamp is unknown or empty.",
+    "pending": "Awaiting acknowledgement",
+    "buffered": "Buffered behind current batch",
+    "oldest": "Oldest known sample",
+    "storage": "Journal size"
   }
 }

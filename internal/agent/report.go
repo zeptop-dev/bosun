@@ -217,6 +217,25 @@ func (a *Agent) registerMetrics() {
 			{Name: "bosun_apply_dirty", Value: dirty},
 		}
 	})
+	m.Describe("bosun_traffic_pending_bytes", "gauge", "collected user bytes awaiting panel acknowledgement, excluding unread core counters")
+	m.Describe("bosun_traffic_buffered_bytes", "gauge", "lifecycle checkpoint user bytes waiting behind the current batch")
+	m.Describe("bosun_traffic_oldest_timestamp_seconds", "gauge", "oldest known pending sample start; 0 means empty or legacy unknown")
+	m.Describe("bosun_traffic_journal_bytes", "gauge", "last observed size of the durable accounting journal")
+	m.Add(func() []metrics.Sample {
+		a.statusMu.Lock()
+		delivery := a.status.Delivery
+		a.statusMu.Unlock()
+		oldest := float64(0)
+		if delivery.OldestAt != nil {
+			oldest = float64(delivery.OldestAt.Unix())
+		}
+		return []metrics.Sample{
+			{Name: "bosun_traffic_pending_bytes", Value: float64(delivery.PendingBytes)},
+			{Name: "bosun_traffic_buffered_bytes", Value: float64(delivery.BufferedBytes)},
+			{Name: "bosun_traffic_oldest_timestamp_seconds", Value: oldest},
+			{Name: "bosun_traffic_journal_bytes", Value: float64(delivery.JournalBytes)},
+		}
+	})
 	m.Describe("bosun_core_running", "gauge", "1 if the core process is running")
 	m.Describe("bosun_users", "gauge", "users currently provisioned")
 	m.Describe("bosun_forward_up", "gauge", "1 if the forward target answered the last probe")

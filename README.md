@@ -1508,3 +1508,19 @@ CIDR does not automatically route it directly to this server's LAN. Add an expli
 direct split rule if that is the intended path. The authorization check consumes
 resolved addresses before routing, including mixed-answer rejection; remote
 proxies receive checked IPs rather than a domain to resolve independently.
+
+### Accounting delivery health
+
+Captain report and resource-beat HTTP delivery run outside the serial apply
+loop, with one outstanding request per stream. Further report requests coalesce;
+traffic collection, journal writes and acknowledgements remain serial. A local
+core switch can append a durable lifecycle checkpoint while a report is in
+flight, and acknowledging that report preserves the newer checkpoint. Legacy
+Xboard and standalone report behavior is unchanged. State pulls and core RPCs
+still have their own timeouts; this does not make every agent operation asynchronous.
+
+The local diagnostics page and `/metrics` expose collected pending bytes,
+lifecycle-buffered bytes, the oldest known sample time and journal size.
+These exclude counters not yet read from the cores. Old journals without sample
+timestamps remain readable and report that time as unknown. The accounting
+sequence, epoch, billing rules and acknowledgement contract are unchanged.

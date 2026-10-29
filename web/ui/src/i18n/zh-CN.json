@@ -1056,5 +1056,13 @@
     "sshHint": "SSH 代理仅支持 TCP 转发，使用用户密码和自动生成的主机密钥。请使用 sing-box 订阅以校验主机公钥；不提供 shell、SFTP 或 UDP。",
     "timeout": "操作等待超时，请先刷新查看节点状态再重试。",
     "listenAddress": "此 Mieru 构建不能绑定指定监听 IP，请使用 mita。"
+  },
+  "delivery": {
+    "title": "流量上报",
+    "hint": "已采集但尚未确认的流量，不包含内核中未读取的计数；缺少时间表示未知或暂无积压。",
+    "pending": "等待确认",
+    "buffered": "后续缓冲",
+    "oldest": "最早已知采样",
+    "storage": "记录文件大小"
   }
 }
