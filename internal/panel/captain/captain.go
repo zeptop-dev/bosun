@@ -27,11 +27,12 @@ import (
 
 // Config is the connection setup.
 type Config struct {
-	URL       string        // panel base URL
-	PairCode  string        // one-time pairing code; used only when no token is stored
-	TokenFile string        // where the node token is persisted
-	Version   string        // bosun version reported to the panel
-	Timeout   time.Duration // HTTP timeout
+	URL           string        // panel base URL
+	PairCode      string        // one-time pairing code; used only when no token is stored
+	TokenFile     string        // where the node token is persisted
+	Version       string        // bosun version reported to the panel
+	Timeout       time.Duration // HTTP timeout
+	OfflineMaxAge time.Duration // opt-in bounded recovery lease; zero disables
 }
 
 // Client is a Captain driver.
@@ -40,15 +41,19 @@ type Client struct {
 	http *http.Client
 	log  *slog.Logger
 
-	mu        sync.Mutex
-	token     string
-	etag      string
-	state     *agentproto.State
-	nodeSeen  string // revision last returned by Node()
-	usersSeen string // revision last returned by Users()
-	fwdSeen   string // revision last returned by Forwards()
-	upgradeTo string // from the last report response
-	addresses *agentproto.PublicAddresses
+	snapshotMu sync.Mutex
+	verifiedAt time.Time
+	offline    bool
+	revoked    bool
+	mu         sync.Mutex
+	token      string
+	etag       string
+	state      *agentproto.State
+	nodeSeen   string // revision last returned by Node()
+	usersSeen  string // revision last returned by Users()
+	fwdSeen    string // revision last returned by Forwards()
+	upgradeTo  string // from the last report response
+	addresses  *agentproto.PublicAddresses
 
 	// Long-poll watcher: keeps a GET /state?wait= request open so a change
 	// on the panel reaches the agent within a second or two.
@@ -119,6 +124,9 @@ func New(cfg Config, log *slog.Logger) (*Client, error) {
 	}
 	if cfg.TokenFile == "" {
 		return nil, fmt.Errorf("captain: token_file is required")
+	}
+	if cfg.OfflineMaxAge < 0 || cfg.OfflineMaxAge > 24*time.Hour {
+		return nil, fmt.Errorf("captain: offline_max_age must be between 0 and 24h")
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 30 * time.Second
@@ -256,12 +264,17 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 	}
 	switch code {
 	case http.StatusNotModified:
+		if etag == "" {
+			return false, fmt.Errorf("captain: unsolicited state 304")
+		}
+		c.validateLease()
 		return false, nil
 	case http.StatusOK:
-	case http.StatusUnauthorized:
+	case http.StatusUnauthorized, http.StatusForbidden:
+		c.revokeLease()
 		return false, fmt.Errorf("captain: token rejected; remove %s and pair again", c.cfg.TokenFile)
 	default:
-		return false, fmt.Errorf("captain: GET state: %s: %s", http.StatusText(code), truncate(body))
+		return false, &stateFetchError{status: code}
 	}
 	var st agentproto.State
 	if err := json.Unmarshal(body, &st); err != nil {
@@ -273,7 +286,9 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 		return false, nil
 	}
 	c.state, c.etag = &st, h.Get("ETag")
+	c.verifiedAt, c.offline, c.revoked = time.Now(), false, false
 	c.mu.Unlock()
+	c.saveSnapshot()
 	return true, nil
 }
 
@@ -284,14 +299,15 @@ func (c *Client) State() *agentproto.State {
 	if c.state == nil {
 		return nil
 	}
-	st := *c.state
-	return &st
+	return cloneState(c.state)
 }
 
 // Node fetches state and returns the node when its revision changed.
 func (c *Client) Node(ctx context.Context) (*spec.Node, bool, error) {
 	if _, err := c.fetch(ctx); err != nil {
-		return nil, false, err
+		if recoveryErr := c.recoverSnapshot(err); recoveryErr != nil {
+			return nil, false, recoveryErr
+		}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -299,8 +315,9 @@ func (c *Client) Node(ctx context.Context) (*spec.Node, bool, error) {
 		return nil, false, nil
 	}
 	c.nodeSeen = c.state.Revision
-	n := c.state.Node
-	n.Forwards = c.state.Forwards
+	st := cloneState(c.state)
+	n := st.Node
+	n.Forwards = st.Forwards
 	return &n, true, nil
 }
 
@@ -313,7 +330,7 @@ func (c *Client) Users(ctx context.Context) ([]spec.User, bool, error) {
 		return nil, false, nil
 	}
 	c.usersSeen = c.state.Revision
-	users := c.state.Users
+	users := cloneState(c.state).Users
 	if users == nil {
 		users = []spec.User{}
 	}
@@ -328,7 +345,7 @@ func (c *Client) Forwards(ctx context.Context) ([]spec.Forward, bool, error) {
 		return nil, false, nil
 	}
 	c.fwdSeen = c.state.Revision
-	fw := c.state.Forwards
+	fw := cloneState(c.state).Forwards
 	if fw == nil {
 		fw = []spec.Forward{}
 	}
@@ -376,7 +393,7 @@ func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error
 func (c *Client) Jobs() []agentproto.Job {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.state == nil {
+	if c.state == nil || c.offline || c.revoked || (c.cfg.OfflineMaxAge > 0 && !time.Now().Before(c.verifiedAt.Add(c.cfg.OfflineMaxAge))) {
 		return nil
 	}
 	return append([]agentproto.Job(nil), c.state.Jobs...)

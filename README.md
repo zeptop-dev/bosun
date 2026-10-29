@@ -1524,3 +1524,46 @@ lifecycle-buffered bytes, the oldest known sample time and journal size.
 These exclude counters not yet read from the cores. Old journals without sample
 timestamps remain readable and report that time as unknown. The accounting
 sequence, epoch, billing rules and acknowledgement contract are unchanged.
+
+### Optional Captain offline recovery
+
+`panel.captain.offline_max_age` defaults to `0s` (disabled). Set an explicit
+bounded duration, for example `1h`, to permit recovery after a bosun restart
+while Captain is temporarily unreachable. The maximum is `24h`. This also
+limits how long the running node may keep serving without authenticated state
+validation. Existing installations retain their behavior until enabled.
+
+A successful state response or solicited `304` refreshes the lease. A private,
+atomic snapshot beside the token file (`<token_file>.recovery/state.json`)
+contains the complete state, including credentials, certificates, user access
+and service controls. Keep it private like the token: directory `0700`, file
+`0600`. Its integrity is bound to the token and panel URL. It is not a backup
+for a different panel or node. Snapshot write failure leaves the current
+validated live state usable but does not promise restart recovery.
+
+Only transient network errors and HTTP 408/429/500/502/503/504 permit cached
+recovery. Authentication rejection (401/403) revokes the lease and atomically invalidates the
+snapshot. Corrupt, stale, future-dated, foreign, symlinked or non-private files
+are rejected. Cached Jobs are never executed, and an offline snapshot cannot
+change the persisted node-mode generation. Missing local binaries or unusable
+certificates are not downloaded or bypassed by this feature.
+
+On lease expiry bosun checkpoints accounting and stops managed cores, forwards
+and reverse WireGuard links, including when polling fails. The serial control
+loop checks the lease every second and before service re-entry; an operation
+already executing may delay that check until its bounded operation completes.
+Fresh authenticated state allows normal reconciliation to resume. During the
+explicit lease, user revocations and new panel-side policies cannot be learned:
+choose the duration according to that operational tradeoff. Previously saved
+pause/limit/security policies remain in force. Disabling recovery does not
+change any current panel policy.
+
+Core activation also verifies expected business TCP/UDP listeners on Linux
+against socket inodes owned by the supervised process (per inbound for mita
+and Snell), in addition to the existing process/API readiness checks. Mieru
+BOTH checks TCP at the configured port and UDP at port + 1; UDP-only protocols
+are not tested with TCP. Unused/no-user inbounds omitted from activation do
+not produce required listeners. Non-Linux platforms and external adapters
+without process evidence retain their prior API readiness check. Local socket
+ownership is not an end-to-end subscriber-connectivity test or seamless
+connection handoff.

@@ -347,3 +347,13 @@ func (c *Core) Check(ctx context.Context, b *core.Bundle) error {
 	}
 	return c.check(ctx, c.configPath(b))
 }
+
+// ListenerPIDs exposes only the currently supervised generation.
+func (c *Core) ListenerPIDs() map[string]int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sup == nil {
+		return nil
+	}
+	return map[string]int{"*": c.sup.PID()}
+}

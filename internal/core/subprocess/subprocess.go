@@ -260,3 +260,13 @@ func ActiveProcesses() map[int32]string {
 	}
 	return out
 }
+
+// PID returns the current supervised child; zero means absent.
+func (s *Supervisor) PID() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cmd == nil || s.cmd.Process == nil {
+		return 0
+	}
+	return s.cmd.Process.Pid
+}

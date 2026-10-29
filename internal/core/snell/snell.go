@@ -201,3 +201,16 @@ func (c *Core) Running() bool {
 func (c *Core) Stats(context.Context, bool) (map[string]spec.Traffic, error) {
 	return map[string]spec.Traffic{}, nil
 }
+
+// ListenerPIDs binds each inbound to its own supervised process.
+func (c *Core) ListenerPIDs() map[string]int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := map[string]int{}
+	for tag, in := range c.instances {
+		if in.sup != nil {
+			out[tag] = in.sup.PID()
+		}
+	}
+	return out
+}

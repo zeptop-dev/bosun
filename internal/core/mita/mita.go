@@ -441,3 +441,29 @@ func (in *instance) waitStatus(ctx context.Context, want appStatus, timeout time
 	}
 	return fmt.Errorf("not %s after %s (status %s); check the config", want, timeout, lastStatus)
 }
+
+// ListenerPIDs binds each inbound to its own supervised process.
+func (c *Core) ListenerPIDs() map[string]int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := map[string]int{}
+	for tag, in := range c.instances {
+		if in.sup != nil {
+			out[tag] = in.sup.PID()
+		}
+	}
+	return out
+}
+
+// Legacy mita binds wildcard and relies on the separate ingress guard.
+func (c *Core) ListenerInbounds(in []spec.Inbound) []spec.Inbound {
+	out := append([]spec.Inbound(nil), in...)
+	for i := range out {
+		if !c.native {
+			out[i].Listen = ""
+		} else {
+			out[i].Listen = bindAddress(out[i])
+		}
+	}
+	return out
+}

@@ -314,3 +314,13 @@ func (c *Core) feedConn(line string) {
 		c.opt.ConnSink(user, ip, host, port, network)
 	}
 }
+
+// ListenerPIDs exposes only the currently supervised generation.
+func (c *Core) ListenerPIDs() map[string]int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sup == nil {
+		return nil
+	}
+	return map[string]int{"*": c.sup.PID()}
+}

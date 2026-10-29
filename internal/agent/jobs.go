@@ -20,6 +20,9 @@ import (
 // runs in its own goroutine; its result is queued for the next report and
 // an out-of-band report is requested so the panel sees it within seconds.
 func (a *Agent) runJobs(ctx context.Context) {
+	if a.serviceLeaseError() != nil {
+		return
+	}
 	src, ok := a.driver.(panel.JobSource)
 	if !ok {
 		return

@@ -236,7 +236,7 @@ func setup(args []string) (*env, error) {
 	case "local":
 	case "captain":
 		cp := cfg.Panel.Captain
-		driver, err = captain.New(captain.Config{URL: cp.URL, PairCode: cp.PairCode, TokenFile: cp.TokenFile, Version: version, Timeout: cp.Timeout}, log)
+		driver, err = captain.New(captain.Config{URL: cp.URL, PairCode: cp.PairCode, TokenFile: cp.TokenFile, Version: version, Timeout: cp.Timeout, OfflineMaxAge: cp.OfflineMaxAge}, log)
 	case "xboard":
 		x := cfg.Panel.Xboard
 		driver, err = xboard.New(xboard.Config{URL: x.URL, Token: x.Token, NodeID: x.NodeID, NodeType: x.NodeType, Timeout: x.Timeout}, log)
@@ -626,7 +626,11 @@ func (s *supervisor) driver() (panel.Driver, error) {
 	}
 	mode, managed, _ := s.store.Mode()
 	if mode == local.ModeManaged && managed != nil {
-		c, err := captain.New(captain.Config{URL: managed.URL, TokenFile: s.tokenFile(), Version: version}, s.log)
+		var offlineMaxAge time.Duration
+		if s.cfg.Panel.Captain != nil {
+			offlineMaxAge = s.cfg.Panel.Captain.OfflineMaxAge
+		}
+		c, err := captain.New(captain.Config{URL: managed.URL, TokenFile: s.tokenFile(), Version: version, OfflineMaxAge: offlineMaxAge}, s.log)
 		if err != nil {
 			// Token gone: nothing to be managed by. Fall back to local mode
 			// so the node stays operable.

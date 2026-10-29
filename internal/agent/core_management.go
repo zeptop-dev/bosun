@@ -66,6 +66,9 @@ func (a *Agent) ManageCore(ctx context.Context, r spec.CoreRequest) error {
 }
 
 func (a *Agent) activateCore(runCtx, ctx context.Context, r spec.CoreRequest) error {
+	if err := a.expireOfflineLease(ctx); err != nil {
+		return err
+	}
 	m := a.CoreManager
 	if a.serviceControlPaused() {
 		return errors.New("resume proxy services before activating a core")
@@ -165,7 +168,7 @@ func (a *Agent) activateCore(runCtx, ctx context.Context, r spec.CoreRequest) er
 		if previous != nil {
 			startErr := old.Start(runCtx, previous)
 			if startErr == nil {
-				startErr = healthyCore(recoverCtx, old)
+				startErr = healthyCoreListeners(recoverCtx, old, inbounds)
 			}
 			if startErr != nil {
 				return errors.Join(cause, stopErr, fmt.Errorf("previous core could not be restored: %w", startErr))
@@ -177,7 +180,7 @@ func (a *Agent) activateCore(runCtx, ctx context.Context, r spec.CoreRequest) er
 		if err = next.Start(runCtx, bundle); err != nil {
 			return rollback(err)
 		}
-		if err = healthyCore(ctx, next); err != nil {
+		if err = healthyCoreListeners(ctx, next, inbounds); err != nil {
 			return rollback(err)
 		}
 	}
@@ -205,7 +208,9 @@ func (a *Agent) activateCore(runCtx, ctx context.Context, r spec.CoreRequest) er
 	return nil
 }
 
-func healthyCore(ctx context.Context, c core.Core) error {
+func healthyCore(ctx context.Context, c core.Core) error { return healthyCoreListeners(ctx, c, nil) }
+
+func healthyCoreListeners(ctx context.Context, c core.Core, inbounds []spec.Inbound) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	tick := time.NewTicker(200 * time.Millisecond)
@@ -215,6 +220,9 @@ func healthyCore(ctx context.Context, c core.Core) error {
 		if c.Running() {
 			probe, cancel := context.WithTimeout(ctx, time.Second)
 			_, err := c.Stats(probe, false)
+			if err == nil {
+				err = core.CheckListeners(c, inbounds)
+			}
 			cancel()
 			if err == nil {
 				if readySince.IsZero() {

@@ -48,6 +48,7 @@ panel:
   captain:                   # only for driver: captain
     url: https://captain.example.com
     pair_code: ABCD-EFGH     # from "add node" in Captain; used once, then the token is stored in data_dir
+    offline_max_age: 0s     # opt-in recovery lease, e.g. 1h; maximum 24h, see README
   # driver: xboard
   xboard:
     url: https://panel.example.com

@@ -151,6 +151,9 @@ func withSkip(m map[string]string, tag, reason string) map[string]string {
 }
 
 func (a *Agent) applyInner(ctx context.Context) error {
+	if err := a.expireOfflineLease(ctx); err != nil {
+		return err
+	}
 	a.shaperMu.Lock()
 	defer a.shaperMu.Unlock()
 	if err := a.reconcileServiceControl(ctx); err != nil {
@@ -527,6 +530,9 @@ func listenPorts(ib spec.Inbound) []firewall.Port {
 // applyForwards reconciles relay rules: the panel's if it manages them,
 // otherwise the local config's.
 func (a *Agent) applyForwards(ctx context.Context) (err error) {
+	if err := a.expireOfflineLease(ctx); err != nil {
+		return err
+	}
 	a.serviceControlPending.Store(true)
 	// Revoke confirmation even on early mode/read/validation failures.
 	a.setAppliedForwardRevision("")

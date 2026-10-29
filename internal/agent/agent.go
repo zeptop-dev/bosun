@@ -312,6 +312,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	push := time.NewTicker(iv.Push)
 	defer pull.Stop()
 	defer push.Stop()
+	leaseTick := time.NewTicker(time.Second)
+	defer leaseTick.Stop()
 	wgTick := time.NewTicker(15 * time.Second)
 	defer wgTick.Stop()
 	// Self-check: once shortly after start, then every 10 minutes.
@@ -452,6 +454,8 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.log.Info("intervals updated", "pull", iv.Pull, "push", iv.Push)
 			}
 			reconfigureBeat()
+		case <-leaseTick.C:
+			_ = a.expireOfflineLease(ctx)
 		case <-wgTick.C:
 			if a.wireGuardActive.Load() && a.node != nil && !a.modeChanging.Load() {
 				if err := a.apply(ctx); err != nil {
@@ -550,6 +554,7 @@ func (a *Agent) pull(ctx context.Context) (bool, error) {
 	changed := false
 	node, nodeChanged, err := a.driver.Node(ctx)
 	if err != nil {
+		_ = a.expireOfflineLease(ctx)
 		return false, fmt.Errorf("node: %w", err)
 	}
 	if nodeChanged {

@@ -173,10 +173,11 @@ type SnellCore struct {
 
 // CaptainPanel configures the Captain driver.
 type CaptainPanel struct {
-	URL       string        `yaml:"url"`
-	PairCode  string        `yaml:"pair_code"`  // one-time; ignored once a token is stored
-	TokenFile string        `yaml:"token_file"` // default <data_dir>/captain.token
-	Timeout   time.Duration `yaml:"timeout"`
+	URL           string        `yaml:"url"`
+	PairCode      string        `yaml:"pair_code"`  // one-time; ignored once a token is stored
+	TokenFile     string        `yaml:"token_file"` // default <data_dir>/captain.token
+	Timeout       time.Duration `yaml:"timeout"`
+	OfflineMaxAge time.Duration `yaml:"offline_max_age"` // 0 disables; at most 24h since authenticated state validation
 	// AllowInsecure permits a plain-http panel URL (lab use only): the
 	// node token and every config the panel pushes would travel in clear.
 	AllowInsecure bool `yaml:"allow_insecure"`
@@ -284,6 +285,9 @@ func Load(path string) (*Config, error) {
 	}
 	if c.Panel.Driver == "xboard" && c.Panel.Xboard == nil {
 		return nil, fmt.Errorf("config: panel.xboard is required when driver is xboard")
+	}
+	if c.Panel.Captain != nil && (c.Panel.Captain.OfflineMaxAge < 0 || c.Panel.Captain.OfflineMaxAge > 24*time.Hour) {
+		return nil, fmt.Errorf("config: panel.captain.offline_max_age must be between 0 and 24h")
 	}
 	if c.Panel.Driver == "captain" {
 		if c.Panel.Captain == nil || c.Panel.Captain.URL == "" {
