@@ -1539,7 +1539,10 @@ contains the complete state, including credentials, certificates, user access
 and service controls. Keep it private like the token: directory `0700`, file
 `0600`. Its integrity is bound to the token and panel URL. It is not a backup
 for a different panel or node. Snapshot write failure leaves the current
-validated live state usable but does not promise restart recovery.
+validated live state usable and attempts to invalidate the older snapshot,
+so a restart cannot silently restore superseded permissions. Invalidation
+failure is logged explicitly; disk or permission failures do not promise
+restart recovery.
 
 Only transient network errors and HTTP 408/429/500/502/503/504 permit cached
 recovery. Authentication rejection (401/403) revokes the lease and atomically invalidates the

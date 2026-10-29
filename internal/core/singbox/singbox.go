@@ -391,3 +391,12 @@ func (c *Core) ListenerPIDs() map[string]int {
 	}
 	return map[string]int{"*": c.sup.PID()}
 }
+
+// Use the same wildcard-family mapping as the actual rendered listener.
+func (c *Core) ListenerInbounds(inbounds []spec.Inbound) []spec.Inbound {
+	out := append([]spec.Inbound(nil), inbounds...)
+	for i := range out {
+		out[i].Listen = listenAddr(out[i].Listen)
+	}
+	return out
+}

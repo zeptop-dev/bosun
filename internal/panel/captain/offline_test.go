@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -180,6 +181,31 @@ func TestOffline304RenewsOnlyValidatedState(t *testing.T) {
 	// Recovery has no ETag; an unsolicited 304 must not renew a disk snapshot.
 	if _, _, e := c.Node(context.Background()); e == nil {
 		t.Fatal("unsolicited 304 validated cached state")
+	}
+}
+
+func TestOfflineSaveFailureInvalidatesOlderSnapshotWithoutRevokingLiveState(t *testing.T) {
+	cfg, code := recoveryRig(t)
+	c := recoveredClient(t, cfg)
+	if _, _, err := c.Node(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// A valid in-memory state that exceeds the recovery file limit simulates a
+	// failed replacement while an older, still-unexpired snapshot exists.
+	c.mu.Lock()
+	c.state.Revision = strings.Repeat("x", snapshotLimit)
+	c.mu.Unlock()
+	c.saveSnapshot()
+	if err := c.ServiceLeaseError(); err != nil {
+		t.Fatal("snapshot failure revoked live authorization", err)
+	}
+	if _, err := os.Stat(filepath.Join(c.snapshotDir(), "state.json")); !os.IsNotExist(err) {
+		t.Fatal("old snapshot was not invalidated", err)
+	}
+	code.Store(503)
+	restarted := recoveredClient(t, cfg)
+	if _, _, err := restarted.Node(context.Background()); err == nil {
+		t.Fatal("restart reused stale authorization after a failed replacement")
 	}
 }
 

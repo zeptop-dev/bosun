@@ -103,11 +103,8 @@ func (c *Client) revokeLease() {
 	c.mu.Unlock()
 	if err := c.writeSnapshot(token, []byte(`{"version":0}`)); err != nil {
 		c.log.Error("cannot persist recovery revocation", "err", err)
-		// Best effort removal if replacement failed, without following a foreign directory.
-		if privateDir(c.snapshotDir()) == nil {
-			if err := os.Remove(filepath.Join(c.snapshotDir(), "state.json")); err != nil && !os.IsNotExist(err) {
-				c.log.Error("cannot remove rejected recovery snapshot", "err", err)
-			}
+		if err := c.invalidateSnapshot(); err != nil {
+			c.log.Error("cannot invalidate rejected recovery snapshot", "err", err)
 		}
 	}
 }
@@ -150,7 +147,30 @@ func (c *Client) saveSnapshot() {
 	}
 	if err != nil {
 		c.log.Warn("offline recovery snapshot not saved; live state remains valid", "err", err)
+		// A previous snapshot may authorize users or traffic that the new state
+		// removed. Do not let a later restart roll that change back silently.
+		if err := c.invalidateSnapshot(); err != nil {
+			c.log.Error("cannot invalidate stale recovery snapshot after save failure", "err", err)
+		}
 	}
+}
+
+// The caller serializes snapshots. Never unlink through a foreign directory;
+// directory fsync makes successful invalidation survive a restart as well.
+func (c *Client) invalidateSnapshot() error {
+	dir := c.snapshotDir()
+	if err := privateDir(dir); err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(dir, "state.json")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 func (c *Client) writeSnapshot(token string, body []byte) error {
 	raw, err := json.Marshal(signedSnapshot{Payload: body, MAC: snapshotMAC(token, body)})
