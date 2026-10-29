@@ -57,3 +57,27 @@ func TestOfflineRecoveryCannotChangeModeGeneration(t *testing.T) {
 		t.Fatal("offline mode change was accepted")
 	}
 }
+
+type leaseUpgradePanel struct{ leasePanel }
+
+func (p *leaseUpgradePanel) UpgradeRequested() string { return "v9.0.0" }
+
+func TestExpiredLeaseAcknowledgesTrafficWithoutStartingLateUpgrade(t *testing.T) {
+	a, c, _ := checkpointRig(t)
+	p := &leaseUpgradePanel{leasePanel{Driver: a.driver}}
+	a.driver = p
+	a.Upgrade = func(string) {}
+	c.bytes = 100
+	full, err := a.prepareDurableReport(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.expired = true
+	a.finishDurableReport(full, false, nil)
+	if a.trafficJournal.Pending != nil {
+		t.Fatal("accepted traffic was not acknowledged")
+	}
+	if a.upgradeAsked != "" {
+		t.Fatal("late report started upgrade after lease expiry")
+	}
+}

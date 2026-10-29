@@ -298,7 +298,7 @@ func (a *Agent) finishDurableReport(full agentproto.Report, changed bool, err er
 		a.sentDoctor, a.sentDoctorAt, a.pendingDoctor = full.Doctor, time.Now(), nil
 	}
 	a.statusMu.Unlock()
-	if ur, ok := a.driver.(panel.UpgradeRequester); ok && a.Upgrade != nil {
+	if ur, ok := a.driver.(panel.UpgradeRequester); ok && a.Upgrade != nil && a.serviceLeaseError() == nil {
 		if v := ur.UpgradeRequested(); v != "" && v != a.upgradeAsked {
 			a.upgradeAsked = v
 			go a.Upgrade(v)
