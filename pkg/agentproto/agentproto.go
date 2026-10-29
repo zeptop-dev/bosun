@@ -33,10 +33,12 @@ type PairResponse struct {
 // State is the complete desired state for one node. Revision changes
 // whenever any part changes; it doubles as the ETag.
 type State struct {
-	Revision string         `json:"revision"`
-	Node     spec.Node      `json:"node"`
-	Users    []spec.User    `json:"users"`
-	Forwards []spec.Forward `json:"forwards"`
+	ConfigRevision string          `json:"config_revision,omitempty"`
+	ConfigDelivery *ConfigDelivery `json:"config_delivery,omitempty"`
+	Revision       string          `json:"revision"`
+	Node           spec.Node       `json:"node"`
+	Users          []spec.User     `json:"users"`
+	Forwards       []spec.Forward  `json:"forwards"`
 	// Intervals the agent should use, in seconds.
 	PullSeconds int `json:"pull_seconds,omitempty"`
 	PushSeconds int `json:"push_seconds,omitempty"`
@@ -76,6 +78,7 @@ type Beat struct {
 
 // Report is what bosun pushes every push interval.
 type Report struct {
+	ConfigReceipt  *ConfigReceipt        `json:"config_receipt,omitempty"`
 	ServiceControl *ServiceControlReport `json:"service_control,omitempty"`
 	// Hostname is freshly read for each report; omitted on lookup failure.
 	Hostname         string           `json:"hostname,omitempty"`
