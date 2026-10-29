@@ -324,3 +324,15 @@ func (c *Core) ListenerPIDs() map[string]int {
 	}
 	return map[string]int{"*": c.sup.PID()}
 }
+
+// Hysteria's renderer maps either unspecified family to :port. Observe the
+// resulting wildcard listener rather than requiring the input's address family.
+func (c *Core) ListenerInbounds(inbounds []spec.Inbound) []spec.Inbound {
+	out := append([]spec.Inbound(nil), inbounds...)
+	for i := range out {
+		if out[i].Listen == "0.0.0.0" || out[i].Listen == "::" {
+			out[i].Listen = ""
+		}
+	}
+	return out
+}

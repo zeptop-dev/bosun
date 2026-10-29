@@ -26,6 +26,30 @@ func inbound() spec.Inbound {
 		TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "a", CertPath: "/c", KeyPath: "/k"}}
 }
 
+func TestReadinessMatchesRenderedListenerAddress(t *testing.T) {
+	c := &Core{}
+	for _, address := range []string{"", "0.0.0.0", "::", "192.0.2.10", "2001:db8::1"} {
+		ib := inbound()
+		ib.Listen = address
+		original := []spec.Inbound{ib}
+		want := c.ListenerInbounds(original)
+		out, _, err := render(original, users, renderOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cfg map[string]any
+		if err := yaml.Unmarshal(out, &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if got := cfg["listen"]; got != net.JoinHostPort(want[0].Listen, "8443") {
+			t.Fatalf("readiness address does not match %q: %v", address, got)
+		}
+		if original[0].Listen != address {
+			t.Fatal("listener observation mutated desired state")
+		}
+	}
+}
+
 func TestRender(t *testing.T) {
 	opt := renderOptions{AuthURL: "http://127.0.0.1:1/auth", StatsListen: "127.0.0.1:2", StatsSecret: "s"}
 	out, st, err := render([]spec.Inbound{inbound()}, users, opt)
