@@ -21,9 +21,10 @@ const (
 // A missing value preserves normal operation. Revision identifies the policy
 // generation independently from frequent host-traffic samples.
 type ServiceControl struct {
-	Revision  string `json:"revision"`
-	Mode      string `json:"mode"`
-	LimitMbps int    `json:"limit_mbps,omitempty"`
+	Offline   *OfflineServiceControl `json:"offline,omitempty"`
+	Revision  string                 `json:"revision"`
+	Mode      string                 `json:"mode"`
+	LimitMbps int                    `json:"limit_mbps,omitempty"`
 }
 
 var serviceControlRevision = regexp.MustCompile(`^[a-zA-Z0-9._:-]{1,128}$`)
@@ -47,5 +48,5 @@ func (s *ServiceControl) Validate() error {
 	default:
 		return errors.New("invalid service control mode")
 	}
-	return nil
+	return s.Offline.Validate()
 }

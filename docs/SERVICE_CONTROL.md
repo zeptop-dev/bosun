@@ -17,6 +17,43 @@ period and the administrator's manual selection. bosun receives an optional
 retain their previous behavior. This control does not alter user quotas,
 traffic receipts, or per-user speed limits.
 
+## Optional offline automatic policy
+
+The current unreleased offline capability adds a `Node.ServiceControl.offline`
+snapshot for local automatic
+threshold evaluation. It is absent by default and requires the independent
+`Report.ServiceControl.offline_supported` capability. Captain sends the action,
+quota, threshold, counting direction, manual restriction, exemption, current
+cycle, twelve absolute cycle boundaries and an authenticated NIC counter anchor.
+This uses host counters and never modifies customer traffic receipts or quotas.
+
+The serial local timer checks counters every fifteen seconds, independently of
+panel HTTP success. The sampler's boot/interface identity and cumulative bytes
+must remain continuous. A private `offline-service-control/offline-traffic.json`
+journal is written and synced before applying a transition. Process restart can
+continue from the journal when the same boot/interface counters remain valid.
+Same-policy anchor refreshes cannot clear an existing local automatic hold in
+the same cycle. Period recovery requires a fresh observed boundary crossing;
+manual holds persist, and cycle exemptions expire. A disabled auto-resume policy
+keeps its automatic hold in later cycles.
+
+Missing interfaces, reset counters, a missed boundary, expired cycle schedule,
+stale anchor after journal loss/reinstall, corrupt journal, or persistence failure
+produce a conservative pause, never a fabricated zero-usage period. A fresh panel
+anchor can repair lost observations. A corrupt journal requires an explicit
+administrative disable/re-enable; disabling retires only this owned journal.
+A recovered cached state must match both the saved policy identity and the exact
+last accepted command revision; it cannot delete or replace newer protection.
+Missing or conflicting journals pause recovery until a fresh online state arrives.
+Applied revision is withheld while evidence or service reconciliation fails.
+Guard checks and local metering share the same stop/restart path, so releasing a
+pause also restores the configured managed processes and forwards.
+
+Versions without this capability ignore the additive object. Disable offline
+protection before manually downgrading to such a release. The feature extends
+when automatic decisions occur; the existing nft enforcement and management
+isolation described below are unchanged.
+
 ## Enforcement boundary
 
 One owned nftables table, `inet bosun_service_control`, covers:

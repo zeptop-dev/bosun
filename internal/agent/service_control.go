@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/zeptop-dev/bosun/internal/runas"
 	"github.com/zeptop-dev/bosun/internal/servicecontrol"
@@ -13,10 +14,12 @@ import (
 )
 
 func (a *Agent) serviceControlActive() bool {
-	return a.node != nil && a.node.ServiceControl != nil && a.node.ServiceControl.Mode != spec.ServiceControlNormal
+	c := a.effectiveServiceControl()
+	return c != nil && c.Mode != spec.ServiceControlNormal
 }
 func (a *Agent) serviceControlPaused() bool {
-	return a.node != nil && a.node.ServiceControl != nil && a.node.ServiceControl.Mode == spec.ServiceControlPause
+	c := a.effectiveServiceControl()
+	return c != nil && c.Mode == spec.ServiceControlPause
 }
 
 func (a *Agent) reconcileServiceControl(ctx context.Context) error {
@@ -35,6 +38,36 @@ func (a *Agent) reconcileServiceControl(ctx context.Context) error {
 		uid = 65534
 	} // injectable nft runner owns the test namespace
 	desired := a.node.ServiceControl
+	var offlineErr error
+	recovering := false
+	if source, ok := a.driver.(interface{ OfflineRecoveryActive() bool }); ok {
+		recovering = source.OfflineRecoveryActive()
+	}
+	if a.offlineControl == nil && a.cfg != nil && a.cfg.DataDir != "" {
+		a.offlineControl = &servicecontrol.Offline{Dir: filepath.Join(a.cfg.DataDir, "offline-service-control")}
+	}
+	if recovering && a.offlineControl != nil {
+		desired, offlineErr = a.offlineControl.RecoveryGuard(desired)
+	}
+	a.offlineRecoveryGuard = recovering && offlineErr != nil
+	if offlineErr == nil && desired != nil && desired.Offline != nil {
+		if a.offlineControl == nil {
+			a.offlineControl = &servicecontrol.Offline{}
+		}
+		desired, offlineErr = a.offlineControl.Resolve(desired, a.SampleHost(ctx).Resources, time.Now())
+	}
+	// Only a fresh online state can retire an owned offline journal. A stale
+	// recovery snapshot is not an authoritative instruction to disable protection.
+	if !recovering && (a.node.ServiceControl == nil || a.node.ServiceControl.Offline == nil) && a.offlineControl != nil && a.offlineControl.Dir != "" {
+		offlineErr = errors.Join(offlineErr, a.offlineControl.Disable())
+	}
+	a.resolvedServiceControl = desired
+	a.statusMu.Lock()
+	a.offlineControlReport = nil
+	if a.offlineControl != nil && (a.offlineRecoveryGuard || a.node.ServiceControl != nil && a.node.ServiceControl.Offline != nil) {
+		a.offlineControlReport = a.offlineControl.Report()
+	}
+	a.statusMu.Unlock()
 	if a.serviceControlActive() {
 		users := append([]spec.User(nil), a.users...)
 		for _, ib := range a.node.Inbounds {
@@ -64,7 +97,7 @@ func (a *Agent) reconcileServiceControl(ctx context.Context) error {
 	if a.fwd != nil {
 		a.fwd.SetServiceControl(a.serviceControlActive())
 	}
-	return a.ServiceControl.Apply(ctx, desired, uid, a.MonitorOnly(), scope)
+	return errors.Join(a.ServiceControl.Apply(ctx, desired, uid, a.MonitorOnly(), scope), offlineErr)
 }
 
 // Pause installs the independent guard before collecting counters. A failed
@@ -99,18 +132,27 @@ func (a *Agent) stopControlledServices(ctx context.Context) error {
 // services immediately; waiting for a successful pull could leave traffic
 // unprotected indefinitely while the panel is unreachable.
 func (a *Agent) refreshServiceControl(ctx context.Context) error {
+	wasPaused, wasActive := a.serviceControlPaused(), a.serviceControlActive()
 	a.shaperMu.Lock()
-	defer a.shaperMu.Unlock()
 	err := a.reconcileServiceControl(ctx)
-	if err == nil {
-		return nil
+	offline := a.offlineRecoveryGuard || a.node != nil && a.node.ServiceControl != nil && a.node.ServiceControl.Offline != nil
+	resume := err == nil && offline && !a.serviceControlPaused() && (wasPaused || wasActive != a.serviceControlActive() || a.coreDirty || a.forwardDirty)
+	if err == nil && offline && a.serviceControlPaused() {
+		err = a.stopControlledServices(ctx)
 	}
-	a.coreDirty, a.forwardDirty, a.dirty = true, true, true
-	a.serviceControlPending.Store(true)
-	a.setAppliedCoreRevision("")
-	a.setAppliedForwardRevision("")
-	if a.serviceControlActive() {
-		err = errors.Join(err, a.stopControlledServices(ctx))
+	if err != nil {
+		a.coreDirty, a.forwardDirty, a.dirty = true, true, true
+		a.serviceControlPending.Store(true)
+		a.setAppliedCoreRevision("")
+		a.setAppliedForwardRevision("")
+		if a.serviceControlActive() {
+			err = errors.Join(err, a.stopControlledServices(ctx))
+		}
+	}
+	a.shaperMu.Unlock()
+	if resume {
+		a.coreDirty, a.forwardDirty, a.dirty = true, true, true
+		return errors.Join(a.apply(ctx), a.applyForwards(ctx))
 	}
 	return err
 }
@@ -120,6 +162,17 @@ func (a *Agent) serviceControlReport() *agentproto.ServiceControlReport {
 		return nil
 	}
 	s := a.ServiceControl.Status()
+	s.OfflineSupported = s.Supported
+	a.statusMu.Lock()
+	if a.offlineControlReport != nil {
+		cp := *a.offlineControlReport
+		s.Offline = &cp
+	}
+	a.statusMu.Unlock()
+	if s.Offline != nil && s.Offline.Error != "" {
+		s.AppliedRevision = ""
+		s.Error = s.Offline.Error
+	}
 	coreRevision, forwardRevision := a.consumedRevisions()
 	a.statusMu.Lock()
 	pendingRevision := coreRevision != "" && coreRevision != a.appliedCoreRevision ||
@@ -132,4 +185,25 @@ func (a *Agent) serviceControlReport() *agentproto.ServiceControlReport {
 		}
 	}
 	return &s
+}
+
+func (a *Agent) effectiveServiceControl() *spec.ServiceControl {
+	if a.offlineRecoveryGuard && a.resolvedServiceControl != nil {
+		return a.resolvedServiceControl
+	}
+	if a.node == nil {
+		return nil
+	}
+	if a.node.ServiceControl != nil && a.node.ServiceControl.Offline != nil {
+		if a.resolvedServiceControl != nil && a.resolvedServiceControl.Revision == a.node.ServiceControl.Revision {
+			return a.resolvedServiceControl
+		}
+		return &spec.ServiceControl{Revision: a.node.ServiceControl.Revision, Mode: spec.ServiceControlPause}
+	}
+	return a.node.ServiceControl
+}
+
+// Called on the serial local timer, independently of HTTP reporting success.
+func (a *Agent) refreshOfflineServiceControl(ctx context.Context) error {
+	return a.refreshServiceControl(ctx)
 }

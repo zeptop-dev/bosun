@@ -91,12 +91,16 @@ type Agent struct {
 	// Alert delivers an operator notification (Telegram); nil = none.
 	Alert func(text string)
 	// Shaper enforces per-user speed limits in the kernel; nil = none.
-	ServiceControl        *servicecontrol.Manager
-	serviceControlPending atomic.Bool
-	Shaper                *shaper.Shaper
-	wireGuard             *wireGuardRuntime
-	wireGuardActive       atomic.Bool
-	shaperMu              sync.Mutex
+	ServiceControl         *servicecontrol.Manager
+	offlineControl         *servicecontrol.Offline
+	resolvedServiceControl *spec.ServiceControl
+	offlineRecoveryGuard   bool
+	offlineControlReport   *agentproto.OfflineControlReport
+	serviceControlPending  atomic.Bool
+	Shaper                 *shaper.Shaper
+	wireGuard              *wireGuardRuntime
+	wireGuardActive        atomic.Bool
+	shaperMu               sync.Mutex
 	// Realm runs forward rules with the realm backend; nil rejects them.
 	Realm *forward.Realm
 	// Guard drops packets for mita ports that arrive on the wrong local
