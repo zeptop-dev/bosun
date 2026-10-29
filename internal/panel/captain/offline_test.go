@@ -259,3 +259,62 @@ func TestOfflineLeaseBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestOfflineDeliveryRejectionRevokesLease(t *testing.T) {
+	for _, kind := range []string{"report", "beat"} {
+		for _, status := range []int32{401, 403} {
+			t.Run(kind+http.StatusText(int(status)), func(t *testing.T) {
+				cfg, code := recoveryRig(t)
+				c := recoveredClient(t, cfg)
+				if _, _, err := c.Node(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+				code.Store(status)
+				if kind == "report" {
+					_, _ = c.Report(context.Background(), agentproto.Report{})
+				} else {
+					_ = c.Beat(context.Background(), agentproto.Beat{})
+				}
+				if c.ServiceLeaseError() == nil {
+					t.Fatal("delivery authorization rejection left lease valid")
+				}
+				code.Store(503)
+				if _, _, err := recoveredClient(t, cfg).Node(context.Background()); err == nil {
+					t.Fatal("rejected delivery resurrected cached credentials")
+				}
+			})
+		}
+	}
+}
+
+func TestOfflineLateStateCannotUndoRevocation(t *testing.T) {
+	cfg, code := recoveryRig(t)
+	c := recoveredClient(t, cfg)
+	if _, _, err := c.Node(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-release
+		_ = json.NewEncoder(w).Encode(agentproto.State{Revision: "old", Node: spec.Node{ID: "node"}})
+	}))
+	defer server.Close()
+	c.cfg.URL = server.URL
+	result := make(chan error, 1)
+	go func() { _, err := c.fetch(context.Background()); result <- err }()
+	<-entered
+	c.revokeLease()
+	close(release)
+	if err := <-result; err == nil {
+		t.Fatal("late state accepted after newer rejection")
+	}
+	if c.ServiceLeaseError() == nil {
+		t.Fatal("late state revived revoked lease")
+	}
+	c.cfg.URL = cfg.URL
+	code.Store(200)
+	if _, err := c.fetch(context.Background()); err != nil || c.ServiceLeaseError() != nil {
+		t.Fatal("fresh state after rejection cannot recover", err)
+	}
+}

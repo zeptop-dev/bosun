@@ -41,19 +41,20 @@ type Client struct {
 	http *http.Client
 	log  *slog.Logger
 
-	snapshotMu sync.Mutex
-	verifiedAt time.Time
-	offline    bool
-	revoked    bool
-	mu         sync.Mutex
-	token      string
-	etag       string
-	state      *agentproto.State
-	nodeSeen   string // revision last returned by Node()
-	usersSeen  string // revision last returned by Users()
-	fwdSeen    string // revision last returned by Forwards()
-	upgradeTo  string // from the last report response
-	addresses  *agentproto.PublicAddresses
+	snapshotMu     sync.Mutex
+	verifiedAt     time.Time
+	offline        bool
+	revoked        bool
+	authGeneration uint64
+	mu             sync.Mutex
+	token          string
+	etag           string
+	state          *agentproto.State
+	nodeSeen       string // revision last returned by Node()
+	usersSeen      string // revision last returned by Users()
+	fwdSeen        string // revision last returned by Forwards()
+	upgradeTo      string // from the last report response
+	addresses      *agentproto.PublicAddresses
 
 	// Long-poll watcher: keeps a GET /state?wait= request open so a change
 	// on the panel reaches the agent within a second or two.
@@ -243,7 +244,7 @@ func (c *Client) fetch(ctx context.Context) (bool, error) { return c.fetchWait(c
 // the request until the revision changes or the window ends.
 func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 	c.mu.Lock()
-	tok, etag := c.token, c.etag
+	tok, etag, generation := c.token, c.etag, c.authGeneration
 	c.mu.Unlock()
 	if tok == "" {
 		if err := c.Pair(ctx); err != nil {
@@ -267,8 +268,7 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 		if etag == "" {
 			return false, fmt.Errorf("captain: unsolicited state 304")
 		}
-		c.validateLease()
-		return false, nil
+		return false, c.validateLease(generation)
 	case http.StatusOK:
 	case http.StatusUnauthorized, http.StatusForbidden:
 		c.revokeLease()
@@ -281,6 +281,10 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 		return false, fmt.Errorf("captain: decode state: %w", err)
 	}
 	c.mu.Lock()
+	if c.authGeneration != generation {
+		c.mu.Unlock()
+		return false, errors.New("captain: state response predates authorization rejection")
+	}
 	if c.state != nil && st.Node.ModeRevision < c.state.Node.ModeRevision {
 		c.mu.Unlock()
 		return false, nil
@@ -377,6 +381,9 @@ func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error
 	if err != nil {
 		return false, err
 	}
+	if code == http.StatusUnauthorized || code == http.StatusForbidden {
+		c.revokeLease()
+	}
 	if code != http.StatusOK {
 		return false, fmt.Errorf("captain: POST report: %s: %s", http.StatusText(code), truncate(body))
 	}
@@ -418,6 +425,9 @@ func (c *Client) Beat(ctx context.Context, b agentproto.Beat) error {
 	code, body, _, err := c.do(ctx, http.MethodPost, "/api/agent/beat", b, nil)
 	if err != nil {
 		return err
+	}
+	if code == http.StatusUnauthorized || code == http.StatusForbidden {
+		c.revokeLease()
 	}
 	if code != http.StatusOK && code != http.StatusNoContent {
 		return fmt.Errorf("captain: POST beat: %s: %s", http.StatusText(code), truncate(body))

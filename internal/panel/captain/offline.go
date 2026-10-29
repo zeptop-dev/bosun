@@ -77,14 +77,19 @@ func privateDir(dir string) error {
 	}
 	return nil
 }
-func (c *Client) validateLease() {
+func (c *Client) validateLease(generation uint64) error {
 	c.mu.Lock()
+	if c.authGeneration != generation {
+		c.mu.Unlock()
+		return errors.New("captain: state response predates authorization rejection")
+	}
 	if c.state != nil && !c.revoked {
 		c.verifiedAt = time.Now()
 		c.offline = false
 	}
 	c.mu.Unlock()
 	c.saveSnapshot()
+	return nil
 }
 func (c *Client) revokeLease() {
 	if c.cfg.OfflineMaxAge == 0 {
@@ -94,6 +99,7 @@ func (c *Client) revokeLease() {
 	defer c.snapshotMu.Unlock()
 	c.mu.Lock()
 	c.revoked = true
+	c.authGeneration++
 	c.etag = ""
 	c.mu.Unlock()
 	// Persist a tombstone using the same atomic replacement and directory fsync.
