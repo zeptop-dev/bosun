@@ -202,6 +202,10 @@ func (c *Client) doClient(ctx context.Context, hc *http.Client, method, path str
 		return 0, nil, nil, err
 	}
 	defer resp.Body.Close()
+	// Status alone is authoritative even when the error body is truncated or stalls.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		c.revokeLease()
+	}
 	out, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	return resp.StatusCode, out, resp.Header, err
 }
@@ -271,7 +275,6 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 		return false, c.validateLease(generation)
 	case http.StatusOK:
 	case http.StatusUnauthorized, http.StatusForbidden:
-		c.revokeLease()
 		return false, fmt.Errorf("captain: token rejected; remove %s and pair again", c.cfg.TokenFile)
 	default:
 		return false, &stateFetchError{status: code}
@@ -381,9 +384,6 @@ func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error
 	if err != nil {
 		return false, err
 	}
-	if code == http.StatusUnauthorized || code == http.StatusForbidden {
-		c.revokeLease()
-	}
 	if code != http.StatusOK {
 		return false, fmt.Errorf("captain: POST report: %s: %s", http.StatusText(code), truncate(body))
 	}
@@ -425,9 +425,6 @@ func (c *Client) Beat(ctx context.Context, b agentproto.Beat) error {
 	code, body, _, err := c.do(ctx, http.MethodPost, "/api/agent/beat", b, nil)
 	if err != nil {
 		return err
-	}
-	if code == http.StatusUnauthorized || code == http.StatusForbidden {
-		c.revokeLease()
 	}
 	if code != http.StatusOK && code != http.StatusNoContent {
 		return fmt.Errorf("captain: POST beat: %s: %s", http.StatusText(code), truncate(body))

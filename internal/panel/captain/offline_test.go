@@ -318,3 +318,33 @@ func TestOfflineLateStateCannotUndoRevocation(t *testing.T) {
 		t.Fatal("fresh state after rejection cannot recover", err)
 	}
 }
+
+func TestOfflineTruncatedRejectionRevokesLease(t *testing.T) {
+	for _, kind := range []string{"state", "report", "beat"} {
+		t.Run(kind, func(t *testing.T) {
+			cfg, _ := recoveryRig(t)
+			c := recoveredClient(t, cfg)
+			if _, _, err := c.Node(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Length", "100")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte("short"))
+			}))
+			defer srv.Close()
+			c.cfg.URL = srv.URL
+			switch kind {
+			case "state":
+				_, _ = c.fetch(context.Background())
+			case "report":
+				_, _ = c.Report(context.Background(), agentproto.Report{})
+			case "beat":
+				_ = c.Beat(context.Background(), agentproto.Beat{})
+			}
+			if c.ServiceLeaseError() == nil {
+				t.Fatal("partial rejection body left cached authorization valid")
+			}
+		})
+	}
+}
