@@ -52,7 +52,7 @@ type Config struct {
 
 	// MinVersion refuses any self-update or rollback below this release
 	// tag ("v0.44.2"), so a node cannot be talked back into a build with
-	// a known hole. Empty = no floor.
+	// a known hole. Empty retains the binary's built-in compatibility floor.
 	MinVersion string `yaml:"min_version"`
 
 	// Probe runs the latency checks on a node that is not managed by

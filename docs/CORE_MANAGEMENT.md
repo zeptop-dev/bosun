@@ -8,7 +8,7 @@ An inbound selects a protocol and an adapter using the existing `core` field. Co
 2. Select **Activate / switch**, review the interruption notice, and confirm.
 3. Select that core in an inbound's editor, or retain automatic selection for existing supported protocols.
 
-A switch serializes with configuration application and reporting. It checks the inventory revision and configuration compatibility, validates sing-box/Xray configurations with the candidate binary, checkpoints outstanding traffic, stops the old instance and waits for the new instance's statistics API. Failed startup or selection persistence restores the old instance and reports the error. Other adapters validate their rendered model and then use startup/readiness checks. Switching interrupts connections served by that distribution. It cannot atomically stop network traffic and persist counters; the boundaries below still apply.
+A switch serializes with configuration application and reporting. It checks the inventory revision and configuration compatibility, validates sing-box/Xray configurations with the candidate binary, checkpoints outstanding traffic, stops the old instance and waits for the new instance's statistics API. Since v0.84.0, Linux activation also checks expected business TCP/UDP sockets against the supervised process's ownership; unused or deliberately userless inbounds do not create fictitious listener requirements. Failed startup or selection persistence restores the old instance and reports the error. Other adapters validate their rendered model and then use startup/readiness checks. Switching interrupts connections served by that distribution. It cannot atomically stop network traffic and persist counters; the boundaries below still apply.
 
 Successful selections and preference order persist in `<data_dir>/cores/active.json`; downloaded executables are under `<data_dir>/cores/<distribution>/<version>/`. New UI-enabled distributions are appended to the preference order. A switch that would move existing automatically assigned inbounds to another core is rejected; pin them first. A failed configuration apply must be resolved before switching. These files are installation state, separate from the standalone configuration backup; preserve the data volume or reselect cores when restoring on a new host. An explicit `config.yaml` binary path remains an administrator pin and cannot be replaced through the UI.
 
@@ -44,6 +44,39 @@ Kernel nft forwarding reports installation, replacement and cleanup failures to
 the caller. Failed scripts are retried even when the desired rules are unchanged;
 successful identical scripts retain the existing no-reinstall behavior. A failed
 removal of the last rule cannot be acknowledged as a successful empty config.
+
+## Session-bound configuration receipts
+
+bosun v0.84.0 and Captain v1.49.0 add a structural `config_revision` and a
+`config_receipt`, alongside the existing received/applied revisions. The
+structural digest covers runtime configuration while excluding dynamic users,
+jobs and monitoring-only state. Each full-state delivery still binds both
+revisions to a random session generated for the current bosun client process.
+The receipt's observation sequence increases within that session; HTTP retries
+reuse the frozen observation, rather than refreshing its time or sequence.
+
+A positive receipt requires coherent node, users and forwarding revisions
+actually consumed by the apply loop. Watcher prefetches cannot supply missing
+proof. Failed dynamic user changes, skipped required configuration, unavailable
+helpers/decoy, or a stopped required core/realm process withhold confirmation.
+Monitor-only mode can confirm its genuinely empty runtime only after successful
+cleanup. Deliberately idle no-user Mieru/Snell instances remain valid. Cached
+offline state never acknowledges a new delivery, and retirement of a session
+removes its delivery metadata on consumption.
+
+Captain evaluates the delivery identity and freshness before presenting recent
+application confirmation. A receipt does not prove subscriber authorization,
+remote reachability or a working end-to-end line. A changed desired structure
+requires a new confirmation; an older successful receipt cannot make it green.
+Older panels ignore these additive fields. Older agents continue serving their
+existing configuration but cannot provide this new evidence. Standalone and
+Xboard modes do not manufacture Captain receipts. The exact digest contract is
+in [pkg/configrevision](../pkg/configrevision/README.md).
+
+**中文说明：** bosun v0.84.0 / Captain v1.49.0 新增结构版本与进程会话绑定的配置回执。
+确认来自实际消费并成功应用的节点、用户和转发状态，不能借用 watcher 预取或离线缓存。
+应用失败、应运行的进程退出或依赖组件失败时不确认；回执只证明近期应用，不能代替端到端连通测试。
+旧面板和旧节点继续兼容，但缺少新回执时不提供这项确认。
 
 ## Traffic accounting during changes
 

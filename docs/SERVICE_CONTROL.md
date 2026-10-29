@@ -2,13 +2,15 @@
 
 Available with bosun v0.83.0 and Captain v1.48.0. Captain requires fresh
 capability reports before enabling controls; older agents continue existing
-services but cannot enforce this feature. The built-in updater refuses updates
-or rollback below bosun v0.83.0 because those versions ignore service controls.
+services but cannot enforce this feature. The current built-in updater refuses
+updates or rollback below bosun v0.84.0 because older versions cannot enforce
+the authorization lease and optional local traffic policy described below.
 
 **中文说明：** 服务器暂停与总限速需要 bosun v0.83.0 / Captain v1.48.0
 及节点新鲜的能力报告。总限速是托管流量上传与下载共用的丢包限速，不是平滑整形，
 也不等于供应商账单封顶；系统和管理连接不计入该限制。旧节点仍可提供原服务，
-但不能启用此保护。内置更新与回滚不允许低于 v0.83.0，以免旧程序忽略限制。
+但不能启用此保护。当前内置更新与回滚不允许低于 v0.84.0，以免旧程序忽略
+离线授权期限或本地流量策略。
 
 Captain decides when a server policy applies from its recorded NIC traffic
 period and the administrator's manual selection. bosun receives an optional
@@ -19,9 +21,8 @@ traffic receipts, or per-user speed limits.
 
 ## Optional offline automatic policy
 
-The current unreleased offline capability adds a `Node.ServiceControl.offline`
-snapshot for local automatic
-threshold evaluation. It is absent by default and requires the independent
+bosun v0.84.0 and Captain v1.49.0 add a `Node.ServiceControl.offline`
+snapshot for local automatic threshold evaluation. It is absent by default and requires the independent
 `Report.ServiceControl.offline_supported` capability. Captain sends the action,
 quota, threshold, counting direction, manual restriction, exemption, current
 cycle, twelve absolute cycle boundaries and an authenticated NIC counter anchor.
@@ -49,10 +50,16 @@ Applied revision is withheld while evidence or service reconciliation fails.
 Guard checks and local metering share the same stop/restart path, so releasing a
 pause also restores the configured managed processes and forwards.
 
-Versions without this capability ignore the additive object. Disable offline
-protection before manually downgrading to such a release. The feature extends
-when automatic decisions occur; the existing nft enforcement and management
-isolation described below are unchanged.
+Versions without this capability ignore the additive object. The built-in
+v0.84.0 rollback floor prevents that silent loss of protection. Manual binary
+replacement bypasses the floor and is not a supported way to clear an active
+hold. If an older installation must be recovered, first restore authenticated
+panel access, explicitly disable offline protection and active server controls,
+and confirm normal reconciliation. Stop client traffic and let pending and
+buffered accounting finish before restoring a compatible installation backup.
+Do not delete owned journals to bypass an uncertain or active policy. The
+feature extends when automatic decisions occur; the existing nft enforcement
+and management isolation described below are unchanged.
 
 ## Enforcement boundary
 

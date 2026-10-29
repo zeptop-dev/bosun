@@ -24,6 +24,7 @@ Verified end to end against the manifest's tested releases (sing-box
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
 - Captain configuration-application confirmation (v0.81): report the exact revision successfully applied by both proxy and forwarding paths, separately from the latest received revision. Preserve unknown state across failures/restarts and retry failed nft changes; confirmation still requires runtime observations before it can support a service-status result. [Semantics and version compatibility](docs/CORE_MANAGEMENT.md#received-and-successfully-applied-revisions).
+- Reliable Captain operation (bosun v0.84 / Captain v1.49): session-bound structural configuration receipts, asynchronous report delivery, optional bounded offline recovery and local traffic protection. Fresh application confirmation is separate from end-to-end connectivity. Recovery is disabled by default; the built-in update/rollback floor is v0.84.0. [Recovery and authorization limits](#optional-captain-offline-recovery), [configuration receipts](docs/CORE_MANAGEMENT.md#session-bound-configuration-receipts) and [offline traffic policy](docs/SERVICE_CONTROL.md#optional-offline-automatic-policy).
 - Carrier monitoring (bosun v0.82 / Captain v1.43): select TCP/ICMP and IPv4/IPv6/dual independently, preserve four target lists, and keep per-family measurements and Prometheus series separate. Permission and routing failures stay explicit without a protocol/family fallback. [Configuration and compatibility](#carrier-monitoring-compatibility).
 - Managed server controls (bosun v0.83 / Captain v1.48): pause managed services or apply a shared upload-plus-download limit without blocking management access. Persist and verify owned enforcement; existing user quotas and speed limits stay separate. [Prerequisites and recovery](docs/SERVICE_CONTROL.md).
 - Optional Mihomo dual-stack connection selection (v0.83): generate client IPv6 and concurrent dialing settings while preserving DNS AAAA policy and explicit per-node overrides. Existing templates change only when reapplied; native Snell retains its existing IPv4 listener default. [Protocol and listener boundaries](docs/DESIGNER_DUAL_STACK.md).
@@ -1511,7 +1512,7 @@ proxies receive checked IPs rather than a domain to resolve independently.
 
 ### Accounting delivery health
 
-Captain report and resource-beat HTTP delivery run outside the serial apply
+Since bosun v0.84.0, Captain report and resource-beat HTTP delivery run outside the serial apply
 loop, with one outstanding request per stream. Further report requests coalesce;
 traffic collection, journal writes and acknowledgements remain serial. A local
 core switch can append a durable lifecycle checkpoint while a report is in
@@ -1527,7 +1528,7 @@ sequence, epoch, billing rules and acknowledgement contract are unchanged.
 
 ### Optional Captain offline recovery
 
-`panel.captain.offline_max_age` defaults to `0s` (disabled). Set an explicit
+Available since bosun v0.84.0. `panel.captain.offline_max_age` defaults to `0s` (disabled). Set an explicit
 bounded duration, for example `1h`, to permit recovery after a bosun restart
 while Captain is temporarily unreachable. The maximum is `24h`. This also
 limits how long the running node may keep serving without authenticated state
@@ -1559,7 +1560,10 @@ Fresh authenticated state allows normal reconciliation to resume. During the
 explicit lease, user revocations and new panel-side policies cannot be learned:
 choose the duration according to that operational tradeoff. Previously saved
 pause/limit/security policies remain in force. Disabling recovery does not
-change any current panel policy.
+change any current panel policy. The built-in updater refuses versions below
+v0.84.0 because older binaries cannot enforce this lease or the local traffic
+policy. Manual replacement bypasses that protection; do not remove recovery or
+control journals to force service to resume. See [service-control recovery](docs/SERVICE_CONTROL.md#optional-offline-automatic-policy).
 
 Core activation also verifies expected business TCP/UDP listeners on Linux
 against socket inodes owned by the supervised process (per inbound for mita
