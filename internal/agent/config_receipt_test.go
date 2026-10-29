@@ -2,11 +2,14 @@ package agent
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/core"
+	"github.com/zeptop-dev/bosun/internal/decoy"
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/servicecontrol"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
@@ -296,5 +299,51 @@ func TestConfigReceiptModeTransitionRequiresNewModeProcess(t *testing.T) {
 	expectConfigReceipt(t, a, false)
 	if !a.modeChanging.Load() {
 		t.Fatal("fixture did not enter mode transition")
+	}
+}
+
+func TestConfigReceiptDecoyMustBeReadyOrActuallyDisabled(t *testing.T) {
+	for _, kind := range []string{"missing_server", "certificate_disabled", "certificate_pending", "disabled_still_running"} {
+		t.Run(kind, func(t *testing.T) {
+			a, _, _ := configRevisionRig(t)
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			port := ln.Addr().(*net.TCPAddr).Port
+			_ = ln.Close()
+			desired := &spec.Decoy{Domain: "example.com", Port: port}
+			if kind != "missing_server" {
+				a.Decoy = decoy.New(nil, a.log)
+				t.Cleanup(a.Decoy.Stop)
+				if kind != "certificate_disabled" {
+					a.Decoy.TLSConfig = &tls.Config{}
+				}
+			}
+			if kind != "disabled_still_running" {
+				a.node.Decoy = desired
+			}
+			applyRevision(t, a)
+			if kind == "disabled_still_running" {
+				// An independently restarted old listener is not evidence that the
+				// currently desired disabled configuration is still applied.
+				a.Decoy.Configure(context.Background(), desired)
+			}
+			if kind == "certificate_pending" || kind == "disabled_still_running" {
+				if st := a.Decoy.Status(); st == nil || !st.Running || st.CertReady {
+					t.Fatal("invalid pending fixture", st)
+				}
+			}
+			appliedRevision(t, a, "first")
+			expectConfigReceipt(t, a, false)
+			if a.Decoy != nil {
+				a.node.Decoy = nil
+				applyRevision(t, a)
+				if a.Decoy.Status() != nil {
+					t.Fatal("disabled decoy still configured")
+				}
+				expectConfigReceipt(t, a, true)
+			}
+		})
 	}
 }
