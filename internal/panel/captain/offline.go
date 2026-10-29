@@ -86,6 +86,7 @@ func (c *Client) validateLease(generation uint64) error {
 	if c.state != nil && !c.revoked {
 		c.verifiedAt = time.Now()
 		c.offline = false
+		c.configRejected = false
 	}
 	c.mu.Unlock()
 	c.saveSnapshot()
@@ -93,12 +94,19 @@ func (c *Client) validateLease(generation uint64) error {
 }
 func (c *Client) revokeLease() {
 	if c.cfg.OfflineMaxAge == 0 {
+		// The existing service policy is unchanged without an offline lease,
+		// but a rejected token cannot retain configuration delivery evidence.
+		c.mu.Lock()
+		c.configRejected = true
+		c.authGeneration++
+		c.mu.Unlock()
 		return
 	}
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
 	c.mu.Lock()
 	c.revoked = true
+	c.configRejected = true
 	c.authGeneration++
 	c.etag = ""
 	c.mu.Unlock()
@@ -144,6 +152,7 @@ func (c *Client) saveSnapshot() {
 	}
 	state := *c.state
 	state.Jobs = nil
+	state.ConfigDelivery = nil // an offline snapshot cannot deliver a new process's configuration
 	token := c.token
 	identity := fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.URL+"\x00"+token)))
 	body, err := json.Marshal(offlineSnapshot{Version: 1, Identity: identity, ValidatedAt: c.verifiedAt, State: state})
@@ -267,6 +276,7 @@ func (c *Client) recoverSnapshot(cause error) error {
 		return errors.New("captain: offline recovery lease expired")
 	}
 	saved.State.Jobs = nil
+	saved.State.ConfigDelivery = nil
 	c.state = &saved.State
 	c.verifiedAt = saved.ValidatedAt
 	c.offline = true

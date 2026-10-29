@@ -6,7 +6,9 @@ package captain
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +23,7 @@ import (
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/dns"
+	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -56,6 +59,11 @@ type Client struct {
 	fwdSeen        string // revision last returned by Forwards()
 	upgradeTo      string // from the last report response
 	addresses      *agentproto.PublicAddresses
+	configSession  string // random per Client; never restored from a snapshot
+	configRejected bool   // delivery evidence is revoked even when offline recovery is disabled
+	nodeConfig     panel.ConfigState
+	usersConfig    panel.ConfigState
+	forwardConfig  panel.ConfigState
 
 	// Long-poll watcher: keeps a GET /state?wait= request open so a change
 	// on the panel reaches the agent within a second or two.
@@ -135,6 +143,11 @@ func New(cfg Config, log *slog.Logger) (*Client, error) {
 	}
 	cfg.URL = strings.TrimRight(cfg.URL, "/")
 	c := &Client{cfg: cfg, http: &http.Client{Timeout: cfg.Timeout}, log: log.With("panel", "captain"), changed: make(chan struct{}, 1), stop: make(chan struct{})}
+	var session [16]byte
+	if _, err := rand.Read(session[:]); err != nil {
+		return nil, fmt.Errorf("captain: configuration session: %w", err)
+	}
+	c.configSession = hex.EncodeToString(session[:])
 	if b, err := os.ReadFile(cfg.TokenFile); err == nil {
 		c.token = strings.TrimSpace(string(b))
 	} else if cfg.PairCode == "" {
@@ -250,6 +263,11 @@ func (c *Client) fetch(ctx context.Context) (bool, error) { return c.fetchWait(c
 func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 	c.mu.Lock()
 	tok, etag, generation := c.token, c.etag, c.authGeneration
+	configSession := c.configSession
+	lastDelivery := ""
+	if d := c.configStateLocked(); d.Valid() {
+		lastDelivery = d.DeliveryID
+	}
 	c.mu.Unlock()
 	if tok == "" {
 		if err := c.Pair(ctx); err != nil {
@@ -257,6 +275,12 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 		}
 	}
 	headers := map[string]string{}
+	if configSession != "" {
+		headers[agentproto.ConfigSessionHeader] = configSession
+	}
+	if lastDelivery != "" {
+		headers[agentproto.ConfigDeliveryHeader] = lastDelivery
+	}
 	path := "/api/agent/state"
 	if etag != "" {
 		headers["If-None-Match"] = etag
@@ -295,6 +319,7 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 	}
 	c.state, c.etag = &st, h.Get("ETag")
 	c.verifiedAt, c.offline, c.revoked = time.Now(), false, false
+	c.configRejected = false
 	c.mu.Unlock()
 	c.saveSnapshot()
 	return true, nil
@@ -325,7 +350,10 @@ func (c *Client) Node(ctx context.Context) (*spec.Node, bool, error) {
 	// The watcher may already hold a newer online state while the agent is still
 	// applying its cached node. Only this consumer can make that node authoritative.
 	c.nodeOffline = c.offline
-	if c.state.Revision == c.nodeSeen {
+	metadata := c.configStateLocked()
+	sameDelivery := c.nodeConfig.SameDelivery(metadata)
+	c.nodeConfig = metadata
+	if c.state.Revision == c.nodeSeen && sameDelivery {
 		return nil, false, nil
 	}
 	c.nodeSeen = c.state.Revision
@@ -340,7 +368,13 @@ func (c *Client) Node(ctx context.Context) (*spec.Node, bool, error) {
 func (c *Client) Users(ctx context.Context) ([]spec.User, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.state == nil || c.state.Revision == c.usersSeen {
+	if c.state == nil {
+		return nil, false, nil
+	}
+	metadata := c.configStateLocked()
+	sameDelivery := c.usersConfig.SameDelivery(metadata)
+	c.usersConfig = metadata
+	if c.state.Revision == c.usersSeen && sameDelivery {
 		return nil, false, nil
 	}
 	c.usersSeen = c.state.Revision
@@ -355,7 +389,13 @@ func (c *Client) Users(ctx context.Context) ([]spec.User, bool, error) {
 func (c *Client) Forwards(ctx context.Context) ([]spec.Forward, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.state == nil || c.state.Revision == c.fwdSeen {
+	if c.state == nil {
+		return nil, false, nil
+	}
+	metadata := c.configStateLocked()
+	sameDelivery := c.forwardConfig.SameDelivery(metadata)
+	c.forwardConfig = metadata
+	if c.state.Revision == c.fwdSeen && sameDelivery {
 		return nil, false, nil
 	}
 	c.fwdSeen = c.state.Revision

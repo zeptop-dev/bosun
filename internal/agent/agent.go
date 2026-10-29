@@ -70,8 +70,13 @@ type Agent struct {
 	status       Status
 	// The two apply paths run separately. Only matching, successful consumed
 	// revisions acknowledge the whole configuration; neither survives restart.
-	appliedCoreRevision    string // guarded by statusMu
-	appliedForwardRevision string // guarded by statusMu
+	appliedCoreRevision     string // guarded by statusMu
+	appliedForwardRevision  string // guarded by statusMu
+	appliedCoreConfig       panel.ConfigState
+	appliedForwardConfig    panel.ConfigState
+	configReceiptSequence   uint64
+	configCorePartial       bool // omitted configuration or a nonfatal helper failure
+	configUserLimitsOmitted bool // persists until a fresh user list replaces degraded local users
 
 	// Upgrade is called (in its own goroutine, once per requested version)
 	// when the panel asks the node to move to another release.
@@ -580,6 +585,9 @@ func (a *Agent) pull(ctx context.Context) (bool, error) {
 	}
 	if usersChanged {
 		a.users = users
+		a.statusMu.Lock()
+		a.configUserLimitsOmitted = false
+		a.statusMu.Unlock()
 		changed = true
 		a.log.Info("user list updated", "users", len(users))
 	}

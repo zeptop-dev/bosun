@@ -108,6 +108,9 @@ func (a *Agent) resolveCerts(ctx context.Context, node *spec.Node) {
 // apply renders the current state onto each core and starts, restarts or
 // stops cores as their assignment changes.
 func (a *Agent) apply(ctx context.Context) (err error) {
+	a.statusMu.Lock()
+	a.configCorePartial = false
+	a.statusMu.Unlock()
 	a.serviceControlPending.Store(true)
 	revision, _ := a.consumedRevisions()
 	a.setAppliedCoreRevision("")
@@ -210,6 +213,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		// Such an inbound is left out with the reason instead of breaking
 		// the core's whole config.
 		if err := ib.Validate(); err != nil {
+			a.partialConfig()
 			a.log.Warn("inbound skipped", "inbound", ib.Tag, "reason", err.Error())
 			if spec.ValidTag(ib.Tag) {
 				skipped = withSkip(skipped, ib.Tag, "invalid: "+err.Error())
@@ -217,6 +221,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 			continue
 		}
 		if _, skip := skipped[ib.Tag]; skip {
+			a.partialConfig()
 			a.log.Warn("inbound skipped", "inbound", ib.Tag, "reason", skipped[ib.Tag])
 			continue
 		}
@@ -226,6 +231,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	// left out with the reason (shown by the doctor) and retried next pull.
 	assign, unsupported := a.reg.Split(inbounds)
 	for tag, reason := range unsupported {
+		a.partialConfig()
 		a.log.Warn("inbound skipped", "inbound", tag, "reason", reason)
 		skipped = withSkip(skipped, tag, reason)
 	}
@@ -253,6 +259,9 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	// makes a core refuse its whole config, which would strand every
 	// inbound on the node. Bad rules are dropped and reported.
 	if node = validateNode(node, a.log, func(msgs []string) {
+		if len(msgs) > 0 {
+			a.partialConfig()
+		}
 		a.setStatus(func(s *Status) { s.RejectedRules = msgs })
 	}); node == nil {
 		return fmt.Errorf("agent: node spec is unusable")
@@ -276,8 +285,26 @@ func (a *Agent) applyInner(ctx context.Context) error {
 			limits = append(limits, shaper.Limit{UserID: u.ID, Mbps: l})
 		}
 	}
+	// Inbound-scoped grants are also dynamic authorization. If their requested
+	// limit is absent from the actual shaping plan, retain legacy serving behavior
+	// but do not acknowledge the complete delivered configuration.
+	configuredLimits := map[int64]int{}
+	for _, limit := range limits {
+		configuredLimits[limit.UserID] = limit.Mbps
+	}
+	for _, inbound := range node.Inbounds {
+		for _, user := range inbound.EffectiveUsers(a.users) {
+			if want := node.EffectiveSpeedLimit(user); want > 0 && configuredLimits[user.ID] != want {
+				a.partialConfig()
+			}
+		}
+	}
 	if a.Shaper == nil || !a.Shaper.Supported() {
 		if len(limits) > 0 {
+			a.partialConfig()
+			a.statusMu.Lock()
+			a.configUserLimitsOmitted = true
+			a.statusMu.Unlock()
 			if node.HasPrivateAccess() || hasWireGuard(node) {
 				return errors.Join(fmt.Errorf("private access with speed limits requires Linux nft and tc"), a.stopPrivateCores(ctx))
 			}
@@ -311,6 +338,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	defer func() {
 		if a.Shaper != nil && !hasWireGuardTransit(node) {
 			if err := a.Shaper.Apply(ctx, limits); err != nil {
+				a.partialConfig()
 				a.log.Error("speed limit shaper", "err", err)
 			}
 			st := a.Shaper.Status()
@@ -455,6 +483,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 	}
 	if a.Guard != nil {
 		if err := a.Guard.Apply(ctx, rules); err != nil {
+			a.partialConfig()
 			a.log.Error("strict ingress", "err", err)
 		}
 		st := a.Guard.Status()
@@ -465,11 +494,15 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 				s.Guard = &st
 			}
 		})
+	} else if len(rules) > 0 {
+		a.partialConfig()
 	}
 	if a.Conn != nil {
 		a.Conn.SetEnabled(node.ConnLog)
 	}
-	_ = a.applyEgress(ctx, node)
+	if err := a.applyEgress(ctx, node); err != nil {
+		a.partialConfig()
+	}
 	if a.Firewall != nil {
 		for _, f := range a.fwd.Snapshot() {
 			for _, proto := range forwardProtocols(f.Protocol) {
@@ -485,6 +518,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 			ports = append(ports, firewall.Port{Proto: "tcp", Port: 80, Source: "certificate:http01"})
 		}
 		if err := a.Firewall.Apply(ctx, ports); err != nil {
+			a.partialConfig()
 			a.log.Warn("firewall auto-open", "err", err)
 		}
 		st := a.Firewall.Status()
@@ -550,7 +584,30 @@ func (a *Agent) applyForwards(ctx context.Context) (err error) {
 		return nil
 	}
 	if a.MonitorOnly() || (a.node != nil && a.node.Mode == spec.NodeMonitor) {
-		return spec.ValidateMonitorState(a.node, a.users, a.cfg.ForwardSpecs())
+		if a.node == nil {
+			return errors.New("monitor configuration is not initialized")
+		}
+		if src, ok := a.driver.(panel.ForwardSource); ok {
+			fw, changed, err := src.Forwards(ctx)
+			if err != nil {
+				return err
+			}
+			if changed {
+				a.node.Forwards = fw
+			}
+			_, revision = a.consumedRevisions()
+		}
+		if err := spec.ValidateMonitorState(a.node, a.users, a.cfg.ForwardSpecs()); err != nil {
+			return err
+		}
+		if !a.MonitorOnly() || (a.node.Mode != "" && a.node.Mode != spec.NodeMonitor) || a.node.ModeRevision != a.modeRevision() {
+			return errors.New("forward cleanup waits for the current monitor mode revision")
+		}
+		// Empty monitor state is an actual stop/cleanup operation. Only its
+		// successful completion can acknowledge the consumed empty forward list.
+		a.shaperMu.Lock()
+		defer a.shaperMu.Unlock()
+		return a.stopControlledServices(ctx)
 	}
 	if !a.proxyModeReady(a.node) {
 		return errors.New("forwarding waits for the current node mode revision")

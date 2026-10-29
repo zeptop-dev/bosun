@@ -21,13 +21,29 @@ func (a *Agent) consumedRevisions() (string, string) {
 }
 
 func (a *Agent) setAppliedCoreRevision(revision string) {
+	metadata := panel.ConfigState{}
+	if source, ok := a.driver.(panel.ConsumedConfigSource); ok && revision != "" {
+		_, metadata, _ = source.ConsumedConfig()
+		if metadata.StateRevision != revision || !metadata.Valid() {
+			metadata = panel.ConfigState{}
+		}
+	}
 	a.statusMu.Lock()
 	a.appliedCoreRevision = revision
+	a.appliedCoreConfig = metadata
 	a.statusMu.Unlock()
 }
 
 func (a *Agent) setAppliedForwardRevision(revision string) {
+	metadata := panel.ConfigState{}
+	if source, ok := a.driver.(panel.ConsumedConfigSource); ok && revision != "" {
+		_, _, metadata = source.ConsumedConfig()
+		if metadata.StateRevision != revision || !metadata.Valid() {
+			metadata = panel.ConfigState{}
+		}
+	}
 	a.statusMu.Lock()
 	a.appliedForwardRevision = revision
+	a.appliedForwardConfig = metadata
 	a.statusMu.Unlock()
 }
