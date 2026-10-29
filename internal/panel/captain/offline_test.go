@@ -1,10 +1,12 @@
 package captain
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -344,6 +346,48 @@ func TestOfflineTruncatedRejectionRevokesLease(t *testing.T) {
 			}
 			if c.ServiceLeaseError() == nil {
 				t.Fatal("partial rejection body left cached authorization valid")
+			}
+		})
+	}
+}
+
+func TestOfflineProvenanceChangesOnlyWhenNodeConsumesFreshState(t *testing.T) {
+	for _, revision := range []string{"revision", "fresh"} {
+		t.Run(revision, func(t *testing.T) {
+			cfg, code := recoveryRig(t)
+			code.Store(503)
+			c := recoveredClient(t, cfg)
+			old, _, err := c.Node(context.Background())
+			if err != nil || !c.OfflineRecoveryActive() {
+				t.Fatal("recovery fixture failed", err)
+			}
+			st := agentproto.State{Revision: revision, Node: spec.Node{ID: "node", Mode: spec.NodeFull, ServiceControl: &spec.ServiceControl{Revision: "new-command", Mode: spec.ServiceControlPause}}}
+			if revision == "revision" {
+				st.Node = *old
+			}
+			body, err := json.Marshal(st)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.http.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				header := make(http.Header)
+				header.Set("ETag", revision)
+				if r.Header.Get("If-None-Match") == revision {
+					return &http.Response{StatusCode: 304, Header: header, Body: io.NopCloser(strings.NewReader(""))}, nil
+				}
+				return &http.Response{StatusCode: 200, Header: header, Body: io.NopCloser(bytes.NewReader(body))}, nil
+			})
+			// fetch is also the watcher's path: accepting an online response must not
+			// let the serial agent treat its still-cached node as a fresh command.
+			if _, err := c.fetch(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if old.ServiceControl.Revision != "pause" || !c.OfflineRecoveryActive() {
+				t.Fatal("watcher made an unconsumed cached node authoritative")
+			}
+			_, changed, err := c.Node(context.Background())
+			if err != nil || changed != (revision != "revision") || c.OfflineRecoveryActive() {
+				t.Fatal("Node did not consume fresh authorization", changed, err)
 			}
 		})
 	}

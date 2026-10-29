@@ -286,5 +286,8 @@ func cloneState(in *agentproto.State) *agentproto.State {
 func (c *Client) OfflineRecoveryActive() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.nodeSeen != "" {
+		return c.cfg.OfflineMaxAge > 0 && c.nodeOffline
+	}
 	return c.cfg.OfflineMaxAge > 0 && c.offline
 }

@@ -44,6 +44,7 @@ type Client struct {
 	snapshotMu     sync.Mutex
 	verifiedAt     time.Time
 	offline        bool
+	nodeOffline    bool // provenance of the last state handed to the agent by Node
 	revoked        bool
 	authGeneration uint64
 	mu             sync.Mutex
@@ -318,7 +319,13 @@ func (c *Client) Node(ctx context.Context) (*spec.Node, bool, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.state == nil || c.state.Revision == c.nodeSeen {
+	if c.state == nil {
+		return nil, false, nil
+	}
+	// The watcher may already hold a newer online state while the agent is still
+	// applying its cached node. Only this consumer can make that node authoritative.
+	c.nodeOffline = c.offline
+	if c.state.Revision == c.nodeSeen {
 		return nil, false, nil
 	}
 	c.nodeSeen = c.state.Revision
