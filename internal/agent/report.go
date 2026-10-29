@@ -151,7 +151,7 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 		rep.NodeModeError = a.status.LastError
 	}
 	a.statusMu.Unlock()
-	rep.ConfigReceipt = a.configReceipt(rep.AppliedRevision)
+	rep.ConfigReceipt = a.configReceipt(rep.AppliedRevision, rep.Cores)
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		if rc, ok := c.(interface {

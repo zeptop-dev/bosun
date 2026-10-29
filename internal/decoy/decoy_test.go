@@ -78,3 +78,53 @@ func TestBuiltinPageAndProxy(t *testing.T) {
 		t.Fatal("still configured after nil")
 	}
 }
+
+func TestConfigureReloadsUpstreamSecurityOptions(t *testing.T) {
+	for _, option := range []string{"allow_private", "insecure"} {
+		t.Run(option, func(t *testing.T) {
+			up := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("upstream reached")) }))
+			defer up.Close()
+			s := New(nil, slog.Default())
+			s.TLSConfig = selfSigned(t, "example.com")
+			defer s.Stop()
+			port := freePort(t)
+			cfg := spec.Decoy{Domain: "example.com", Port: port, Upstream: up.URL, AllowPrivate: true, Insecure: true}
+			s.Configure(context.Background(), &cfg)
+			transport := &http.Transport{DisableKeepAlives: true, TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // local test certificate
+			defer transport.CloseIdleConnections()
+			client := &http.Client{Transport: transport, Timeout: time.Second}
+			url := "https://127.0.0.1:" + strconv.Itoa(port) + "/"
+			get := func() (int, error) {
+				resp, err := client.Get(url)
+				if err != nil {
+					return 0, err
+				}
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+				return resp.StatusCode, nil
+			}
+			if code, err := get(); err != nil || code != http.StatusOK {
+				t.Fatal("initial upstream request", code, err)
+			}
+			if option == "allow_private" {
+				cfg.AllowPrivate = false
+			} else {
+				cfg.Insecure = false
+			}
+			s.Configure(context.Background(), &cfg)
+			if code, err := get(); err == nil && code == http.StatusOK {
+				t.Fatal("security option change kept using the old permissive handler")
+			}
+			if option == "allow_private" {
+				if st := s.Status(); st == nil || st.Running || st.Error == "" {
+					t.Fatal("private upstream was not rejected", st)
+				}
+			}
+			cfg.AllowPrivate, cfg.Insecure = true, true
+			s.Configure(context.Background(), &cfg)
+			if code, err := get(); err != nil || code != http.StatusOK {
+				t.Fatal("explicitly restored options did not recover", code, err)
+			}
+		})
+	}
+}

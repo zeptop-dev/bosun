@@ -5,11 +5,14 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/decoy"
+	"github.com/zeptop-dev/bosun/internal/forward"
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/servicecontrol"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
@@ -346,4 +349,91 @@ func TestConfigReceiptDecoyMustBeReadyOrActuallyDisabled(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConfigReceiptCoreDeathRevokesCurrentConfirmation(t *testing.T) {
+	a, _, c := configRevisionRig(t)
+	applyRevision(t, a)
+	expectConfigReceipt(t, a, true)
+	c.running = false
+	report := a.buildReport(nil, spec.SystemStatus{})
+	if report.Cores[c.Name()].Running {
+		t.Fatal("core fixture did not die")
+	}
+	if report.ConfigReceipt == nil || report.ConfigReceipt.Applied {
+		t.Fatal("dead core retained applied receipt", report.ConfigReceipt)
+	}
+}
+
+func TestConfigReceiptReverseOnlyXrayMustRemainRunning(t *testing.T) {
+	a, _, _ := configRevisionRig(t)
+	xray := &fakeCore{name: "xray"}
+	a.reg.Register(xray)
+	a.node.Inbounds = nil
+	a.node.ReverseClients = []spec.ReverseClient{{ID: "reverse"}}
+	applyRevision(t, a)
+	if !xray.running {
+		t.Fatal("reverse-only core was not started")
+	}
+	expectConfigReceipt(t, a, true)
+	xray.running = false
+	expectConfigReceipt(t, a, false)
+}
+
+func TestConfigReceiptUnusedSnellDoesNotNeedAProcess(t *testing.T) {
+	a, _, _ := configRevisionRig(t)
+	a.reg.Register(&fakeCore{name: "snell", protos: []spec.Protocol{spec.Snell}})
+	applyRevision(t, a)
+	expectConfigReceipt(t, a, true)
+}
+
+type configPartialInstances struct{ fakeCore }
+
+func (c *configPartialInstances) ListenerPIDs() map[string]int {
+	return map[string]int{"one": os.Getpid(), "two": 0}
+}
+
+func TestConfigReceiptMultiInstanceCoreNeedsEveryAssignedProcess(t *testing.T) {
+	a, _, _ := configRevisionRig(t)
+	snell := &configPartialInstances{fakeCore: fakeCore{name: "snell", protos: []spec.Protocol{spec.Snell}}}
+	a.reg.Register(snell)
+	a.node.Inbounds = []spec.Inbound{{Tag: "one", Protocol: spec.Snell, Port: 18443, SnellPSK: "test-key"}, {Tag: "two", Protocol: spec.Snell, Port: 18444, SnellPSK: "test-key"}}
+	applyRevision(t, a)
+	if !snell.Running() {
+		t.Fatal("fixture needs one surviving process")
+	}
+	expectConfigReceipt(t, a, false)
+}
+
+func TestConfigReceiptRealmChecksProcessNotRemoteProbe(t *testing.T) {
+	a, p, _ := configRevisionRig(t)
+	file := filepath.Join(t.TempDir(), "realm-fixture")
+	if err := os.WriteFile(file, []byte("#!/bin/sh\nexec sleep 60\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	a.Realm = &forward.Realm{Binary: func(context.Context) (string, error) { return file, nil }, Dir: t.TempDir(), Log: a.log}
+	p.revisionPanel.forwards = []spec.Forward{{Tag: "realm", Port: 18443, Protocol: "tcp", Target: "127.0.0.1:1", Backend: "realm"}}
+	t.Cleanup(a.fwd.Stop)
+	applyRevision(t, a)
+	if !a.Realm.Running() {
+		t.Fatal("realm fixture did not start")
+	}
+	// A missing/unavailable remote target is not a local process apply failure.
+	deadline := time.Now().Add(4 * time.Second)
+	for {
+		stats := a.fwd.Snapshot()
+		if len(stats) == 1 && stats[0].Health == "down" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("probe fixture did not observe the unavailable remote", stats)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	expectConfigReceipt(t, a, true)
+	a.fwd.Stop()
+	if a.Realm.Running() {
+		t.Fatal("realm fixture did not stop")
+	}
+	expectConfigReceipt(t, a, false)
 }

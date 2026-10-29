@@ -100,7 +100,7 @@ func (s *Server) Configure(ctx context.Context, d *spec.Decoy) {
 }
 
 func same(a, b spec.Decoy) bool {
-	return a.Domain == b.Domain && a.EffectivePort() == b.EffectivePort() && a.Upstream == b.Upstream && a.ACME == b.ACME
+	return a.Domain == b.Domain && a.EffectivePort() == b.EffectivePort() && a.Upstream == b.Upstream && a.ACME == b.ACME && a.AllowPrivate == b.AllowPrivate && a.Insecure == b.Insecure
 }
 
 func (s *Server) startLocked(ctx context.Context) error {
