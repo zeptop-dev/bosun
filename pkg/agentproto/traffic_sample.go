@@ -119,6 +119,14 @@ func ValidateTrafficSample(s *TrafficSample) error {
 		if source.DurationMS != nil && (*source.DurationMS < 0 || source.StartedAt == nil) {
 			return bad()
 		}
+		if source.DurationMS != nil {
+			// Supported timestamp years bound this subtraction well inside
+			// int64. Compare before subtracting the untrusted duration itself.
+			wallMS := source.EndedAt.UnixMilli() - source.StartedAt.UnixMilli()
+			if *source.DurationMS > wallMS+1000 || *source.DurationMS < wallMS-1000 {
+				return bad()
+			}
+		}
 		if source.Quality == "observed" && (source.StartedAt == nil || source.DurationMS == nil || len(source.Reasons) != 0) {
 			return bad()
 		}

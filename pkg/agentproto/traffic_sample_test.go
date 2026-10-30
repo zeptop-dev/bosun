@@ -2,6 +2,7 @@ package agentproto
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -30,5 +31,23 @@ func TestTrafficSampleBoundedValidation(t *testing.T) {
 	s.Sources[0].StartedAt = nil
 	if ValidateTrafficSample(s) == nil {
 		t.Fatal("claimed observed interval without baseline")
+	}
+}
+
+func TestTrafficSampleDurationMatchesObservedBoundaries(t *testing.T) {
+	at := time.Now().UTC()
+	start := at.Add(-time.Minute)
+	duration := int64(math.MaxInt64)
+	s := &TrafficSample{Version: 1, CollectionStartedAt: at, CollectionEndedAt: at, Segments: 1, Quality: "observed", Sources: []TrafficSampleSource{{Core: "xray", Counter: "users", StartedAt: &start, EndedAt: at, DurationMS: &duration, Quality: "observed", Segments: 1}}}
+	if ValidateTrafficSample(s) == nil {
+		t.Fatal("one-minute interval accepted MaxInt64 elapsed duration")
+	}
+	duration = 0
+	if ValidateTrafficSample(s) == nil {
+		t.Fatal("one-minute interval accepted zero elapsed duration")
+	}
+	duration = 60000
+	if err := ValidateTrafficSample(s); err != nil {
+		t.Fatal(err)
 	}
 }
