@@ -3,14 +3,14 @@
 Available with bosun v0.83.0 and Captain v1.48.0. Captain requires fresh
 capability reports before enabling controls; older agents continue existing
 services but cannot enforce this feature. The current built-in updater refuses
-updates or rollback below bosun v0.84.0 because older versions cannot enforce
-the authorization lease and optional local traffic policy described below.
+updates or rollback below bosun v0.85.0 to preserve path-health policies as well
+as the authorization lease and optional local traffic policy described below.
 
 **中文说明：** 服务器暂停与总限速需要 bosun v0.83.0 / Captain v1.48.0
 及节点新鲜的能力报告。总限速是托管流量上传与下载共用的丢包限速，不是平滑整形，
 也不等于供应商账单封顶；系统和管理连接不计入该限制。旧节点仍可提供原服务，
-但不能启用此保护。当前内置更新与回滚不允许低于 v0.84.0，以免旧程序忽略
-离线授权期限或本地流量策略。
+但不能启用此保护。当前内置更新与回滚不允许低于 v0.85.0，以免旧程序忽略
+路径健康、离线授权期限或本地流量策略。
 
 Captain decides when a server policy applies from its recorded NIC traffic
 period and the administrator's manual selection. bosun receives an optional
