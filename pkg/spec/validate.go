@@ -407,6 +407,9 @@ func ValidateAuditRule(r AuditRule) error {
 // its backend. The panel and the agent run the same check, so a rule the
 // node would refuse never reaches it.
 func (f Forward) ValidateTargets() error {
+	if err := f.ValidatePathHealth(); err != nil {
+		return err
+	}
 	if f.Backend == "nft" && f.Listen != "" {
 		host, _, _ := net.SplitHostPort(f.Target)
 		target, listen := net.ParseIP(host), net.ParseIP(f.Listen)

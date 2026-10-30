@@ -45,7 +45,9 @@ var classifications = []classification{
 	{"Node.Outbounds[].Balancer", "Members Strategy", "", ""},
 	{"Node.Routes[]", "Match Action Value", "", ""},
 	{"Node.AuditRules[]", "ID Match Action", "Name", ""},
-	{"Forwards[]", "Tag Listen Port Protocol Target Backend PreserveSource ProxyProtocol Targets Balance Weight", "IngressID", ""},
+	{"Forwards[]", "PathHealth Tag Listen Port Protocol Target Backend PreserveSource ProxyProtocol Targets Balance Weight", "IngressID", ""},
+	{"Forwards[].PathHealth", "RouteID ScopeID Protocol ServerName ALPN AutoFailover IntervalSeconds TimeoutSeconds FailureThreshold RecoveryThreshold Candidates", "", ""},
+	{"Forwards[].PathHealth.Candidates[]", "ID Target Digest", "", ""},
 	{"Forwards[].Targets[]", "Target Weight", "", ""},
 	{"Node.Decoy", "Domain Port Upstream ACME AllowPrivate Insecure", "", ""},
 	{"Node.ACME", "", "Email CloudflareToken", ""},
@@ -210,4 +212,14 @@ func TestProjectionCannotEmbedUnreviewedSourceData(t *testing.T) {
 		}
 	}
 	walk(reflect.TypeFor[projection]())
+}
+
+// Captured by executing the released v0.84.0 projection (814f872). Additive
+// optional health must not invalidate receipts from an unchanged old agent.
+func TestReleased084ForwardDigestWithoutPathHealth(t *testing.T) {
+	got, err := Digest(spec.Node{}, []spec.Forward{{Tag: "line-7-entry", Listen: "127.0.0.1", Port: 1080, Protocol: "tcp", Target: "198.51.100.20:443", Targets: []spec.ForwardTarget{{Target: "203.0.113.30:443", Weight: 2}}}})
+	const want = "cfg1-2ef775ca90185afbed68040f4cb22c70cbc48ff9f7be6073d2a521bcfd2dc9ef"
+	if err != nil || got != want {
+		t.Fatalf("released digest changed: %s %v", got, err)
+	}
 }

@@ -435,6 +435,8 @@ type RouteRule struct {
 // stream or datagrams to Target. A chain (entry -> relay -> exit) is just
 // one Forward per hop, each pointing at the next; the panel orchestrates.
 type Forward struct {
+	// PathHealth probes the existing business chain with a bounded protocol handshake.
+	PathHealth *PathHealth `json:"path_health,omitempty"`
 	// IngressID is editor metadata. Resolved Listen/Port work with older agents.
 	IngressID string `json:"ingress_id,omitempty"`
 	Tag       string `json:"tag,omitempty"`

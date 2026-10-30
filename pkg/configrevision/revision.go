@@ -182,6 +182,7 @@ type auditRule struct {
 	Action string
 }
 type forward struct {
+	PathHealth                    *pathHealth `json:",omitempty"`
 	Tag, Listen                   string
 	Port                          int
 	Protocol, Backend             string
@@ -189,6 +190,27 @@ type forward struct {
 	Targets                       []forwardTarget
 	Balance                       string
 }
+type pathHealth struct {
+	RouteID                                                              int64
+	ScopeID, Protocol, ServerName                                        string
+	ALPN                                                                 []string
+	AutoFailover                                                         bool
+	IntervalSeconds, TimeoutSeconds, FailureThreshold, RecoveryThreshold int
+	Candidates                                                           []pathHealthCandidate
+}
+type pathHealthCandidate struct{ ID, Target, Digest string }
+
+func projectPathHealth(p *spec.PathHealth) *pathHealth {
+	if p == nil {
+		return nil
+	}
+	out := &pathHealth{RouteID: p.RouteID, ScopeID: p.ScopeID, Protocol: p.Protocol, ServerName: p.ServerName, ALPN: stringsCopy(p.ALPN), AutoFailover: p.AutoFailover, IntervalSeconds: p.IntervalSeconds, TimeoutSeconds: p.TimeoutSeconds, FailureThreshold: p.FailureThreshold, RecoveryThreshold: p.RecoveryThreshold}
+	for _, c := range p.Candidates {
+		out.Candidates = append(out.Candidates, pathHealthCandidate{ID: c.ID, Target: c.Target, Digest: c.Digest})
+	}
+	return out
+}
+
 type forwardTarget struct {
 	Target string
 	Weight int
@@ -253,7 +275,7 @@ func project(n spec.Node, forwards []spec.Forward) (*projection, error) {
 		p.Routes = append(p.Routes, route{stringsCopy(v.Match), v.Action, v.Value})
 	}
 	for _, v := range forwards {
-		f := forward{Tag: v.Tag, Listen: v.Listen, Port: v.Port, Protocol: v.Protocol, Backend: v.Backend, PreserveSource: v.PreserveSource, ProxyProtocol: v.ProxyProtocol, Balance: v.BalanceMode()}
+		f := forward{PathHealth: projectPathHealth(v.PathHealth), Tag: v.Tag, Listen: v.Listen, Port: v.Port, Protocol: v.Protocol, Backend: v.Backend, PreserveSource: v.PreserveSource, ProxyProtocol: v.ProxyProtocol, Balance: v.BalanceMode()}
 		if f.Backend == "" {
 			f.Backend = "relay"
 		}
