@@ -20,6 +20,8 @@ Verified end to end against the manifest's tested releases (sing-box
 
 - Direct standalone page links under static section headings on desktop and mobile, searchable settings pages, protected drafts and responsive forms in six languages, with credentials and tokens under My account. [Console navigation](#console-navigation).
 
+- On-demand passive host diagnostics (bosun v0.86 / Captain v1.51) use a short process-bound lease, one sampler and explicit unknown measurements. Frozen traffic batches retain counter-read provenance; current persisted backlog is observed separately. Existing monitoring, configuration and billing stay independent. [Live diagnostics](docs/REALTIME_DIAGNOSTICS.md), [traffic provenance](docs/TRAFFIC_HISTORY.md).
+
 - Durable Captain reporting journals, structured Linux exit diagnostics with a separately rebuilt MIT GeoCheck tool, and named typed inbound/outbound/route presets with change previews. [Operation and failure boundaries](docs/DIAGNOSTICS_AND_PRESETS.md).
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
