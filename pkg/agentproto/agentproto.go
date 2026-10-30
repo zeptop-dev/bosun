@@ -33,12 +33,13 @@ type PairResponse struct {
 // State is the complete desired state for one node. Revision changes
 // whenever any part changes; it doubles as the ETag.
 type State struct {
-	ConfigRevision string          `json:"config_revision,omitempty"`
-	ConfigDelivery *ConfigDelivery `json:"config_delivery,omitempty"`
-	Revision       string          `json:"revision"`
-	Node           spec.Node       `json:"node"`
-	Users          []spec.User     `json:"users"`
-	Forwards       []spec.Forward  `json:"forwards"`
+	Diagnostics    *DiagnosticsControl `json:"diagnostics,omitempty"`
+	ConfigRevision string              `json:"config_revision,omitempty"`
+	ConfigDelivery *ConfigDelivery     `json:"config_delivery,omitempty"`
+	Revision       string              `json:"revision"`
+	Node           spec.Node           `json:"node"`
+	Users          []spec.User         `json:"users"`
+	Forwards       []spec.Forward      `json:"forwards"`
 	// Intervals the agent should use, in seconds.
 	PullSeconds int `json:"pull_seconds,omitempty"`
 	PushSeconds int `json:"push_seconds,omitempty"`
