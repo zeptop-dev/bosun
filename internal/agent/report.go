@@ -192,6 +192,11 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 		rep.Certs = append(rep.Certs, st)
 	}
 	a.statusMu.Unlock()
+	rep.PathHealth = &agentproto.PathHealthReport{Supported: true}
+	// Cached/offline state and a revoked lease cannot attest a new delivery.
+	if rep.ConfigReceipt != nil && !a.serviceControlPaused() {
+		rep.PathHealth.Samples = a.fwd.PathHealthSnapshot()
+	}
 	for _, s := range a.fwd.Snapshot() {
 		rep.Forwards = append(rep.Forwards, s.Status())
 	}

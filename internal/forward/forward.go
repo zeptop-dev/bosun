@@ -50,6 +50,7 @@ type Stats struct {
 
 // rule is one running forward with its listeners.
 type rule struct {
+	pathHealth *pathHealthState
 	controlled bool
 	spec       spec.Forward
 	cancel     context.CancelFunc
@@ -75,9 +76,10 @@ type rule struct {
 
 // Manager owns the set of running rules and reconciles it against a spec.
 type Manager struct {
-	log   *slog.Logger
-	mu    sync.Mutex
-	rules map[string]*rule
+	pathClock *pathHealthClock
+	log       *slog.Logger
+	mu        sync.Mutex
+	rules     map[string]*rule
 	// nftApplied is the nft script currently installed ("" = no table).
 	nftApplied      string
 	preparedNFT     map[string]nftTarget
@@ -89,11 +91,11 @@ type Manager struct {
 
 // NewManager returns an empty manager.
 func NewManager(log *slog.Logger) *Manager {
-	return &Manager{log: log.With("component", "forward"), rules: map[string]*rule{}}
+	return &Manager{pathClock: newPathHealthClock(), log: log.With("component", "forward"), rules: map[string]*rule{}}
 }
 
 func key(f spec.Forward) string {
-	return fmt.Sprintf("%s|%s|%d|%s|%s|%s|%t|%t|%v|%s", f.Tag, f.Listen, f.Port, f.Protocol, f.Target, f.Backend, f.PreserveSource, f.ProxyProtocol, f.Hops(), f.BalanceMode())
+	return fmt.Sprintf("%s|%s|%d|%s|%s|%s|%t|%t|%v|%s", f.Tag, f.Listen, f.Port, f.Protocol, f.Target, f.Backend, f.PreserveSource, f.ProxyProtocol, f.Hops(), f.BalanceMode()) + "|" + f.PathHealth.Digest()
 }
 
 // Apply makes the running set match forwards: unchanged rules keep their
@@ -139,7 +141,7 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 			m.log.Info("realm forward added", "tag", f.Tag, "port", f.Port, "protocol", f.Protocol, "target", f.Target)
 			continue
 		}
-		r, err := startControlled(f, m.log, m.controlled)
+		r, err := startControlledWithHealth(f, m.log, m.controlled, m.pathClock)
 		if err != nil {
 			m.log.Error("forward failed to start", "tag", f.Tag, "err", err)
 			if firstErr == nil {
@@ -342,8 +344,13 @@ func start(f spec.Forward, log *slog.Logger) (*rule, error) {
 }
 
 func startControlled(f spec.Forward, log *slog.Logger, controlled bool) (*rule, error) {
+	return startControlledWithHealth(f, log, controlled, nil)
+}
+func startControlledWithHealth(f spec.Forward, log *slog.Logger, controlled bool, clock *pathHealthClock) (*rule, error) {
+	f.PathHealth = spec.ClonePathHealth(f.PathHealth)
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &rule{controlled: controlled, spec: f, cancel: cancel, log: log.With("tag", f.Tag), hops: newHops(f)}
+	r.initPathHealth(clock)
 	addr := net.JoinHostPort(f.Listen, strconv.Itoa(f.Port))
 	var closers []func()
 	for _, p := range protocols(f) {
@@ -384,6 +391,7 @@ func startControlled(f spec.Forward, log *slog.Logger, controlled bool) (*rule, 
 			go r.serveUDP(ctx, pc)
 		}
 	}
+	r.startPathHealth(ctx)
 	go func() {
 		<-ctx.Done()
 		for _, c := range closers {

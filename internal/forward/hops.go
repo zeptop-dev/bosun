@@ -90,6 +90,9 @@ func (h *hop) isUp() bool {
 func (r *rule) candidates() []*hop { return r.candidatesFor("tcp") }
 
 func (r *rule) candidatesFor(network string) []*hop {
+	if network == "tcp" && r.spec.PathHealth != nil && r.spec.PathHealth.AutoFailover {
+		return r.pathCandidates(time.Now())
+	}
 	if len(r.hops) == 1 {
 		return r.hops
 	}
