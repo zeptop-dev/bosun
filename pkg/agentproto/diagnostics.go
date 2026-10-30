@@ -32,22 +32,22 @@ type DiagnosticsControl struct {
 // SampledAt is the actual observation time; ElapsedMS is the sampling interval.
 // This stream never bills traffic.
 type DiagnosticsSample struct {
-	Session     string                 `json:"session"`
-	Epoch       string                 `json:"epoch"`
-	Sequence    uint64                 `json:"sequence"`
-	SampledAt   time.Time              `json:"sampled_at"`
-	ElapsedMS   int64                  `json:"elapsed_ms"`
-	CPUPercent  *float64               `json:"cpu_percent"`
-	MemoryUsed  *uint64                `json:"memory_used"`
-	MemoryTotal *uint64                `json:"memory_total"`
-	NetUpBPS    *float64               `json:"net_up_bps"`
-	NetDownBPS  *float64               `json:"net_down_bps"`
-	Interfaces  []DiagnosticsInterface `json:"interfaces"`
-	Truncated   bool                   `json:"truncated"`
+	Session               string                 `json:"session"`
+	Epoch                 string                 `json:"epoch"`
+	Sequence              uint64                 `json:"sequence"`
+	SampledAt             time.Time              `json:"sampled_at"`
+	ElapsedMS             int64                  `json:"elapsed_ms"`
+	CPUPercent            *float64               `json:"cpu_percent"`
+	MemoryUsed            *uint64                `json:"memory_used"`
+	MemoryTotal           *uint64                `json:"memory_total"`
+	NetUpBytesPerSecond   *float64               `json:"net_up_bytes_per_second"`
+	NetDownBytesPerSecond *float64               `json:"net_down_bytes_per_second"`
+	Interfaces            []DiagnosticsInterface `json:"interfaces"`
+	Truncated             bool                   `json:"truncated"`
 }
 
 type DiagnosticsInterface struct {
-	Name  string   `json:"name"`
-	RXBPS *float64 `json:"rx_bps"`
-	TXBPS *float64 `json:"tx_bps"`
+	Name             string   `json:"name"`
+	RXBytesPerSecond *float64 `json:"rx_bytes_per_second"`
+	TXBytesPerSecond *float64 `json:"tx_bytes_per_second"`
 }
