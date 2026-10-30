@@ -27,12 +27,13 @@ import (
 // There is necessarily a small gap between resetting upstream counters and
 // fsync: upstream APIs do not support transactional reads with acknowledgement.
 type trafficBatch struct {
-	Seq       uint64                  `json:"seq"`
-	Window    int                     `json:"window"`
-	StartedAt time.Time               `json:"started_at,omitempty"`
-	Traffic   []spec.UserTraffic      `json:"traffic"`
-	Inbounds  map[string]spec.Traffic `json:"inbounds,omitempty"`
-	Outbounds map[string]spec.Traffic `json:"outbounds,omitempty"`
+	Seq       uint64                    `json:"seq"`
+	Window    int                       `json:"window"`
+	StartedAt time.Time                 `json:"started_at,omitempty"`
+	Sample    *agentproto.TrafficSample `json:"sample,omitempty"`
+	Traffic   []spec.UserTraffic        `json:"traffic"`
+	Inbounds  map[string]spec.Traffic   `json:"inbounds,omitempty"`
+	Outbounds map[string]spec.Traffic   `json:"outbounds,omitempty"`
 }
 
 type trafficJournal struct {
@@ -149,6 +150,8 @@ func (a *Agent) reportError(err error) bool {
 // Reporter drivers: an unavailable panel must not prevent safe local changes.
 func (a *Agent) checkpointTraffic(ctx context.Context) error {
 	defer a.updateDeliveryStatus()
+	// Every caller may replace or reconfigure counter sources after this read.
+	defer func() { a.trafficReads = nil }()
 	running := false
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
@@ -188,6 +191,9 @@ func (a *Agent) checkpointTraffic(ctx context.Context) error {
 }
 
 func (a *Agent) collectTrafficBatch(ctx context.Context) *trafficBatch {
+	sample := &agentproto.TrafficSample{Version: 1, CollectionStartedAt: time.Now().UTC(), Segments: 1, Reasons: []string{}, Sources: []agentproto.TrafficSampleSource{}}
+	a.trafficSample = sample
+	defer func() { a.trafficSample = nil }()
 	a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
 	_, traffic := a.collectUserTraffic(ctx)
 	in := a.collectTagged(ctx, map[string]spec.Traffic{}, "inbound", func(c core.Core) (map[string]spec.Traffic, error) {
@@ -206,7 +212,9 @@ func (a *Agent) collectTrafficBatch(ctx context.Context) *trafficBatch {
 	started := j.Since
 	window := max(1, int(time.Since(j.Since).Seconds()))
 	j.Since = time.Now()
-	return &trafficBatch{StartedAt: started, Window: window, Traffic: traffic, Inbounds: in, Outbounds: out}
+	sample.CollectionEndedAt = time.Now().UTC()
+	finishTrafficSample(sample)
+	return &trafficBatch{StartedAt: started, Sample: sample, Window: window, Traffic: traffic, Inbounds: in, Outbounds: out}
 }
 
 func mergeTrafficBatches(old, next *trafficBatch) *trafficBatch {
@@ -224,7 +232,7 @@ func mergeTrafficBatches(old, next *trafficBatch) *trafficBatch {
 			sums[k] = cur
 		}
 	}
-	out := &trafficBatch{StartedAt: old.StartedAt, Window: old.Window + next.Window, Inbounds: map[string]spec.Traffic{}, Outbounds: map[string]spec.Traffic{}}
+	out := &trafficBatch{StartedAt: old.StartedAt, Sample: mergeTrafficSamples(old.Sample, next.Sample), Window: old.Window + next.Window, Inbounds: map[string]spec.Traffic{}, Outbounds: map[string]spec.Traffic{}}
 	for _, t := range sums {
 		out.Traffic = append(out.Traffic, t)
 	}
@@ -264,6 +272,12 @@ func (a *Agent) prepareDurableReport(ctx context.Context) (agentproto.Report, er
 	b := j.Pending
 	full := a.buildReport(b.Traffic, a.SampleHost(ctx))
 	full.TrafficSeq, full.TrafficEpoch, full.TrafficWindowSeconds = b.Seq, j.Epoch, b.Window
+	full.TrafficSample = b.Sample
+	a.updateDeliveryStatus()
+	a.statusMu.Lock()
+	delivery := a.status.Delivery
+	a.statusMu.Unlock()
+	full.TrafficDelivery = &agentproto.TrafficDelivery{SampledAt: time.Now().UTC(), PendingBytes: delivery.PendingBytes, BufferedBytes: delivery.BufferedBytes, JournalBytes: delivery.JournalBytes, OldestAt: delivery.OldestAt}
 	full.Inbounds, full.Outbounds, full.Jobs = b.Inbounds, b.Outbounds, a.takeJobResults()
 	return full, nil
 }

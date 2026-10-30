@@ -58,7 +58,9 @@ func (a *Agent) collectUserTraffic(ctx context.Context) (perUser, perInbound []s
 		if !c.Running() {
 			continue
 		}
+		process := trafficProcess(c)
 		stats, err := c.Stats(ctx, true)
+		a.noteTrafficRead(c, "users", process, err)
 		if err != nil {
 			a.statsCollectionErr = errors.Join(a.statsCollectionErr, err)
 			a.log.Warn("stats failed", "core", name, "err", err)
@@ -116,10 +118,12 @@ func (a *Agent) collectTagged(ctx context.Context, pending map[string]spec.Traff
 		if !c.Running() {
 			continue
 		}
+		process := trafficProcess(c)
 		stats, err := read(c)
 		if errors.Is(err, errSkip) {
 			continue
 		}
+		a.noteTrafficRead(c, kind+"s", process, err)
 		if err != nil {
 			a.statsCollectionErr = errors.Join(a.statsCollectionErr, err)
 			a.log.Debug(kind+" stats failed", "core", name, "err", err)

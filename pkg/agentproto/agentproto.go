@@ -79,9 +79,11 @@ type Beat struct {
 
 // Report is what bosun pushes every push interval.
 type Report struct {
-	PathHealth     *PathHealthReport     `json:"path_health,omitempty"`
-	ConfigReceipt  *ConfigReceipt        `json:"config_receipt,omitempty"`
-	ServiceControl *ServiceControlReport `json:"service_control,omitempty"`
+	TrafficSample   *TrafficSample        `json:"traffic_sample,omitempty"`
+	TrafficDelivery *TrafficDelivery      `json:"traffic_delivery,omitempty"`
+	PathHealth      *PathHealthReport     `json:"path_health,omitempty"`
+	ConfigReceipt   *ConfigReceipt        `json:"config_receipt,omitempty"`
+	ServiceControl  *ServiceControlReport `json:"service_control,omitempty"`
 	// Hostname is freshly read for each report; omitted on lookup failure.
 	Hostname         string           `json:"hostname,omitempty"`
 	PublicAddresses  *PublicAddresses `json:"public_addresses,omitempty"`

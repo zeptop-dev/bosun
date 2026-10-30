@@ -196,7 +196,9 @@ type Agent struct {
 	sentDoctorAt   time.Time
 	pendingDoctor  *doctor.Report
 	lastReport     time.Time
-	trafficJournal *trafficJournal // owned by the serial report loop
+	trafficJournal *trafficJournal                // owned by the serial report loop
+	trafficReads   map[string]trafficReadBoundary // same serial owner; never restored across processes
+	trafficSample  *agentproto.TrafficSample
 	lastReportErr  string
 }
 

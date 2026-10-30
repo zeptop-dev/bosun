@@ -128,6 +128,8 @@ func (s *Supervisor) launch(ctx context.Context) error {
 	s.cmd = cmd
 	active.Lock()
 	active.commands[cmd] = s.name
+	active.next++
+	active.generations[cmd] = active.next
 	active.Unlock()
 	s.exited = exited
 	s.gen++
@@ -143,6 +145,7 @@ func (s *Supervisor) launch(ctx context.Context) error {
 		err := cmd.Wait()
 		active.Lock()
 		delete(active.commands, cmd)
+		delete(active.generations, cmd)
 		active.Unlock()
 		s.mu.Lock()
 		stopping := s.stopping
@@ -249,7 +252,22 @@ func (s *Supervisor) Running() bool {
 var active = struct {
 	sync.Mutex
 	commands map[*exec.Cmd]string
-}{commands: make(map[*exec.Cmd]string)}
+	// Independent of PID reuse and a supervisor's internal restart scheduling.
+	next        uint64
+	generations map[*exec.Cmd]uint64
+}{commands: make(map[*exec.Cmd]string), generations: make(map[*exec.Cmd]uint64)}
+
+// ActiveGenerations identifies the current locally supervised counter sources.
+// Tokens are process-local only and must not be exposed as stable host identity.
+func ActiveGenerations() map[int]uint64 {
+	active.Lock()
+	defer active.Unlock()
+	out := make(map[int]uint64, len(active.generations))
+	for cmd, generation := range active.generations {
+		out[cmd.Process.Pid] = generation
+	}
+	return out
+}
 
 func ActiveProcesses() map[int32]string {
 	active.Lock()
