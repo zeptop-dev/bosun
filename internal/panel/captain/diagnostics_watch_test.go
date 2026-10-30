@@ -37,13 +37,29 @@ func TestDiagnosticsSamplingContinuesDuringStateLongPoll(t *testing.T) {
 		}
 		diagnosticStateResponse(w, r, diagnosticControl(r, "epoch", 1, 10000))
 	})
-	// Release the simulated long poll before server/client cleanup; do not
-	// start unrelated public-address discovery with Changed().
-	t.Cleanup(func() { close(release) })
 	if _, err := c.fetch(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	go c.watch()
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		// Stop new polls before releasing the in-flight request. Its final 304
+		// may still persist the recovery snapshot, so join the watcher before
+		// diagnosticsClient's TempDir cleanup can remove that directory.
+		if err := c.Close(); err != nil {
+			t.Error(err)
+		}
+		close(release)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("state watcher did not exit before fixture cleanup")
+		}
+	})
+	// Start only the state watcher, without public-address discovery.
+	go func() {
+		defer close(done)
+		c.watch()
+	}()
 	select {
 	case <-waiting:
 	case <-time.After(2 * time.Second):
