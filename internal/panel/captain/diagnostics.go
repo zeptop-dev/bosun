@@ -83,7 +83,7 @@ func (c *Client) acceptDiagnosticsLocked(r diagnosticRequest, control *agentprot
 		d.cursor, d.challenge = "", ""
 		return false
 	}
-	if control.Session != r.session || control.RequestNonce != r.nonce || !diagnosticToken(control.Epoch) || !diagnosticToken(control.Challenge) || control.Generation == 0 {
+	if control.Session != r.session || control.RequestNonce != r.nonce || !diagnosticToken(control.Epoch) || (control.Challenge != "" && !diagnosticToken(control.Challenge)) || control.Generation == 0 {
 		c.stopDiagnosticsLocked()
 		return false
 	}

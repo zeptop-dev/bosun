@@ -34,7 +34,9 @@ func diagnosticsClient(t *testing.T, handler http.HandlerFunc) *Client {
 	return c
 }
 func diagnosticControl(r *http.Request, epoch string, generation uint64, remaining int64) *agentproto.DiagnosticsControl {
-	return &agentproto.DiagnosticsControl{Session: r.Header.Get(agentproto.ConfigSessionHeader), RequestNonce: r.Header.Get(agentproto.DiagnosticsNonceHeader), Challenge: "challenge", Epoch: epoch, Generation: generation, RemainingMS: remaining, IntervalMS: 1000}
+	// Only candidate commands carry a challenge; active and stopped commands
+	// from Captain have an empty challenge after the process proves possession.
+	return &agentproto.DiagnosticsControl{Session: r.Header.Get(agentproto.ConfigSessionHeader), RequestNonce: r.Header.Get(agentproto.DiagnosticsNonceHeader), Epoch: epoch, Generation: generation, RemainingMS: remaining, IntervalMS: 1000}
 }
 func diagnosticStateResponse(w http.ResponseWriter, r *http.Request, command *agentproto.DiagnosticsControl) {
 	w.Header().Set("ETag", "same-revision")
@@ -67,7 +69,11 @@ func TestDiagnosticsMetadataDoesNotApplyOrPersist(t *testing.T) {
 		if generation.Load() > 1 && (r.Header.Get(agentproto.DiagnosticsChallengeHeader) != "challenge" || r.Header.Get(agentproto.DiagnosticsCursorHeader) != "epoch:1") {
 			t.Error("challenge-only cursor was not echoed")
 		}
-		diagnosticStateResponse(w, r, diagnosticControl(r, "epoch", generation.Load(), 0))
+		control := diagnosticControl(r, "epoch", generation.Load(), 0)
+		if generation.Load() == 1 {
+			control.Challenge = "challenge"
+		}
+		diagnosticStateResponse(w, r, control)
 	})
 	ctx := context.Background()
 	if _, moved, err := c.Node(ctx); err != nil || !moved {
@@ -96,6 +102,75 @@ func TestDiagnosticsMetadataDoesNotApplyOrPersist(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsCandidateHandshakeAcceptsEmptyActiveAndStopChallenge(t *testing.T) {
+	var requests, posts atomic.Int32
+	samples := make(chan agentproto.DiagnosticsSample, 4)
+	c := diagnosticsClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			posts.Add(1)
+			var sample agentproto.DiagnosticsSample
+			if err := json.NewDecoder(r.Body).Decode(&sample); err != nil {
+				t.Error(err)
+			}
+			samples <- sample
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		var control *agentproto.DiagnosticsControl
+		switch requests.Add(1) {
+		case 1:
+			if r.Header.Get(agentproto.DiagnosticsChallengeHeader) != "" || r.Header.Get(agentproto.DiagnosticsCursorHeader) != "" {
+				t.Error("first request carried an unissued challenge or cursor")
+			}
+			control = diagnosticControl(r, "candidate", 1, 0)
+			control.Challenge = "candidate-challenge"
+		case 2:
+			if r.Header.Get(agentproto.DiagnosticsChallengeHeader) != "candidate-challenge" || r.Header.Get(agentproto.DiagnosticsCursorHeader) != "candidate:1" {
+				t.Error("candidate challenge and cursor were not echoed")
+			}
+			control = diagnosticControl(r, "active", 3, 5000)
+		case 3:
+			if r.Header.Get(agentproto.DiagnosticsChallengeHeader) != "" || r.Header.Get(agentproto.DiagnosticsCursorHeader) != "active:3" {
+				t.Error("activated process retained a consumed challenge or lost its cursor")
+			}
+			control = diagnosticControl(r, "stopped", 4, 0)
+		default:
+			t.Error("unexpected state request")
+		}
+		diagnosticStateResponse(w, r, control)
+	})
+	if moved, err := c.fetch(context.Background()); err != nil || !moved {
+		t.Fatal("candidate state failed", moved, err)
+	}
+	c.mu.Lock()
+	candidateIdle := c.diagnostics.deadline.IsZero() && c.diagnostics.wake == nil
+	c.mu.Unlock()
+	if !candidateIdle || posts.Load() != 0 {
+		t.Fatal("challenge-only candidate started sampling")
+	}
+	if moved, err := c.fetch(context.Background()); err != nil || moved {
+		t.Fatal("active metadata reapplied configuration", moved, err)
+	}
+	sample := awaitDiagnostic(t, samples)
+	if sample.Epoch != "active" || sample.Sequence != 1 || sample.CPUPercent != nil || sample.NetUpBytesPerSecond != nil || sample.NetDownBytesPerSecond != nil {
+		t.Fatal("empty-challenge activation did not start a fresh epoch", sample)
+	}
+	if moved, err := c.fetch(context.Background()); err != nil || moved {
+		t.Fatal("stop metadata reapplied configuration", moved, err)
+	}
+	c.mu.Lock()
+	stopped := c.diagnostics.deadline.IsZero() && c.diagnostics.challenge == "" && c.diagnostics.cursor == "stopped:4"
+	c.mu.Unlock()
+	if !stopped {
+		t.Fatal("empty-challenge stop was not accepted and acknowledged")
+	}
+	select {
+	case <-samples:
+		t.Fatal("stopped process sent another sample")
+	case <-time.After(1100 * time.Millisecond):
+	}
+}
+
 func TestDiagnosticsCommandFreshnessAndOrdering(t *testing.T) {
 	// A pre-created wake channel suppresses the worker: this test exercises the
 	// protocol clock and request ordering independently from OS sampling.
@@ -105,7 +180,7 @@ func TestDiagnosticsCommandFreshnessAndOrdering(t *testing.T) {
 		return diagnosticRequest{order: order, started: started, session: "session", nonce: "nonce"}
 	}
 	command := func(generation uint64) *agentproto.DiagnosticsControl {
-		return &agentproto.DiagnosticsControl{Session: "session", RequestNonce: "nonce", Challenge: "challenge", Epoch: "epoch", Generation: generation, RemainingMS: 15000, IntervalMS: 1000}
+		return &agentproto.DiagnosticsControl{Session: "session", RequestNonce: "nonce", Epoch: "epoch", Generation: generation, RemainingMS: 15000, IntervalMS: 1000}
 	}
 	if c.acceptDiagnosticsLocked(request(1, now.Add(-11*time.Second)), command(1), now) != true || c.diagnostics.cursor != "" || !c.diagnostics.deadline.IsZero() {
 		t.Fatal("late command acknowledged or activated")
@@ -153,7 +228,7 @@ func TestDiagnosticsRejectsForeignOrInvalidControls(t *testing.T) {
 			c := &Client{configSession: "session", diagnostics: diagnosticState{wake: make(chan struct{}, 1)}}
 			now := time.Now()
 			r := diagnosticRequest{order: 1, started: now.Add(-time.Second), nonce: "nonce", session: "session"}
-			command := &agentproto.DiagnosticsControl{Session: "session", RequestNonce: "nonce", Challenge: "challenge", Epoch: "epoch", Generation: 1, RemainingMS: 15000, IntervalMS: 1000}
+			command := &agentproto.DiagnosticsControl{Session: "session", RequestNonce: "nonce", Epoch: "epoch", Generation: 1, RemainingMS: 15000, IntervalMS: 1000}
 			switch kind {
 			case "nonce":
 				command.RequestNonce = "other"
@@ -212,7 +287,7 @@ func TestDiagnosticsAgedResponseImmediatelyRefetchesWithoutAcknowledgement(t *te
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.diagnostics.cursor != "fresh:2" || !c.diagnostics.deadline.IsZero() {
-		t.Fatal("fresh challenge did not supersede ignored response")
+		t.Fatal("fresh stop control did not supersede ignored response")
 	}
 }
 

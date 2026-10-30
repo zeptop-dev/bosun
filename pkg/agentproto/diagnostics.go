@@ -18,6 +18,8 @@ const (
 // configuration, must not be persisted for offline recovery, and cannot renew
 // a lease without a newer Generation. RemainingMS is measured from the request
 // start on the agent's monotonic clock, not from receipt of the response.
+// Challenge is present only while proving process possession; active and
+// stopped controls have an empty Challenge.
 type DiagnosticsControl struct {
 	Session      string `json:"session"`
 	RequestNonce string `json:"request_nonce"`

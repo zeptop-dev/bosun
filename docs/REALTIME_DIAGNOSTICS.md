@@ -8,6 +8,8 @@ disable these passive, administrator-requested measurements.
 State requests advertise diagnostics version 1 and a fresh request nonce. The
 agent echoes the server challenge and the last accepted `epoch:generation`
 cursor. A challenge-only command has zero remaining time and does not sample.
+Only the candidate process handshake carries a challenge. Active and stopped
+commands have an empty challenge, clearing the header on the next request.
 Every start, stop or renewal must advance generation; changing worker/process
 identity also changes epoch. Repeated generations cannot extend a lease.
 
