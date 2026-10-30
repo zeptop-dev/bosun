@@ -1,5 +1,7 @@
 package agentproto
 
+import "time"
+
 const (
 	DiagnosticsVersionHeader   = "X-Bosun-Diagnostics-Version"
 	DiagnosticsNonceHeader     = "X-Bosun-Diagnostics-Nonce"
@@ -27,12 +29,13 @@ type DiagnosticsControl struct {
 
 // DiagnosticsSample contains passive host observations only. Nil rates mean
 // unavailable, first sample, counter reset or a sampling gap; zero is measured.
-// SampledAt and ElapsedMS are milliseconds. This stream never bills traffic.
+// SampledAt is the actual observation time; ElapsedMS is the sampling interval.
+// This stream never bills traffic.
 type DiagnosticsSample struct {
 	Session     string                 `json:"session"`
 	Epoch       string                 `json:"epoch"`
 	Sequence    uint64                 `json:"sequence"`
-	SampledAt   int64                  `json:"sampled_at"`
+	SampledAt   time.Time              `json:"sampled_at"`
 	ElapsedMS   int64                  `json:"elapsed_ms"`
 	CPUPercent  *float64               `json:"cpu_percent"`
 	MemoryUsed  *uint64                `json:"memory_used"`
