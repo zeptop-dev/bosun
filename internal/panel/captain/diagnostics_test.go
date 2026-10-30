@@ -418,6 +418,74 @@ func TestDiagnosticsWorkerRenewalEpochAndIndependentMonitoring(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsSlowPostDoesNotCatchUpOrOutliveLease(t *testing.T) {
+	for _, expires := range []bool{false, true} {
+		t.Run(map[bool]string{false: "arrival budget", true: "expiry during cooldown"}[expires], func(t *testing.T) {
+			type arrival struct {
+				at     time.Time
+				sample agentproto.DiagnosticsSample
+			}
+			arrivals := make(chan arrival, 8)
+			var posts atomic.Int32
+			c := diagnosticsClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					remaining := int64(5000)
+					if expires {
+						remaining = 1400
+					}
+					diagnosticStateResponse(w, r, diagnosticControl(r, "epoch", 1, remaining))
+					return
+				}
+				var sample agentproto.DiagnosticsSample
+				if err := json.NewDecoder(r.Body).Decode(&sample); err != nil {
+					t.Error(err)
+				}
+				if posts.Add(1) == 1 {
+					// Simulate upstream transit within the two-second POST budget.
+					// The next scheduled one-second tick passes before acceptance.
+					timer := time.NewTimer(1100 * time.Millisecond)
+					defer timer.Stop()
+					select {
+					case <-timer.C:
+					case <-r.Context().Done():
+						return
+					}
+				}
+				arrivals <- arrival{at: time.Now(), sample: sample}
+				w.WriteHeader(http.StatusNoContent)
+			})
+			if _, err := c.fetch(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			var first arrival
+			select {
+			case first = <-arrivals:
+			case <-time.After(3 * time.Second):
+				t.Fatal("slow sample was not accepted before its deadline")
+			}
+			if expires {
+				select {
+				case <-arrivals:
+					t.Fatal("worker sent a catch-up sample instead of waiting through lease expiry")
+				case <-time.After(800 * time.Millisecond):
+				}
+				return
+			}
+			select {
+			case second := <-arrivals:
+				if spacing := second.at.Sub(first.at); spacing < 500*time.Millisecond {
+					t.Fatalf("slow POST caused arrival burst within Captain's budget: %v", spacing)
+				}
+				if second.sample.Sequence != first.sample.Sequence+1 || second.sample.ElapsedMS < 1500 {
+					t.Fatal("slow POST queued a stale sample or lost actual elapsed time", second.sample)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("slow successful POST stopped an otherwise active lease")
+			}
+		})
+	}
+}
+
 func TestDiagnosticsWorkerExpiresAndRevokesInFlight(t *testing.T) {
 	for _, stop := range []string{"expiry", "revoke", "offline"} {
 		t.Run(stop, func(t *testing.T) {

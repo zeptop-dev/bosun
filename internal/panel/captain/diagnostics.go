@@ -173,7 +173,7 @@ func (c *Client) diagnosticsWorker(ctx context.Context, wake <-chan struct{}, do
 	var epoch string
 	var sequence uint64
 	var baselineRevision uint64
-	var next time.Time
+	var next, earliest time.Time
 	activeBefore := false
 	for {
 		c.mu.Lock()
@@ -203,6 +203,9 @@ func (c *Client) diagnosticsWorker(ctx context.Context, wake <-chan struct{}, do
 		if current != epoch {
 			epoch, sequence, next = current, 0, time.Time{}
 			sampler.Reset()
+		}
+		if earliest.After(next) {
+			next = earliest
 		}
 		if !next.IsZero() && time.Now().Before(next) {
 			until := next
@@ -256,6 +259,11 @@ func (c *Client) diagnosticsWorker(ctx context.Context, wake <-chan struct{}, do
 						c.stopDiagnosticsLocked()
 					}
 					c.mu.Unlock()
+				} else {
+					// Never catch up after a slow POST: Captain budgets arrivals,
+					// which may be much closer together than sample timestamps.
+					// Keep this floor across baseline/epoch resets as well.
+					earliest = time.Now().Add(500 * time.Millisecond)
 				}
 			}
 		}

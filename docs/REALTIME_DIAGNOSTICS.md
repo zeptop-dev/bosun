@@ -27,6 +27,8 @@ the same epoch continues its sequence. A new epoch starts sequence 1. Rejection,
 offline recovery and shutdown cancel in-flight requests. Samples are sent
 serially with a two-second deadline, with no backlog or retries. A failed send
 requires a fresh lease generation before further sampling.
+Successful sends leave at least 500 milliseconds before the next sample, so a
+slow response cannot cause a catch-up burst against the server's arrival budget.
 
 The one-second sampler reads only aggregate CPU times, virtual memory and NIC
 counters. It does not enumerate connections/processes, scan filesystems, execute
