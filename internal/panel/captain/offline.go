@@ -99,6 +99,7 @@ func (c *Client) revokeLease() {
 		c.mu.Lock()
 		c.configRejected = true
 		c.authGeneration++
+		c.stopDiagnosticsLocked()
 		c.mu.Unlock()
 		return
 	}
@@ -108,6 +109,7 @@ func (c *Client) revokeLease() {
 	c.revoked = true
 	c.configRejected = true
 	c.authGeneration++
+	c.stopDiagnosticsLocked()
 	c.etag = ""
 	c.mu.Unlock()
 	// Persist a tombstone using the same atomic replacement and directory fsync.
@@ -153,6 +155,7 @@ func (c *Client) saveSnapshot() {
 	state := *c.state
 	state.Jobs = nil
 	state.ConfigDelivery = nil // an offline snapshot cannot deliver a new process's configuration
+	state.Diagnostics = nil    // transient observation commands never survive a restart
 	token := c.token
 	identity := fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.URL+"\x00"+token)))
 	body, err := json.Marshal(offlineSnapshot{Version: 1, Identity: identity, ValidatedAt: c.verifiedAt, State: state})
@@ -225,6 +228,9 @@ func (c *Client) writeSnapshot(token string, body []byte) error {
 	return d.Sync()
 }
 func (c *Client) recoverSnapshot(cause error) error {
+	c.mu.Lock()
+	c.stopDiagnosticsLocked()
+	c.mu.Unlock()
 	if c.cfg.OfflineMaxAge == 0 || !transientStateError(cause) {
 		return cause
 	}
@@ -277,6 +283,7 @@ func (c *Client) recoverSnapshot(cause error) error {
 	}
 	saved.State.Jobs = nil
 	saved.State.ConfigDelivery = nil
+	saved.State.Diagnostics = nil
 	c.state = &saved.State
 	c.verifiedAt = saved.ValidatedAt
 	c.offline = true

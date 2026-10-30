@@ -11,6 +11,7 @@ const (
 	DiagnosticsMaxSampleBytes  = 8192
 	DiagnosticsMaxInterfaces   = 16
 	DiagnosticsMaxLeaseMS      = 15000
+	DiagnosticsMaxSequence     = uint64(9007199254740991)
 )
 
 // DiagnosticsControl is transient observation metadata. It is not desired

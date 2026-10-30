@@ -64,6 +64,7 @@ type Client struct {
 	nodeConfig     panel.ConfigState
 	usersConfig    panel.ConfigState
 	forwardConfig  panel.ConfigState
+	diagnostics    diagnosticState
 
 	// Long-poll watcher: keeps a GET /state?wait= request open so a change
 	// on the panel reaches the agent within a second or two.
@@ -80,6 +81,7 @@ func (c *Client) Changed() <-chan struct{} {
 
 // Close stops the watcher (the agent calls it when it shuts down).
 func (c *Client) Close() error {
+	c.closeDiagnostics()
 	c.watchOnce.Do(func() {}) // never start after Close
 	select {
 	case <-c.stop:
@@ -261,20 +263,38 @@ func (c *Client) fetch(ctx context.Context) (bool, error) { return c.fetchWait(c
 // fetchWait is fetch with an optional long-poll window; the server holds
 // the request until the revision changes or the window ends.
 func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
+	changed := false
+	for attempt := 0; ; attempt++ {
+		moved, retry, err := c.fetchStateResponse(ctx, wait)
+		changed = changed || moved
+		if err != nil || !retry || attempt >= 1 {
+			return changed, err
+		}
+		// A long-poll response cannot start or extend a diagnostic lease from
+		// its arrival time. Refetch with a fresh nonce and request start instead.
+		wait = ""
+	}
+}
+
+func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, bool, error) {
 	c.mu.Lock()
-	tok, etag, generation := c.token, c.etag, c.authGeneration
+	tok := c.token
+	c.mu.Unlock()
+	if tok == "" {
+		if err := c.Pair(ctx); err != nil {
+			return false, false, err
+		}
+	}
+	c.mu.Lock()
+	etag, generation := c.etag, c.authGeneration
 	configSession := c.configSession
 	lastDelivery := ""
 	if d := c.configStateLocked(); d.Valid() {
 		lastDelivery = d.DeliveryID
 	}
-	c.mu.Unlock()
-	if tok == "" {
-		if err := c.Pair(ctx); err != nil {
-			return false, err
-		}
-	}
 	headers := map[string]string{}
+	diagnosticRequest := c.diagnosticsRequestLocked(headers)
+	c.mu.Unlock()
 	if configSession != "" {
 		headers[agentproto.ConfigSessionHeader] = configSession
 	}
@@ -290,39 +310,67 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 	}
 	code, body, h, err := c.doClient(ctx, c.waitClient(wait), http.MethodGet, path, nil, headers)
 	if err != nil {
-		return false, err
+		c.diagnosticsFailed(diagnosticRequest)
+		return false, false, err
 	}
 	switch code {
 	case http.StatusNotModified:
 		if etag == "" {
-			return false, fmt.Errorf("captain: unsolicited state 304")
+			c.diagnosticsFailed(diagnosticRequest)
+			return false, false, fmt.Errorf("captain: unsolicited state 304")
 		}
-		return false, c.validateLease(generation)
+		c.mu.Lock()
+		if diagnosticRequest.authorization == c.authGeneration && diagnosticRequest.order > c.diagnostics.handled {
+			c.diagnostics.handled = diagnosticRequest.order
+		}
+		c.mu.Unlock()
+		return false, false, c.validateLease(generation)
 	case http.StatusOK:
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return false, fmt.Errorf("captain: token rejected; remove %s and pair again", c.cfg.TokenFile)
+		return false, false, fmt.Errorf("captain: token rejected; remove %s and pair again", c.cfg.TokenFile)
 	default:
-		return false, &stateFetchError{status: code}
+		c.diagnosticsFailed(diagnosticRequest)
+		return false, false, &stateFetchError{status: code}
 	}
 	var st agentproto.State
 	if err := json.Unmarshal(body, &st); err != nil {
-		return false, fmt.Errorf("captain: decode state: %w", err)
+		c.diagnosticsFailed(diagnosticRequest)
+		return false, false, fmt.Errorf("captain: decode state: %w", err)
 	}
 	c.mu.Lock()
 	if c.authGeneration != generation {
 		c.mu.Unlock()
-		return false, errors.New("captain: state response predates authorization rejection")
+		return false, false, errors.New("captain: state response predates authorization rejection")
+	}
+	if diagnosticRequest.order < c.diagnostics.handled {
+		c.mu.Unlock()
+		return false, false, nil
 	}
 	if c.state != nil && st.Node.ModeRevision < c.state.Node.ModeRevision {
 		c.mu.Unlock()
-		return false, nil
+		return false, false, nil
 	}
-	c.state, c.etag = &st, h.Get("ETag")
+	retry := c.acceptDiagnosticsLocked(diagnosticRequest, st.Diagnostics, c.diagnosticsNowLocked())
+	st.Diagnostics = nil
+	// A recovery snapshot deliberately drops jobs and delivery evidence. Its
+	// first authenticated response must restore the full live state even when
+	// the server's desired revision itself has not changed.
+	moved := c.state == nil || c.offline || c.revoked || c.configRejected || c.state.Revision != st.Revision || !sameConfigDelivery(c.state.ConfigDelivery, st.ConfigDelivery)
+	if moved {
+		c.state = &st
+	}
+	c.etag = h.Get("ETag")
 	c.verifiedAt, c.offline, c.revoked = time.Now(), false, false
 	c.configRejected = false
 	c.mu.Unlock()
-	c.saveSnapshot()
-	return true, nil
+	if moved {
+		c.saveSnapshot()
+	}
+	return moved, retry, nil
+}
+
+func sameConfigDelivery(a, b *agentproto.ConfigDelivery) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }
 
 // State returns the last state fetched from the panel, or nil.
