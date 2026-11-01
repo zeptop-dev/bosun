@@ -6,6 +6,9 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.87.0** (2026-11-01) — Report bounded private evidence of files actually activated by managed proxy cores. Bind artifacts to supervised process generations and independently accepted configuration receipts; failed applies, partial activation and automatic restarts cannot borrow older evidence. Process-local keyed digests reveal no native configuration or credentials, and later runtime user updates remain explicit. Old panels remain compatible and invalid optional evidence cannot block accounting.
+  - Add provincial Zstatic TCP probe presets with additive province selection, preserving existing custom targets and default monitoring behavior. Proxy core versions and built-in rollback floor remain unchanged.
+
 - **v0.86.0** (2026-10-30) — Add passive, on-demand host diagnostics for Captain v1.51.0. A single process-bound worker samples CPU, memory and NIC counters only while a short authenticated lease remains valid; command metadata does not change proxy revisions, trigger application or enter offline recovery. Missing baselines and gaps remain unknown, and network rates are explicitly bytes per second.
   - Attach bounded counter-read provenance to frozen traffic batches and separately report current persisted backlog. Preserve collection boundaries across retries, distinguish first reads, process changes, failures and coalescing, and tolerate malformed optional metadata without rejecting valid accounting. Keep journal version 1, existing epoch/sequence receipts and customer counters unchanged.
   - Preserve compatibility with older panels and agents, existing monitoring and managed service controls. No core version or built-in rollback-floor change.

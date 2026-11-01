@@ -1601,3 +1601,5 @@ not produce required listeners. Non-Linux platforms and external adapters
 without process evidence retain their prior API readiness check. Local socket
 ownership is not an end-to-end subscriber-connectivity test or seamless
 connection handoff.
+
+Managed proxy cores can report private, process-bound evidence of actually activated configuration files. Digests exclude later runtime updates and never upload native configuration or credentials. See [activated configuration evidence](docs/RENDERED_CONFIG.md).
