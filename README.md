@@ -905,7 +905,11 @@ realm-backed rule (`[[endpoints]]` with `listen`/`remote`; `both` turns UDP
 on, `udp` turns TCP off) and supervises one `realm -c` process, restarting
 it when the set changes. Host-name targets and UDP work; there are no byte
 or connection counters. The doctor fails a realm rule when the process is
-not running.
+not running. Realm 2.9.6 applies `extra_remotes` and weighted round-robin only
+to TCP: UDP uses the primary `remote`, including on a `both` endpoint. Changing
+any realm rule restarts the shared process and interrupts its existing sessions.
+See [forward transport semantics](docs/FORWARD_TRANSPORTS.md) for UDP idle,
+backend update boundaries and isolated acceptance commands.
 
 ### Egress follows ingress (multi-IP hosts)
 
