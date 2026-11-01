@@ -15,7 +15,7 @@ import (
 )
 
 // MinVersion is the first bosun release that understands Captain delivery.
-const MinVersion = "v0.88.0"
+const MinVersion = "v0.89.0"
 const Prefix = "/api/agent/downloads/"
 
 // Client is an authenticated, same-origin download channel. TokenFile is read

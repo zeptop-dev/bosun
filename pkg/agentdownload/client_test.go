@@ -35,7 +35,7 @@ func TestAuthenticationChangesAfterPairingAndNeverLeavesEndpoint(t *testing.T) {
 		}
 		return err
 	}
-	if err := get(srv.URL + Prefix + "bosun/v0.88.0/SHA256SUMS"); err != nil {
+	if err := get(srv.URL + Prefix + "bosun/v0.89.0/SHA256SUMS"); err != nil {
 		t.Fatal(err)
 	}
 	if auth != "" || pair != "ABCD-EFGH" {
@@ -44,7 +44,7 @@ func TestAuthenticationChangesAfterPairingAndNeverLeavesEndpoint(t *testing.T) {
 	if err := os.WriteFile(token, []byte("node-token\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := get(srv.URL + Prefix + "bosun/v0.88.0/SHA256SUMS"); err != nil {
+	if err := get(srv.URL + Prefix + "bosun/v0.89.0/SHA256SUMS"); err != nil {
 		t.Fatal(err)
 	}
 	if auth != "Bearer node-token" || pair != "" {

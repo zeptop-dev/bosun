@@ -99,7 +99,7 @@ bosun; its cached configuration can keep serving traffic.
 
 ## Captain package delivery
 
-With bosun v0.88.0 or newer and a Captain that supports agent downloads, the
+With bosun v0.89.0 or newer and a Captain that supports agent downloads, the
 server installer can use `--download-source captain`. The configured
 `panel.captain.url` is the complete reachable HTTPS endpoint, including a custom
 port when needed; it is used for both control traffic and package delivery.
@@ -126,7 +126,7 @@ integrity; it does not establish an independent upstream authenticity claim.
 Captain mode never falls back to GitHub or a Go source build. An unavailable
 package or unsupported prebuilt platform produces an error. Existing installed
 cores continue to be reused. Native upgrade backups and rollback floors remain
-in force; Captain mode raises the floor to v0.88.0 so a downgrade cannot silently
+in force; Captain mode raises the floor to v0.89.0 so a downgrade cannot silently
 ignore the configured download source. Empty or `github` preserves the existing
 upstream behavior for old configurations and standalone/Xboard deployments.
 

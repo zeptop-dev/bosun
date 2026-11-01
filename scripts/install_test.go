@@ -38,9 +38,9 @@ func TestCaptainBootstrapDownloadsAndChecksWithoutGitHub(t *testing.T) {
 				}
 				switch {
 				case strings.HasSuffix(r.URL.Path, "/releases/latest"):
-					v := "v0.88.0"
+					v := "v0.89.0"
 					if fail == "old-version" {
-						v = "v0.87.0"
+						v = "v0.88.0"
 					}
 					fmt.Fprintf(w, `{"tag_name":%q}`, v)
 				case strings.HasSuffix(r.URL.Path, "/bosun-linux-amd64"):
@@ -104,15 +104,15 @@ func TestCaptainBootstrapRefusesCredentialDestinationChangesBeforeNetworking(t *
 			token := filepath.Join(dir, "token")
 			os.WriteFile(token, []byte("existing-token"), 0600)
 			helper := filepath.Join(dir, "bosun")
-			body := "case \"$1\" in installer-download-config) printf 'captain\\nhttps://old.example.com:18443\\n" + token + "\\n';; version) echo 'bosun v0.88.0';; esac"
+			body := "case \"$1\" in installer-download-config) printf 'captain\\nhttps://old.example.com:18443\\n" + token + "\\n';; version) echo 'bosun v0.89.0';; esac"
 			if scenario == "unreadable-config" {
-				body = "case \"$1\" in installer-download-config) exit 1;; version) echo 'bosun v0.88.0';; esac"
+				body = "case \"$1\" in installer-download-config) exit 1;; version) echo 'bosun v0.89.0';; esac"
 			}
 			if scenario == "unknown-owner" {
-				body = "case \"$1\" in installer-download-config) exit 1;; version) echo 'bosun v0.87.0';; esac"
+				body = "case \"$1\" in installer-download-config) exit 1;; version) echo 'bosun v0.88.0';; esac"
 			}
 			if scenario == "orphan-token" {
-				body = "case \"$1\" in installer-download-config) printf 'github\\n\\n\\n';; version) echo 'bosun v0.88.0';; esac"
+				body = "case \"$1\" in installer-download-config) printf 'github\\n\\n\\n';; version) echo 'bosun v0.89.0';; esac"
 			}
 			os.WriteFile(helper, []byte("#!/bin/sh\n"+body+"\n"), 0755)
 			script := strings.ReplaceAll(Install, "NATIVE=/usr/local/bin/bosun", "NATIVE="+helper)
@@ -222,7 +222,7 @@ func TestOfflineUninstallWithBrokenConfigUsesOnlyVerifiedPrivateWorker(t *testin
 				}
 			}
 			native := filepath.Join(dir, "bosun")
-			helper := "#!/bin/sh\ncase \"$1\" in installer-download-config) touch '" + configRead + "'; echo 'config unavailable' >&2; exit 1;; version) echo 'bosun v0.88.0';; *) exit 1;; esac\n"
+			helper := "#!/bin/sh\ncase \"$1\" in installer-download-config) touch '" + configRead + "'; echo 'config unavailable' >&2; exit 1;; version) echo 'bosun v0.89.0';; *) exit 1;; esac\n"
 			if err := os.WriteFile(native, []byte(helper), 0755); err != nil {
 				t.Fatal(err)
 			}

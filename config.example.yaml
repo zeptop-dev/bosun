@@ -48,7 +48,7 @@ panel:
   captain:                   # only for driver: captain
     url: https://captain.example.com
     pair_code: ABCD-EFGH     # from "add node" in Captain; used once, then the token is stored in data_dir
-    download_source: github # captain: native bosun updates and managed cores use this panel URL (>= v0.88.0)
+    download_source: github # captain: native bosun updates and managed cores use this panel URL (>= v0.89.0)
     offline_max_age: 0s     # opt-in recovery lease, e.g. 1h; maximum 24h, see README
   # driver: xboard
   xboard:

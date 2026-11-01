@@ -107,7 +107,7 @@ if [ -x "$NATIVE" ] && [ -f /etc/bosun/config.yaml ]; then
     # Only releases predating this option can safely retain the historical
     # GitHub default when they do not understand the read-only helper.
     current_version=$("$NATIVE" version 2>/dev/null | awk '{print $2}')
-    if ! printf '%s\n' "$current_version" | grep -Eq '^v0\.[0-9]+\.[0-9]+$' || ! printf '%s\n' "$current_version" | awk -F. '{exit !(($2+0)<88)}'; then
+    if ! printf '%s\n' "$current_version" | grep -Eq '^v0\.[0-9]+\.[0-9]+$' || ! printf '%s\n' "$current_version" | awk -F. '{exit !(($2+0)<89)}'; then
       echo 'Cannot read existing download configuration; refusing to guess a download source.' >&2; exit 1
     fi
   fi
@@ -164,7 +164,7 @@ resolve_version() {
   fi
   printf '%s\n' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo 'invalid release version' >&2; exit 1; }
   if [ "$DOWNLOAD_SOURCE" = captain ]; then
-    printf '%s\n' "$VERSION" | awk -F. '{sub(/^v/,"",$1); exit !(($1+0)>0 || ($2+0)>=88)}' || { echo 'Captain delivery requires bosun v0.88.0 or newer; wait for its official release' >&2; exit 1; }
+    printf '%s\n' "$VERSION" | awk -F. '{sub(/^v/,"",$1); exit !(($1+0)>0 || ($2+0)>=89)}' || { echo 'Captain delivery requires bosun v0.89.0 or newer; wait for its official release' >&2; exit 1; }
     BASE="$CAPTAIN/api/agent/downloads/bosun/$VERSION"
   else
     BASE="https://github.com/$REPO/releases/download/$VERSION"
