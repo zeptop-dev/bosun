@@ -6,6 +6,10 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.88.0** (2026-11-01) — Close UDP relay sockets on every retirement path, count each active session once and refresh inactivity from successful traffic in either direction. Continuous one-way traffic keeps its selected path; new source sessions retain weighted round-robin selection, independently of TCP.
+  - Preserve the complete installed nft table when any requested target fails preflight resolution. Retry the whole intended set and retain service-control address pins. No agent protocol, proxy-core version, billing or built-in rollback-floor changes.
+  - Validate Captain's compiled complete UDP/TCP+UDP paths with actual sockets, plus isolated Linux nft dual-stack transactions and fixed realm 2.9.6 forwarding. Explain realm-wide process restart and nft conntrack boundaries; configuration receipts do not promise drained or uninterrupted flows.
+
 - **v0.87.0** (2026-11-01) — Report bounded private evidence of files actually activated by managed proxy cores. Bind artifacts to supervised process generations and independently accepted configuration receipts; failed applies, partial activation and automatic restarts cannot borrow older evidence. Process-local keyed digests reveal no native configuration or credentials, and later runtime user updates remain explicit. Old panels remain compatible and invalid optional evidence cannot block accounting.
   - Add provincial Zstatic TCP probe presets with additive province selection, preserving existing custom targets and default monitoring behavior. Proxy core versions and built-in rollback floor remain unchanged.
 

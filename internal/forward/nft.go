@@ -190,6 +190,24 @@ func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) error {
 		}
 		targets[f.Tag] = t
 	}
+	// Never replace the installed table with a successfully resolved subset.
+	// In particular, a failing new branch must not remove an existing path.
+	// Targets pinned by ServiceControlScope are reused above so the guard and
+	// NAT table continue to describe the same addresses and families.
+	var problems []error
+	for _, f := range rules {
+		if err := errs[f.Tag]; err != nil {
+			problems = append(problems, fmt.Errorf("forward %q: %w", f.Tag, err))
+		}
+	}
+	if problem := errors.Join(problems...); problem != nil {
+		for _, r := range m.rules {
+			if r.spec.Backend == "nft" {
+				r.setBackend(problem)
+			}
+		}
+		return problem
+	}
 	script := renderNFT(rules, targets)
 	var applyErr error
 	if len(rules) == 0 {
@@ -236,13 +254,7 @@ func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) error {
 		}
 		r.setBackendTarget(problem, resolved)
 	}
-	problems := []error{applyErr}
-	for _, f := range rules {
-		if err := errs[f.Tag]; err != nil {
-			problems = append(problems, fmt.Errorf("forward %q: %w", f.Tag, err))
-		}
-	}
-	return errors.Join(problems...)
+	return applyErr
 }
 
 // ServiceControlScope pins the same resolved NAT family for the guard and the

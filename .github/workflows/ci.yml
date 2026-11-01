@@ -32,7 +32,7 @@ jobs:
           sudo apt-get install -y nftables iproute2 util-linux python3
           go test -c ./internal/forward -o /tmp/bosun-forward.test
           go test -c ./internal/egressguard -o /tmp/bosun-egress.test
-          sudo env BOSUN_NFT_TEST=1 /tmp/bosun-forward.test -test.run '^TestNFTLinuxDualStackRelay$' -test.v -test.timeout 45s
+          sudo env BOSUN_NFT_TEST=1 /tmp/bosun-forward.test -test.run '^TestNFTLinux(DualStackRelay|RuntimeTransactions)$' -test.v -test.timeout 3m
           sudo env BOSUN_NFT_TEST=1 /tmp/bosun-egress.test -test.run '^TestGuardLinuxScopedConnections$' -test.v -test.timeout 45s
       - name: Real private-access cores in isolated Linux namespaces
         run: |
