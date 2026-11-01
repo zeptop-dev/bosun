@@ -11,6 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/zeptop-dev/bosun/pkg/agentdownload"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -173,11 +174,12 @@ type SnellCore struct {
 
 // CaptainPanel configures the Captain driver.
 type CaptainPanel struct {
-	URL           string        `yaml:"url"`
-	PairCode      string        `yaml:"pair_code"`  // one-time; ignored once a token is stored
-	TokenFile     string        `yaml:"token_file"` // default <data_dir>/captain.token
-	Timeout       time.Duration `yaml:"timeout"`
-	OfflineMaxAge time.Duration `yaml:"offline_max_age"` // 0 disables; at most 24h since authenticated state validation
+	DownloadSource string        `yaml:"download_source"` // github (default) or captain, including managed cores and updates
+	URL            string        `yaml:"url"`
+	PairCode       string        `yaml:"pair_code"`  // one-time; ignored once a token is stored
+	TokenFile      string        `yaml:"token_file"` // default <data_dir>/captain.token
+	Timeout        time.Duration `yaml:"timeout"`
+	OfflineMaxAge  time.Duration `yaml:"offline_max_age"` // 0 disables; at most 24h since authenticated state validation
 	// AllowInsecure permits a plain-http panel URL (lab use only): the
 	// node token and every config the panel pushes would travel in clear.
 	AllowInsecure bool `yaml:"allow_insecure"`
@@ -260,7 +262,7 @@ func Load(path string) (*Config, error) {
 	// only used until a token is stored, so leaving the variables set is fine.
 	if u := os.Getenv("BOSUN_CAPTAIN"); u != "" {
 		c.Panel.Driver = "captain"
-		c.Panel.Captain = &CaptainPanel{URL: u, PairCode: os.Getenv("BOSUN_PAIR")}
+		c.Panel.Captain = &CaptainPanel{URL: u, PairCode: os.Getenv("BOSUN_PAIR"), DownloadSource: os.Getenv("BOSUN_DOWNLOAD_SOURCE")}
 		c.Web = nil
 	}
 	if c.Panel.Driver == "" {
@@ -288,6 +290,22 @@ func Load(path string) (*Config, error) {
 	}
 	if c.Panel.Captain != nil && (c.Panel.Captain.OfflineMaxAge < 0 || c.Panel.Captain.OfflineMaxAge > 24*time.Hour) {
 		return nil, fmt.Errorf("config: panel.captain.offline_max_age must be between 0 and 24h")
+	}
+	if cp := c.Panel.Captain; cp != nil {
+		if cp.DownloadSource != "" && cp.DownloadSource != "github" && cp.DownloadSource != "captain" {
+			return nil, fmt.Errorf("config: panel.captain.download_source must be github or captain")
+		}
+		if cp.DownloadSource == "captain" {
+			if c.Panel.Driver != "captain" {
+				return nil, fmt.Errorf("config: Captain downloads require the captain driver")
+			}
+			if _, err := agentdownload.New(cp.URL, cp.TokenFile, cp.PairCode, cp.AllowInsecure); err != nil {
+				return nil, err
+			}
+			if c.MinVersion == "" || selfupdate.Newer(agentdownload.MinVersion, c.MinVersion) {
+				c.MinVersion = agentdownload.MinVersion
+			}
+		}
 	}
 	if c.Panel.Driver == "captain" {
 		if c.Panel.Captain == nil || c.Panel.Captain.URL == "" {
@@ -377,4 +395,14 @@ func (c *Config) EgressGuardOn() bool {
 		return *c.Cores.EgressGuard
 	}
 	return c.Cores.User != ""
+}
+
+// Downloads returns the configured Captain artifact channel; nil retains the
+// original direct upstream behavior. Callers must propagate validation errors.
+func (c *Config) Downloads() (*agentdownload.Client, error) {
+	if c.Panel.Captain == nil || c.Panel.Captain.DownloadSource != "captain" {
+		return nil, nil
+	}
+	cp := c.Panel.Captain
+	return agentdownload.New(cp.URL, cp.TokenFile, cp.PairCode, cp.AllowInsecure)
 }

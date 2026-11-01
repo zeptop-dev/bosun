@@ -128,6 +128,29 @@ func main() {
 		} else {
 			err = hostupdate.CheckLayoutFile("bosun", os.Args[2])
 		}
+	case "installer-download-config":
+		if len(os.Args) != 3 {
+			err = fmt.Errorf("installer-download-config requires a config path")
+			break
+		}
+		var cfg *config.Config
+		cfg, err = config.Load(os.Args[2])
+		if err == nil {
+			cp := cfg.Panel.Captain
+			if cfg.Panel.Driver == "captain" && cp != nil {
+				if strings.ContainsAny(cp.TokenFile+cp.URL, "\r\n") {
+					err = fmt.Errorf("invalid token file path")
+					break
+				}
+				source := cp.DownloadSource
+				if source == "" {
+					source = "github"
+				}
+				fmt.Printf("%s\n%s\n%s\n", source, cp.URL, cp.TokenFile)
+			} else {
+				fmt.Print("github\n\n\n")
+			}
+		}
 	case "installer-check-upgrade":
 		if len(os.Args) != 3 || !hostupdate.NewerRelease(version, os.Args[2]) {
 			err = fmt.Errorf("target is not a newer release")
@@ -267,6 +290,10 @@ func setup(args []string) (*env, error) {
 		audits.Check(user, clientIP, host, port, network)
 	}
 	inst := coreinstall.New(cfg.CoresDir(), log)
+	inst.Downloads, err = cfg.Downloads()
+	if err != nil {
+		return nil, err
+	}
 	if cfg.Cores.RegistryToken != "" {
 		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
 	}
@@ -432,6 +459,10 @@ func cmdRun(args []string) error {
 	}
 
 	upd := newUpdater(cfg.MinVersion)
+	upd.Downloads, err = cfg.Downloads()
+	if err != nil {
+		return err
+	}
 	go watchUpdates(ctx, log, upd)
 
 	// Certificate automation for inbounds (and the panel). Renewals restart
@@ -835,8 +866,14 @@ func cmdCore(args []string) error {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	inst := coreinstall.New(filepath.Join(dataDir, "cores"), log)
-	if cfg, err := config.Load(*cfgPath); err == nil && cfg.Cores.RegistryToken != "" {
-		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
+	if cfg, err := config.Load(*cfgPath); err == nil {
+		inst.Downloads, err = cfg.Downloads()
+		if err != nil {
+			return err
+		}
+		if cfg.Cores.RegistryToken != "" {
+			inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
+		}
 	}
 
 	switch sub {

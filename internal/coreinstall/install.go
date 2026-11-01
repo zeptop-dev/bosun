@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/zeptop-dev/bosun/pkg/agentdownload"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,13 +25,14 @@ import (
 
 // Installer places core binaries under Root/<core>/<version>/<binary>.
 type Installer struct {
-	mu      sync.Mutex
-	Root    string
-	Log     *slog.Logger
-	HTTP    *http.Client
-	GOOS    string            // defaults to runtime.GOOS
-	GOARCH  string            // defaults to runtime.GOARCH
-	Headers map[string]string // extra request headers, e.g. a GitLab Deploy-Token
+	Downloads *agentdownload.Client // nil uses upstream; non-nil forbids upstream/source-build fallback
+	mu        sync.Mutex
+	Root      string
+	Log       *slog.Logger
+	HTTP      *http.Client
+	GOOS      string            // defaults to runtime.GOOS
+	GOARCH    string            // defaults to runtime.GOARCH
+	Headers   map[string]string // extra request headers, e.g. a GitLab Deploy-Token
 	// Musl prefers the "<GOOS>/<GOARCH>-musl" asset when one exists (Alpine);
 	// detected from /etc/alpine-release by New.
 	Musl bool
@@ -108,16 +110,27 @@ func (i *Installer) Install(ctx context.Context, rel Release) (string, error) {
 	}
 	defer os.Remove(tmp)
 
-	asset, hasAsset := rel.Assets[i.platform()]
+	platform := i.platform()
+	asset, hasAsset := rel.Assets[platform]
 	if i.Musl {
 		if a, ok := rel.Assets[i.platform()+"-musl"]; ok {
 			asset, hasAsset = a, true
+			platform += "-musl"
+		}
+	}
+	if i.Downloads != nil {
+		if !hasAsset {
+			return "", fmt.Errorf("coreinstall: Captain delivery has no prebuilt %s %s for %s; source builds are disabled", rel.Core, rel.Version, platform)
+		}
+		asset, err = i.captainAsset(ctx, rel, platform, asset)
+		if err != nil {
+			return "", err
 		}
 	}
 	if hasAsset {
 		i.Log.Info("downloading", "core", rel.Core, "version", rel.Version, "url", asset.URL)
 		err = i.download(ctx, asset, tmp)
-		if err != nil && rel.Build != nil {
+		if err != nil && rel.Build != nil && i.Downloads == nil {
 			i.Log.Warn("download failed, building from source instead", "core", rel.Core, "version", rel.Version, "err", err)
 			err = i.build(ctx, *rel.Build, tmp)
 		}
@@ -151,12 +164,16 @@ func (i *Installer) fetch(ctx context.Context, url string, limit int64) ([]byte,
 	if base == "" {
 		base = RegistryBase
 	}
-	if strings.HasPrefix(url, base) {
+	if i.Downloads == nil && strings.HasPrefix(url, base) {
 		for k, v := range i.Headers {
 			req.Header.Set(k, v)
 		}
 	}
-	resp, err := i.HTTP.Do(req)
+	hc := i.HTTP
+	if i.Downloads != nil {
+		hc = i.Downloads.HTTP
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +181,11 @@ func (i *Installer) fetch(ctx context.Context, url string, limit int64) ([]byte,
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("coreinstall: GET %s: %s", url, resp.Status)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, limit))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err == nil && int64(len(b)) > limit {
+		return nil, fmt.Errorf("coreinstall: asset exceeds size limit")
+	}
+	return b, err
 }
 
 // expectedSum resolves the digest for an asset: pinned in the manifest, or
@@ -353,4 +374,25 @@ func (i *Installer) buildSource(ctx context.Context, b Build, goBin, work, dest 
 		return fmt.Errorf("core source build failed: %w: %.4096s", err, output)
 	}
 	return nil
+}
+
+// captainAsset retains the locally known archive/member and pinned digest.
+// source_verified=false is only Captain transport integrity, not an upstream
+// authenticated checksum. The node never silently downloads upstream itself.
+func (i *Installer) captainAsset(ctx context.Context, rel Release, platform string, asset Asset) (Asset, error) {
+	m, err := i.Downloads.CoreManifest(ctx, rel.Core, rel.Version, platform)
+	if err != nil {
+		return Asset{}, err
+	}
+	if asset.SHA256 != "" && !strings.EqualFold(asset.SHA256, m.SHA256) {
+		return Asset{}, fmt.Errorf("coreinstall: Captain digest differs from the pinned manifest")
+	}
+	if (asset.SHA256 != "" || asset.SumsURL != "") && !m.SourceVerified {
+		return Asset{}, fmt.Errorf("coreinstall: Captain did not verify the upstream artifact digest")
+	}
+	if !m.SourceVerified {
+		i.Log.Warn("upstream has no checksum; verifying Captain-provided content digest", "core", rel.Core, "version", rel.Version)
+	}
+	asset.URL, asset.SHA256, asset.SumsURL = m.URL, strings.ToLower(m.SHA256), ""
+	return asset, nil
 }

@@ -23,6 +23,8 @@ have_tty() { ( exec 3>/dev/tty ) 2>/dev/null; }
 
 PRODUCT=bosun NATIVE=/usr/local/bin/bosun MODE="" WEB_UPGRADE=0 NODE_MODE=full
 REPO="zeptop-dev/bosun"
+SAVED_DOWNLOADS_KNOWN=0 TOKEN_FILE_SET=0
+DOWNLOAD_SOURCE="" TOKEN_FILE="/var/lib/bosun/captain.token"
 CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN="" ACTION=install KEEP_DATA=0 YES=0 PANEL_USER="" PANEL_PASS=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -33,6 +35,8 @@ while [ $# -gt 0 ]; do
     --keep-data) KEEP_DATA=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --captain) CAPTAIN="$2"; shift 2 ;;
+    --download-source) DOWNLOAD_SOURCE="$2"; shift 2 ;;
+    --token-file) TOKEN_FILE="$2"; TOKEN_FILE_SET=1; shift 2 ;;
     --pair) PAIR="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
     --web-listen) WEB_LISTEN="$2"; shift 2 ;;
@@ -44,20 +48,91 @@ done
 [ "$(uname -s)" = Linux ] || { echo "Linux is required" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 
+# A current native installation can describe its configuration without shell
+# evaluation or parsing YAML. Old binaries do not have this command.
+if [ -x "$NATIVE" ] && [ -f /etc/bosun/config.yaml ]; then
+  if saved_downloads=$("$NATIVE" installer-download-config /etc/bosun/config.yaml 2>/dev/null); then
+    SAVED_DOWNLOADS_KNOWN=1
+    saved_source=$(printf '%s\n' "$saved_downloads" | sed -n '1p')
+    saved_url=$(printf '%s\n' "$saved_downloads" | sed -n '2p')
+    saved_token_file=$(printf '%s\n' "$saved_downloads" | sed -n '3p')
+    [ -n "$DOWNLOAD_SOURCE" ] || DOWNLOAD_SOURCE=$saved_source
+    [ -n "$CAPTAIN" ] || CAPTAIN=$saved_url
+    if [ "$TOKEN_FILE_SET" != 1 ] && [ -n "$saved_token_file" ]; then TOKEN_FILE=$saved_token_file; fi
+  elif [ -z "$DOWNLOAD_SOURCE" ]; then
+    # Only releases predating this option can safely retain the historical
+    # GitHub default when they do not understand the read-only helper.
+    current_version=$("$NATIVE" version 2>/dev/null | awk '{print $2}')
+    if ! printf '%s\n' "$current_version" | grep -Eq '^v0\.[0-9]+\.[0-9]+$' || ! printf '%s\n' "$current_version" | awk -F. '{exit !(($2+0)<88)}'; then
+      echo 'Cannot read existing download configuration; refusing to guess a download source.' >&2; exit 1
+    fi
+  fi
+fi
+DOWNLOAD_SOURCE=${DOWNLOAD_SOURCE:-github}
+case "$DOWNLOAD_SOURCE" in github|captain) ;; *) echo '--download-source must be github or captain' >&2; exit 1 ;; esac
+if [ "$DOWNLOAD_SOURCE" = captain ]; then
+  case "$CAPTAIN" in https://*) ;; *) echo 'Captain downloads require an HTTPS --captain endpoint' >&2; exit 1 ;; esac
+  printf '%s\n' "$CAPTAIN" | LC_ALL=C grep -Eq '^https://(\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+)(:[0-9]+)?/?$' || { echo 'invalid Captain download endpoint' >&2; exit 1; }
+  case "$CAPTAIN" in */../*|*/./*|*/..|*/.) echo 'invalid Captain download endpoint path' >&2; exit 1 ;; esac
+  CAPTAIN=${CAPTAIN%/}
+  if [ "$SAVED_DOWNLOADS_KNOWN" = 1 ] && [ -n "$saved_url" ] && [ "${saved_url%/}" != "$CAPTAIN" ]; then
+    echo 'Captain endpoint differs from the existing configuration; no node credential was sent. Update the endpoint explicitly before retrying.' >&2; exit 1
+  fi
+  if [ -z "$PAIR" ] && { [ "$SAVED_DOWNLOADS_KNOWN" != 1 ] || [ -z "${saved_url:-}" ] || [ "${saved_url%/}" != "$CAPTAIN" ]; }; then
+    echo 'Cannot verify the destination of the existing node token. Use a fresh pairing code for installation or a current configured bosun for upgrades.' >&2; exit 1
+  fi
+  [ "$MODE" != docker ] || { echo 'Captain delivery supports native installation; Docker images require a reachable registry' >&2; exit 1; }
+  if [ -z "$PAIR" ] && [ ! -s "$TOKEN_FILE" ]; then echo 'Captain downloads require a pairing code or an existing node token' >&2; exit 1; fi
+fi
+
+# In Captain mode no redirect may send bootstrap credentials to another host.
+# The permanent token is read from a private header file, never put in argv/URL.
+fetch() {
+  if [ "$DOWNLOAD_SOURCE" != captain ]; then curl -fsSL "$@"; return; fi
+  auth_file=$(umask 077; mktemp "$TMP/captain-headers.XXXXXX")
+  if [ -z "$PAIR" ] && [ -s "$TOKEN_FILE" ]; then
+    token=$(cat "$TOKEN_FILE")
+    case "$token" in *[!a-zA-Z0-9_-]*|'') rm -f "$auth_file"; echo 'invalid node token file' >&2; return 1 ;; esac
+    printf 'Authorization: Bearer %s\n' "$token" > "$auth_file"
+    unset token
+  else
+    case "$PAIR" in *[!a-zA-Z0-9_-]*|'') rm -f "$auth_file"; echo 'invalid pairing code' >&2; return 1 ;; esac
+    printf 'X-Bosun-Pair-Code: %s\n' "$PAIR" > "$auth_file"
+  fi
+  if curl -fsSL --globoff --max-redirs 0 --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 600 --header "@$auth_file" "$@"; then
+    rm -f "$auth_file"; return 0
+  else
+    result=$?; rm -f "$auth_file"; return "$result"
+  fi
+}
+
+# YAML single-quoted scalars preserve punctuation and whitespace in values.
+yaml_quote() { printf "'"; printf '%s' "$1" | sed "s/'/''/g"; printf "'"; }
+
 # Lifecycle commands never re-run installation prompts or rewrite deployment settings.
 resolve_version() {
   if [ -z "$VERSION" ]; then
-    VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+    if [ "$DOWNLOAD_SOURCE" = captain ]; then
+      VERSION=$(fetch "$CAPTAIN/api/agent/downloads/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+    else
+      VERSION=$(fetch "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+    fi
   fi
   printf '%s\n' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo 'invalid release version' >&2; exit 1; }
+  if [ "$DOWNLOAD_SOURCE" = captain ]; then
+    printf '%s\n' "$VERSION" | awk -F. '{sub(/^v/,"",$1); exit !(($1+0)>0 || ($2+0)>=88)}' || { echo 'Captain delivery requires bosun v0.88.0 or newer; wait for its official release' >&2; exit 1; }
+    BASE="$CAPTAIN/api/agent/downloads/bosun/$VERSION"
+  else
+    BASE="https://github.com/$REPO/releases/download/$VERSION"
+  fi
 }
+
 download_worker() {
   command -v curl >/dev/null || { echo 'curl is required to download the release' >&2; exit 1; }
   resolve_version
   case "$(uname -m)" in x86_64|amd64) ARCH=amd64 ;; aarch64|arm64) ARCH=arm64 ;; *) echo 'unsupported architecture' >&2; exit 1 ;; esac
-  BASE="https://github.com/$REPO/releases/download/$VERSION"
-  curl -fsSL -o "$TMP/$PRODUCT" "$BASE/$PRODUCT-linux-$ARCH"
-  curl -fsSL -o "$TMP/SHA256SUMS" "$BASE/SHA256SUMS"
+  fetch -o "$TMP/$PRODUCT" "$BASE/$PRODUCT-linux-$ARCH"
+  fetch -o "$TMP/SHA256SUMS" "$BASE/SHA256SUMS"
   WANT=$(awk -v file="$PRODUCT-linux-$ARCH" '$2 == file {print $1}' "$TMP/SHA256SUMS")
   GOT=$(sha256sum "$TMP/$PRODUCT" | cut -d' ' -f1)
   [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] || { echo 'checksum mismatch' >&2; exit 1; }
@@ -94,6 +169,7 @@ if [ "$ACTION" = upgrade ] || [ "$ACTION" = enable-web-upgrade ]; then
     else echo 'no existing installation found; install first' >&2; exit 1; fi
   fi
   case "$MODE" in docker|binary) ;; *) echo '--mode must be docker or binary' >&2; exit 1 ;; esac
+  [ "$DOWNLOAD_SOURCE" != captain ] || [ "$MODE" != docker ] || { echo 'Captain delivery cannot upgrade Docker images' >&2; exit 1; }
   prepare_worker
   if [ "$MODE" = docker ]; then
     # One-time registration is also available to old Docker installations.
@@ -158,24 +234,33 @@ case "$(uname -m)" in
   *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-if [ -z "$VERSION" ]; then
-  VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
-  [ -n "$VERSION" ] || { echo "could not determine the latest release" >&2; exit 1; }
-fi
-BASE="https://github.com/$REPO/releases/download/$VERSION"
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-echo "downloading bosun $VERSION ($ARCH)"
-curl -fsSL -o "$TMP/bosun" "$BASE/bosun-linux-$ARCH"
-curl -fsSL -o "$TMP/SHA256SUMS" "$BASE/SHA256SUMS"
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+resolve_version
+echo "downloading bosun $VERSION ($ARCH) via $DOWNLOAD_SOURCE"
+fetch -o "$TMP/bosun" "$BASE/bosun-linux-$ARCH"
+fetch -o "$TMP/SHA256SUMS" "$BASE/SHA256SUMS"
 WANT=$(grep " bosun-linux-$ARCH\$" "$TMP/SHA256SUMS" | cut -d' ' -f1)
 GOT=$(sha256sum "$TMP/bosun" | cut -d' ' -f1)
 [ "$WANT" = "$GOT" ] || { echo "checksum mismatch: want $WANT got $GOT" >&2; exit 1; }
+if [ "$DOWNLOAD_SOURCE" = captain ] && [ -f /etc/bosun/config.yaml ]; then
+  chmod 0755 "$TMP/bosun"
+  saved_downloads=$("$TMP/bosun" installer-download-config /etc/bosun/config.yaml) || { echo 'Cannot validate existing download settings; configuration was preserved.' >&2; exit 1; }
+  saved_source=$(printf '%s\n' "$saved_downloads" | sed -n '1p')
+  saved_url=$(printf '%s\n' "$saved_downloads" | sed -n '2p')
+  if [ "$saved_source" != captain ] || [ "${saved_url%/}" != "$CAPTAIN" ]; then
+    echo 'Existing configuration was preserved. Set panel.captain.download_source to captain and panel.captain.url to this endpoint before reinstalling, or use the native upgrade action.' >&2
+    exit 1
+  fi
+fi
 if [ "$MODE" = binary ]; then install -m 0755 "$TMP/bosun" /usr/local/bin/bosun.new; mv /usr/local/bin/bosun.new /usr/local/bin/bosun; fi
 
 # nft and tc back the per-user speed limits, nft forwards and strict
 # ingress; minimal images (Debian cloud, Alpine) ship without them. Best
 # effort: bosun runs without them and the doctor says what is missing.
 if [ "$NODE_MODE" = full ] && [ "$MODE" = binary ] && { ! command -v nft >/dev/null || ! command -v tc >/dev/null || ! command -v ip >/dev/null || ! command -v wg >/dev/null; }; then
+  if [ "$DOWNLOAD_SOURCE" = captain ]; then
+    echo 'Captain delivers bosun and managed cores. Missing nftables/iproute2/wireguard-tools must be installed from a reachable OS package repository; automatic OS downloads are skipped.' >&2
+  else
   echo "installing nftables, iproute2 and wireguard-tools (network enforcement and managed tunnels)"
   if command -v apt-get >/dev/null; then
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables iproute2 wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
@@ -183,6 +268,7 @@ if [ "$NODE_MODE" = full ] && [ "$MODE" = binary ] && { ! command -v nft >/dev/n
     apk add -q nftables iproute2 iproute2-tc wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
   elif command -v dnf >/dev/null; then
     dnf install -y -q nftables iproute iproute-tc wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
+  fi
   fi
 fi
 
@@ -238,8 +324,10 @@ if [ ! -f /etc/bosun/config.yaml ]; then
     PANEL="panel:
   driver: captain
   captain:
-    url: $CAPTAIN
-    pair_code: $PAIR"
+    url: $(yaml_quote "$CAPTAIN")
+    pair_code: $(yaml_quote "$PAIR")
+    download_source: $DOWNLOAD_SOURCE
+    token_file: $(yaml_quote "$TOKEN_FILE")"
   else
     PANEL="panel:
   driver: local
@@ -321,7 +409,10 @@ if [ "$FIRST_INSTALL" = 1 ] && [ -z "$CAPTAIN" ]; then
 fi
 
 if [ "$INIT" = systemd ]; then
-  curl -fsSL -o /etc/systemd/system/bosun.service "https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.service"
+  if [ "$DOWNLOAD_SOURCE" = captain ]; then SERVICE_URL="$CAPTAIN/api/agent/downloads/bootstrap/bosun.service"
+  else SERVICE_URL="https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.service"; fi
+  fetch -o "$TMP/bosun.service" "$SERVICE_URL"
+  install -m 0644 "$TMP/bosun.service" /etc/systemd/system/bosun.service
   systemctl daemon-reload
   systemctl enable --now bosun
   systemctl restart bosun
@@ -329,7 +420,10 @@ if [ "$INIT" = systemd ]; then
   systemctl --no-pager --lines=5 status bosun || true
   echo "bosun $VERSION installed. Logs: journalctl -u bosun -f"
 else
-  curl -fsSL -o /etc/init.d/bosun "https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.initd"
+  if [ "$DOWNLOAD_SOURCE" = captain ]; then SERVICE_URL="$CAPTAIN/api/agent/downloads/bootstrap/bosun.initd"
+  else SERVICE_URL="https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.initd"; fi
+  fetch -o "$TMP/bosun.initd" "$SERVICE_URL"
+  install -m 0755 "$TMP/bosun.initd" /etc/init.d/bosun
   chmod 0755 /etc/init.d/bosun
   rc-update add bosun default >/dev/null 2>&1 || true
   rc-service bosun restart || rc-service bosun start

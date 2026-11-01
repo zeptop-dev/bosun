@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zeptop-dev/bosun/pkg/agentdownload"
 	"github.com/zeptop-dev/bosun/pkg/hostupdate"
 )
 
@@ -43,6 +44,7 @@ const (
 
 // Client checks and applies updates for one binary.
 type Client struct {
+	Downloads *agentdownload.Client // optional Captain delivery, including release metadata and assets
 	// Repo is "owner/name" on GitHub.
 	Repo string
 	// Binary is the asset prefix, e.g. "bosun" -> bosun-linux-amd64.
@@ -103,6 +105,9 @@ type release struct {
 }
 
 func (c *Client) api() string {
+	if c.Downloads != nil {
+		return c.Downloads.APIBase()
+	}
 	if c.APIBase != "" {
 		return strings.TrimRight(c.APIBase, "/")
 	}
@@ -110,6 +115,9 @@ func (c *Client) api() string {
 }
 
 func (c *Client) http() *http.Client {
+	if c.Downloads != nil {
+		return c.Downloads.HTTP
+	}
 	if c.HTTP != nil {
 		return c.HTTP
 	}
@@ -217,7 +225,7 @@ func (c *Client) latest(ctx context.Context) (*release, error) {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", c.Binary+"-selfupdate/"+c.Version)
-	if c.Token != "" {
+	if c.Token != "" && c.Downloads == nil {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	resp, err := c.http().Do(req)
@@ -235,6 +243,9 @@ func (c *Client) latest(ctx context.Context) (*release, error) {
 	if rel.Draft || rel.Prerelease {
 		return nil, errors.New("latest release is a draft or pre-release")
 	}
+	if err := c.validateCaptainRelease(&rel, ""); err != nil {
+		return nil, err
+	}
 	return &rel, nil
 }
 
@@ -244,6 +255,10 @@ func (c *Client) latest(ctx context.Context) (*release, error) {
 // new one as <exe>.backup for Rollback. In Docker this queues a host job and
 // returns its target; the caller must not restart the application itself.
 func (c *Client) Apply(ctx context.Context, version string) (applied string, err error) {
+	if c.Downloads != nil && InContainer() {
+		return "", errors.New("Captain delivery supports native binaries only; Docker images require a reachable registry")
+	}
+
 	if InContainer() && !hostupdate.Check(ctx, c.Binary).Available {
 		return "", ErrInContainer
 	}
@@ -273,6 +288,14 @@ func (c *Client) Apply(ctx context.Context, version string) (applied string, err
 	}
 	if err != nil {
 		return "", err
+	}
+	if c.Downloads != nil {
+		if !ValidTag(rel.TagName) || Newer(agentdownload.MinVersion, rel.TagName) {
+			return "", fmt.Errorf("Captain delivery requires bosun %s or newer", agentdownload.MinVersion)
+		}
+		if version != "" && rel.TagName != version {
+			return "", errors.New("Captain returned a different release tag")
+		}
 	}
 	if rel.TagName == c.Version {
 		return "", ErrUpToDate
@@ -307,7 +330,21 @@ func (c *Client) Apply(ctx context.Context, version string) (applied string, err
 	if sumsURL == "" {
 		return "", fmt.Errorf("release %s has no SHA256SUMS", rel.TagName)
 	}
-	if c.APIBase == "" && !strings.HasPrefix(assetURL, "https://") {
+	if c.Downloads != nil {
+		assetURL, err = c.Downloads.URL(assetURL)
+		if err != nil {
+			return "", err
+		}
+		sumsURL, err = c.Downloads.URL(sumsURL)
+		if err != nil {
+			return "", err
+		}
+		prefix := c.Downloads.APIBase() + "/bosun/" + rel.TagName + "/"
+		if assetURL != prefix+assetName || sumsURL != prefix+"SHA256SUMS" {
+			return "", errors.New("Captain release metadata refers to another artifact")
+		}
+	}
+	if c.Downloads == nil && c.APIBase == "" && !strings.HasPrefix(assetURL, "https://") {
 		return "", fmt.Errorf("refusing non-https download %q", assetURL)
 	}
 
@@ -413,7 +450,7 @@ func (c *Client) byTag(ctx context.Context, tag string) (*release, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	if c.Token != "" {
+	if c.Token != "" && c.Downloads == nil {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	resp, err := c.http().Do(req)
@@ -426,6 +463,9 @@ func (c *Client) byTag(ctx context.Context, tag string) (*release, error) {
 	}
 	var rel release
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rel); err != nil {
+		return nil, err
+	}
+	if err := c.validateCaptainRelease(&rel, tag); err != nil {
 		return nil, err
 	}
 	return &rel, nil
@@ -569,6 +609,22 @@ func checkFreeSpace(dir string, assetSize int64) error {
 	need := uint64(assetSize)*2 + 32<<20
 	if free < need {
 		return fmt.Errorf("not enough free space in %s: %d MiB free, %d MiB needed", dir, free>>20, need>>20)
+	}
+	return nil
+}
+
+func (c *Client) validateCaptainRelease(rel *release, requested string) error {
+	if c.Downloads == nil {
+		return nil
+	}
+	if c.Binary != "bosun" || c.Repo != "zeptop-dev/bosun" {
+		return errors.New("Captain delivery is only supported for bosun")
+	}
+	if !ValidTag(rel.TagName) || Newer(agentdownload.MinVersion, rel.TagName) {
+		return fmt.Errorf("Captain delivery requires bosun %s or newer", agentdownload.MinVersion)
+	}
+	if requested != "" && requested != rel.TagName {
+		return errors.New("Captain returned a different release tag")
 	}
 	return nil
 }

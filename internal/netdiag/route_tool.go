@@ -16,17 +16,22 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zeptop-dev/bosun/pkg/agentdownload"
+	"github.com/zeptop-dev/bosun/pkg/coremanifest"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Upstream GPL-3.0 executable is downloaded separately, never linked or copied
 // into bosun. Fixed release and GitHub asset digests reviewed 2026-10-18.
-const nextTraceVersion = "v1.7.4"
+var nextTraceVersion = coremanifest.RouteToolRelease().Version
 
-var nextTraceHashes = map[string]string{
-	"amd64": "68b6a2210724a4b9439d9337ac69bf17fc7d662002a9a9dbdc5b96c1ab44ca26",
-	"arm64": "ce8fb581c2bd30a157aec4a38e5c0fa1c79eac3b761a978146267b6ae1c678e3",
-}
+var nextTraceHashes = func() map[string]string {
+	hashes := map[string]string{}
+	for platform, asset := range coremanifest.RouteToolRelease().Assets {
+		hashes[strings.TrimPrefix(platform, "linux/")] = asset.SHA256
+	}
+	return hashes
+}()
 
 func routeToolPath(root string, create bool) (string, error) {
 	if root == "" || !filepath.IsAbs(root) {
@@ -82,16 +87,27 @@ func installRouteTool(ctx context.Context, root string) error {
 	if verifyRouteTool(path, digest) == nil {
 		return nil
 	}
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://github.com/nxtrace/NTrace-core/releases/download/"+nextTraceVersion+"/nexttrace-tiny_linux_"+runtime.GOARCH, nil)
-	if err != nil {
-		return err
-	}
+	downloadURL := coremanifest.RouteToolRelease().Assets["linux/"+runtime.GOARCH].URL
 	client := &http.Client{Timeout: 70 * time.Second, CheckRedirect: func(r *http.Request, via []*http.Request) error {
 		if len(via) > 5 || r.URL.Scheme != "https" || (r.URL.Hostname() != "github.com" && r.URL.Hostname() != "release-assets.githubusercontent.com" && r.URL.Hostname() != "objects.githubusercontent.com") {
 			return errors.New("unexpected tool redirect")
 		}
 		return nil
 	}}
+	if downloads := agentdownload.FromContext(ctx); downloads != nil {
+		manifest, err := downloads.CoreManifest(ctx, "nexttrace", nextTraceVersion, "linux/"+runtime.GOARCH)
+		if err != nil {
+			return err
+		}
+		if !manifest.SourceVerified || !strings.EqualFold(manifest.SHA256, digest) {
+			return errors.New("Captain route tool digest differs from the pinned manifest")
+		}
+		downloadURL, client = manifest.URL, downloads.HTTP
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return err
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

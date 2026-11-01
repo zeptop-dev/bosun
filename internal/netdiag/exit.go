@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/coreinstall"
+	"github.com/zeptop-dev/bosun/pkg/agentdownload"
+	"github.com/zeptop-dev/bosun/pkg/coremanifest"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
@@ -25,7 +27,6 @@ import (
 var geoCheckLicense []byte
 
 const geoCheckVersion = "0.3.0-r1"
-const geoCheckRelease = "v0.57.0"
 const maxExitReport = 128 << 10
 
 func geoCheckArgs(in spec.DiagnosticRequest) []string {
@@ -67,6 +68,7 @@ func ensureGeoCheck(ctx context.Context, root string) (string, error) {
 		return "", err
 	}
 	installer := coreinstall.New(dir, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	installer.Downloads = agentdownload.FromContext(ctx)
 	path := installer.Path("geocheck", geoCheckVersion)
 	licensePath := filepath.Join(dir, "geocheck-LICENSE.txt")
 	f, e := os.OpenFile(licensePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -92,11 +94,6 @@ func ensureGeoCheck(ctx context.Context, root string) (string, error) {
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
-	base := coreinstall.RegistryBase + geoCheckRelease + "/"
-	assets := map[string]coreinstall.Asset{}
-	for _, arch := range []string{"amd64", "arm64"} {
-		assets["linux/"+arch] = coreinstall.Asset{URL: base + "geocheck-linux-" + arch, SumsURL: base + "SHA256SUMS", Archive: "raw"}
-	}
 	// The private version directory must exist before Install opens .partial.
 	versionDir := filepath.Dir(path)
 	if err = os.MkdirAll(versionDir, 0700); err != nil {
@@ -112,7 +109,7 @@ func ensureGeoCheck(ctx context.Context, root string) (string, error) {
 	}
 	installCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	return installer.Install(installCtx, coreinstall.Release{Core: "geocheck", Version: geoCheckVersion, Assets: assets})
+	return installer.Install(installCtx, coremanifest.DiagnosticRelease())
 }
 func runExit(ctx context.Context, in spec.DiagnosticRequest, root string) (json.RawMessage, string) {
 	if root == "" || runtime.GOOS != "linux" {

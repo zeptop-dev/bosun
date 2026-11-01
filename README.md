@@ -97,6 +97,53 @@ result in `/var/tmp/bosun-removal-JOB_ID/` with root-only permissions. See
 for retry and recovery. Selecting record-only deletion does not convert or stop
 bosun; its cached configuration can keep serving traffic.
 
+## Captain package delivery
+
+With bosun v0.88.0 or newer and a Captain that supports agent downloads, the
+server installer can use `--download-source captain`. The configured
+`panel.captain.url` is the complete reachable HTTPS endpoint, including a custom
+port when needed; it is used for both control traffic and package delivery.
+The reverse proxy must already serve that endpoint with a valid certificate.
+
+```yaml
+panel:
+  driver: captain
+  captain:
+    url: https://captain.example.com:18443
+    pair_code: ABCD-EFGH
+    download_source: captain
+```
+
+Captain supplies the native installer, service definition, bosun release and
+checksums. Native self-updates, managed sing-box/Extended, Xray, Mieru, Hysteria,
+Snell and realm downloads, and the optional GeoCheck/NextTrace diagnostic tools
+use the same endpoint. Before pairing downloads use the short-lived pairing
+code; afterwards they use the stored node token. Credentials never follow
+redirects, and the node continues checking artifact hashes. When upstream has
+no independent checksum, Captain's content digest only verifies transport
+integrity; it does not establish an independent upstream authenticity claim.
+
+Captain mode never falls back to GitHub or a Go source build. An unavailable
+package or unsupported prebuilt platform produces an error. Existing installed
+cores continue to be reused. Native upgrade backups and rollback floors remain
+in force; Captain mode raises the floor to v0.88.0 so a downgrade cannot silently
+ignore the configured download source. Empty or `github` preserves the existing
+upstream behavior for old configurations and standalone/Xboard deployments.
+
+OS packages and Docker registries are separate. Captain mode supports native
+installation and native upgrades; it refuses Docker installation/image upgrades
+and skips automatic apt/apk/dnf dependency installation. Install missing
+nftables, iproute2 and wireguard-tools from a reachable OS repository when their
+features are needed. Certificate issuance and diagnostics' actual network
+checks still contact their destinations directly.
+
+Re-running the installer preserves the existing configuration. It refuses a
+conflicting Captain endpoint before sending a stored credential, and refuses
+inconsistent saved source settings before replacing binaries or service files.
+Change the existing configuration explicitly when migrating a deployed node.
+A fresh pairing installer uses its supplied pairing code instead of a token
+left on disk by an older installation.
+
 ## Layout
 
 ```

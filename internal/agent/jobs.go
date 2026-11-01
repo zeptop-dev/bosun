@@ -11,6 +11,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/privatecheck"
 	"github.com/zeptop-dev/bosun/internal/realityscan"
 	"github.com/zeptop-dev/bosun/internal/wgsetup"
+	"github.com/zeptop-dev/bosun/pkg/agentdownload"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -93,6 +94,14 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 		dataDir := ""
 		if a.cfg != nil {
 			dataDir = a.cfg.DataDir
+			downloads, err := a.cfg.Downloads()
+			if err != nil {
+				out.Error = "invalid artifact download configuration"
+				break
+			}
+			if downloads != nil {
+				jctx = agentdownload.WithClient(jctx, downloads)
+			}
 		}
 		result := hostmanage.Run(jctx, dataDir, a.modeIdentity(), j.ID, p.HostRequest)
 		if result.State != nil {
