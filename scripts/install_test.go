@@ -169,3 +169,156 @@ func TestCaptainOfflineUninstallUsesCachedWorkerWithoutToken(t *testing.T) {
 		t.Fatal("cached worker was not invoked")
 	}
 }
+
+func TestOfflineUninstallWithBrokenConfigUsesOnlyVerifiedPrivateWorker(t *testing.T) {
+	cases := []struct {
+		name, config, cache           string
+		keep, confirm, removeOriginal bool
+	}{
+		{"corrupt-config", "corrupt", "valid", false, true, false},
+		{"unreadable-config", "unreadable", "valid", true, true, false},
+		{"confirmation-required", "corrupt", "valid", false, false, false},
+		{"copied-before-original-disappears", "corrupt", "valid", true, true, true},
+	}
+	for _, fault := range []string{"corrupt", "unreadable"} {
+		for _, cache := range []string{"missing", "invalid", "unowned", "writable", "symlink", "not-executable"} {
+			cases = append(cases, struct {
+				name, config, cache           string
+				keep, confirm, removeOriginal bool
+			}{fault + "-" + cache, fault, cache, false, true, false})
+		}
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			stub := filepath.Join(dir, "bin")
+			os.Mkdir(stub, 0755)
+			network := filepath.Join(dir, "network")
+			configRead := filepath.Join(dir, "config-read")
+			owner, mode := "0", "755"
+			if tc.cache == "unowned" {
+				owner = "1000"
+			}
+			if tc.cache == "writable" {
+				mode = "777"
+			}
+			commands := map[string]string{
+				"uname": "echo Linux", "id": "echo 0",
+				"stat": "case \"$2\" in %u) echo " + owner + ";; %a) echo " + mode + ";; *) exit 1;; esac",
+				"curl": "touch '" + network + "'; exit 99",
+			}
+			for name, body := range commands {
+				if err := os.WriteFile(filepath.Join(stub, name), []byte("#!/bin/sh\n"+body+"\n"), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg := filepath.Join(dir, "config.yaml")
+			if err := os.WriteFile(cfg, []byte("invalid: ["), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if tc.config == "unreadable" {
+				if err := os.Chmod(cfg, 0000); err != nil {
+					t.Fatal(err)
+				}
+			}
+			native := filepath.Join(dir, "bosun")
+			helper := "#!/bin/sh\ncase \"$1\" in installer-download-config) touch '" + configRead + "'; echo 'config unavailable' >&2; exit 1;; version) echo 'bosun v0.88.0';; *) exit 1;; esac\n"
+			if err := os.WriteFile(native, []byte(helper), 0755); err != nil {
+				t.Fatal(err)
+			}
+			worker := filepath.Join(dir, "worker")
+			called := filepath.Join(dir, "called")
+			versionPath := filepath.Join(dir, "version-path")
+			runPath := filepath.Join(dir, "run-path")
+			capability := "1"
+			if tc.cache == "invalid" {
+				capability = "0"
+			}
+			remove := ""
+			if tc.removeOriginal {
+				remove = "rm -f '" + worker + "'; "
+			}
+			workerBody := "#!/bin/sh\ncase \"$1\" in installer-version) printf '%s\\n' \"$0\" > '" + versionPath + "'; " + remove + "echo " + capability + ";; uninstall) printf '%s\\n' \"$@\" > '" + called + "'; printf '%s\\n' \"$0\" > '" + runPath + "';; *) exit 1;; esac\n"
+			if tc.cache != "missing" {
+				if err := os.WriteFile(worker, []byte(workerBody), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			switch tc.cache {
+			case "symlink":
+				if err := os.Rename(worker, worker+".real"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(worker+".real", worker); err != nil {
+					t.Fatal(err)
+				}
+			case "writable":
+				if err := os.Chmod(worker, 0777); err != nil {
+					t.Fatal(err)
+				}
+			case "not-executable":
+				if err := os.Chmod(worker, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			script := strings.ReplaceAll(Install, "NATIVE=/usr/local/bin/bosun", "NATIVE="+native)
+			script = strings.ReplaceAll(script, "/etc/bosun/config.yaml", cfg)
+			script = strings.ReplaceAll(script, "/usr/local/lib/$PRODUCT-updater/worker", worker)
+			script = strings.ReplaceAll(script, "have_tty() { ( exec 3>/dev/tty ) 2>/dev/null; }", "have_tty() { return 1; }")
+			path := filepath.Join(dir, "install.sh")
+			if err := os.WriteFile(path, []byte(script), 0600); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{path, "uninstall"}
+			if tc.confirm {
+				args = append(args, "--yes")
+			}
+			if tc.keep {
+				args = append(args, "--keep-data")
+			}
+			cmd := exec.Command("sh", args...)
+			cmd.Env = append(os.Environ(), "PATH="+stub+string(os.PathListSeparator)+os.Getenv("PATH"))
+			output, err := cmd.CombinedOutput()
+			if _, e := os.Stat(network); e == nil {
+				t.Fatalf("network request with unavailable config: %s", output)
+			}
+			call, callErr := os.ReadFile(called)
+			if tc.cache == "valid" && tc.confirm {
+				if err != nil {
+					t.Fatalf("offline uninstall: %v %s", err, output)
+				}
+				want := "uninstall\n--yes\n"
+				if tc.keep {
+					want += "--keep-data\n"
+				}
+				if callErr != nil || string(call) != want {
+					t.Fatalf("lost uninstall options: %q %v", call, callErr)
+				}
+				if _, e := os.Stat(configRead); e == nil {
+					t.Fatal("fast path read damaged application config")
+				}
+				verified, _ := os.ReadFile(versionPath)
+				executed, _ := os.ReadFile(runPath)
+				if len(verified) == 0 || string(verified) != string(executed) || strings.TrimSpace(string(executed)) == worker {
+					t.Fatal("uninstall did not execute the same verified private copy")
+				}
+			} else {
+				if err == nil || callErr == nil {
+					t.Fatalf("unsafe or unconfirmed worker executed: %v %q %s", err, call, output)
+				}
+				if tc.cache == "valid" {
+					if !strings.Contains(string(output), "pass --yes") {
+						t.Fatalf("confirmation skipped: %s", output)
+					}
+				} else {
+					if _, e := os.Stat(configRead); e != nil {
+						t.Fatalf("invalid cache bypassed strict config verification: %s", output)
+					}
+					if !strings.Contains(string(output), "Cannot read existing download configuration") {
+						t.Fatalf("unexpected refusal: %s", output)
+					}
+				}
+			}
+		})
+	}
+}

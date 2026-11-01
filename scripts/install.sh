@@ -48,6 +48,50 @@ done
 [ "$(uname -s)" = Linux ] || { echo "Linux is required" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 
+# An offline uninstall can use the trusted local worker even when the running
+# application's config is unreadable. Copy before executing its capability
+# check so the same private file is used for the eventual uninstall.
+trusted_worker_file() {
+  [ -f "$1" ] && [ -x "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %u "$1" 2>/dev/null)" = 0 ] || return 1
+  worker_mode=$(stat -c %a "$1" 2>/dev/null) || return 1
+  case "$worker_mode" in ''|*[!0-7]*|*[2367][0-7]|*[2367]) return 1 ;; esac
+}
+copy_cached_worker() {
+  candidate="/usr/local/lib/$PRODUCT-updater/worker"
+  trusted_worker_file "$candidate" || return 1
+  # Preserve owner/mode and symlinks while copying, then verify the private
+  # copy too: a changed source cannot become trusted merely because root
+  # created the destination file.
+  if ! cp -pP "$candidate" "$TMP/$PRODUCT" || ! trusted_worker_file "$TMP/$PRODUCT" || ! chmod 0755 "$TMP/$PRODUCT"; then rm -f "$TMP/$PRODUCT"; return 1; fi
+  if [ "$("$TMP/$PRODUCT" installer-version 2>/dev/null || true)" != 1 ]; then rm -f "$TMP/$PRODUCT"; return 1; fi
+  WORKER="$TMP/$PRODUCT"
+}
+
+confirm_uninstall() {
+  echo "Remove $PRODUCT containers, service, binaries, configuration, database, backups and certificates. Shared Docker and unrelated applications are preserved."
+  if [ "$YES" != 1 ]; then
+    have_tty || { echo 'pass --yes to confirm uninstall without a terminal' >&2; exit 1; }
+    printf 'Type yes to permanently uninstall: ' >/dev/tty; read -r ans </dev/tty
+    [ "$ans" = yes ] || { echo 'aborted'; exit 1; }
+  fi
+}
+run_uninstall() {
+  if [ "$KEEP_DATA" = 1 ]; then "$WORKER" uninstall --yes --keep-data; else "$WORKER" uninstall --yes; fi
+}
+if [ "$ACTION" = uninstall ]; then
+  TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+  if copy_cached_worker; then
+    confirm_uninstall
+    run_uninstall
+    exit 0
+  fi
+  rm -rf "$TMP"
+  unset TMP
+  trap - EXIT HUP INT TERM
+  # No usable private worker: continue the normal, strict source/config
+  # validation below. Never infer GitHub from a failed config read.
+fi
+
 # A current native installation can describe its configuration without shell
 # evaluation or parsing YAML. Old binaries do not have this command.
 if [ -x "$NATIVE" ] && [ -f /etc/bosun/config.yaml ]; then
@@ -141,10 +185,7 @@ download_worker() {
 }
 prepare_worker() {
   TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT HUP INT TERM
-  candidate="/usr/local/lib/$PRODUCT-updater/worker"
-  if [ -x "$candidate" ] && [ ! -L "$candidate" ] && [ "$(stat -c %u "$candidate")" = 0 ] && [ "$("$candidate" installer-version 2>/dev/null || true)" = 1 ]; then
-    cp "$candidate" "$TMP/$PRODUCT"; chmod 0755 "$TMP/$PRODUCT"; WORKER="$TMP/$PRODUCT"; return
-  fi
+  if copy_cached_worker; then return; fi
   download_worker
 }
 native_command() {
@@ -152,14 +193,9 @@ native_command() {
   else "$NATIVE" "$@"; fi
 }
 if [ "$ACTION" = uninstall ]; then
-  echo "Remove $PRODUCT containers, service, binaries, configuration, database, backups and certificates. Shared Docker and unrelated applications are preserved."
-  if [ "$YES" != 1 ]; then
-    have_tty || { echo 'pass --yes to confirm uninstall without a terminal' >&2; exit 1; }
-    printf 'Type yes to permanently uninstall: ' >/dev/tty; read -r ans </dev/tty
-    [ "$ans" = yes ] || { echo 'aborted'; exit 1; }
-  fi
+  confirm_uninstall
   prepare_worker
-  if [ "$KEEP_DATA" = 1 ]; then "$WORKER" uninstall --yes --keep-data; else "$WORKER" uninstall --yes; fi
+  run_uninstall
   exit 0
 fi
 if [ "$ACTION" = upgrade ] || [ "$ACTION" = enable-web-upgrade ]; then
