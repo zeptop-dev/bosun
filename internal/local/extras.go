@@ -468,6 +468,10 @@ func (s *Store) SetProbe(p ProbeSettings) error {
 			}
 		}
 	}
+	// Older clients do not send the new province field. An explicit bj resets it.
+	if p.CarrierProbe.TCPProvince == "" && s.st.Probe.CarrierProbe != nil {
+		p.CarrierProbe.TCPProvince = s.st.Probe.CarrierProbe.TCPProvince
+	}
 	carrier := p.CarrierProbe.Normalize()
 	if err := carrier.Validate(); err != nil {
 		return err

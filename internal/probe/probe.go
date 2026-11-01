@@ -19,8 +19,8 @@ import (
 )
 
 // Carrier probe points are spec.DefaultCarriers unless the config names
-// its own; they answer on :80 and a refused connection still
-// proves reachability (ServerStatus counts ECONNREFUSED as success).
+// its own. Default TCP probes use Zstatic port 80; availability depends on
+// the target/path. A refused connection follows the reachability policy.
 func carriersOf(cfg spec.Probe) []spec.Carrier {
 	if len(cfg.Carriers) > 0 {
 		return cfg.Carriers

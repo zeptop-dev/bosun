@@ -172,3 +172,27 @@ func TestLegacyIPv6CarrierSettingsAreEditable(t *testing.T) {
 		t.Fatal("invalid modern mode accepted")
 	}
 }
+
+func TestCarrierProvinceSurvivesOlderSettingsClients(t *testing.T) {
+	s := openTest(t)
+	initial := &spec.CarrierProbeConfig{Protocol: "tcp", Family: "dual", TCPProvince: "gd", TCPIPv6: []spec.Carrier{{Name: "custom", Addr: "example.com:443"}}}
+	if err := s.SetProbe(ProbeSettings{Enabled: true, CarrierPing: true, CarrierProbe: initial}); err != nil {
+		t.Fatal(err)
+	}
+	oldClient := s.ProbeSettings()
+	oldClient.CarrierProbe.TCPProvince = ""
+	oldClient.CarrierProbe.Protocol = "icmp"
+	if err := s.SetProbe(oldClient); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.ProbeSettings().CarrierProbe; got.TCPProvince != "gd" || got.TCPIPv6[0].Addr != "example.com:443" {
+		t.Fatal(got)
+	}
+	oldClient.CarrierProbe.TCPProvince = "bj"
+	if err := s.SetProbe(oldClient); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.ProbeSettings().CarrierProbe.TCPProvince; got != "bj" {
+		t.Fatal(got)
+	}
+}

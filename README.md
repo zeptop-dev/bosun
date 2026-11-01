@@ -368,8 +368,8 @@ When Captain's probe collection is on, the node sends a light host sample every
 few seconds (`POST /api/agent/beat`): CPU, memory, swap, disk, load, network
 rate and totals, TCP/UDP/process counts, uptime, IPv4/IPv6 reachability,
 static host facts, plus latency results: TCP or ICMP checks against the
-carrier probe points (NextTrace Beijing CT/CU/CM by default; Captain can name its
-own), with independent IPv4 and IPv6 series, and panel-defined tasks (icmp, tcp, http,
+carrier probe points (Zstatic province presets for TCP, NextTrace Beijing for ICMP;
+Captain can name its own), with independent IPv4 and IPv6 series, and panel-defined tasks (icmp, tcp, http,
 download). High-frequency beats and latency tasks stop when collection is off;
 minute host reports continue. Captain can disable its public page separately.
 
@@ -383,7 +383,9 @@ probe:
   carrier_probe:
     protocol: icmp                # tcp or icmp; default tcp
     family: dual                  # ipv4, ipv6 or dual; default ipv4
-    # Omit lists to use NextTrace Beijing CT AS4134 / CU AS4837 / CM AS9808.
+    tcp_province: bj              # TCP preset province; default Beijing
+    # Empty TCP lists use Zstatic in this province; empty ICMP lists use
+    # NextTrace Beijing CT AS4134 / CU AS4837 / CM AS9808.
     # All four lists are saved independently: tcp_ipv4, tcp_ipv6,
     # icmp_ipv4 and icmp_ipv6. TCP targets require a port.
     icmp_ipv4:
@@ -403,9 +405,26 @@ which change when protocol, family, label or target changes. Prometheus carrier
 metrics include `family` and `series` labels so dual-stack targets cannot collide.
 These checks follow the server route to the selected target, not a proxy chain.
 The legacy `carrier_ping` / `carriers` settings remain readable; without an
-explicit `carrier_probe`, omitted targets use NextTrace TCP IPv4 defaults.
+explicit `carrier_probe`, omitted targets use Zstatic Beijing TCP IPv4 defaults.
 An explicit `carrier_probe` supersedes those legacy runtime settings. The local
 UI keeps its carrier enable switch and preserves all four target lists.
+
+TCP presets use the [Zstatic province catalogue](https://www.zstaticcdn.com/):
+`{province}-{ct|cu|cm}-v{4|6}.ip.zstaticcdn.com:80`. The 31 mainland province-level
+codes are `bj tj he sx nm ln jl hl sh js zj ah fj jx sd ha hb hn gd gx hi cq sc gz yn
+xz sn gs qh nx xj`. The selected province is shared by both TCP address families;
+dual mode measures each family independently. A nonempty custom list takes
+precedence for its own family and is never overwritten by changing province.
+The UI identifies custom lists and offers an explicit restore-preset action.
+ICMP keeps its separate NextTrace defaults and custom lists; the TCP province
+is remembered while ICMP is selected. Province changes produce distinct target
+series, so previous target samples are not included in the new target's window.
+
+The province field is additive. Updated Captain expands preset lists into explicit
+addresses before delivery, so existing agents supporting `carrier_probe` can use
+them even if they do not recognize `tcp_province`. Older settings clients omitting
+that field preserve the saved province; send `bj` explicitly to reset it. This
+compatibility does not upgrade older panels or reinterpret their custom targets.
 
 ### Carrier monitoring compatibility
 
@@ -419,7 +438,7 @@ interpret the new independent modes.
 Legacy custom IPv6 literals retain IPv6; legacy custom hostnames have no stored
 family and use IPv4. Select IPv6 explicitly for an IPv6-only hostname. TCP
 connection refusal counts as host reachability under the existing carrier
-policy, not as an open service port. The default target may answer ICMP while
+policy, not as an open service port. A target may answer ICMP while
 timing out on TCP, so compare the selected protocol and family when interpreting
 readings. No subscriber routing, traffic accounting or proxy cores are changed.
 
@@ -429,6 +448,11 @@ IPv4/IPv6/双栈选择，四套目标分别保存，双栈结果独立统计；�
 结果当成 ICMP 或 IPv6；代理服务和普通监控任务继续运行。旧配置中的 IPv6
 字面地址保持原地址族，自定义域名默认 IPv4，只有 IPv6 的域名需明确选择 IPv6。
 TCP 拒绝连接仅证明目标主机有响应，不证明端口开放；ICMP 可达也不代表 TCP 可达。
+TCP 默认目标改用 Zstatic 省级三网，默认北京，可搜索选择 31 个省级地区，
+IPv4/IPv6 共用所选省份、双栈独立探测。手填目标按地址族优先生效，选省份不会
+覆盖它；需要时明确点击“恢复省份预设”。ICMP 仍使用独立的 NextTrace 北京或
+自定义目标。切换省份后的统计与原目标隔离。新版 Captain 将省份预设展开为
+明确地址后下发，已有支持 carrier_probe 的节点无须为省份选择单独升级。
 本次不改变用户代理路由、计费、订阅或默认内核。
 
 ## Network quality (v0.56)

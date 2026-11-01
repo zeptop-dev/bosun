@@ -1,5 +1,6 @@
+import { carrierProvinceCodes, defaultCarrierTargetText } from '../lib/carrier-provinces'
 import { ResourceOptionsFields } from '../components/ResourceOptionsFields'
-import { ActionIcon, Button, Card, Group, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Textarea, Title } from '@mantine/core'
+import { ActionIcon, Button, Card, Group, NumberInput, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Textarea, Title } from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
@@ -16,7 +17,6 @@ const carriersText = (c: Carrier[]) => c.map((x) => `${x.name} ${x.addr}`).join(
 type TargetKey = 'tcp_ipv4' | 'tcp_ipv6' | 'icmp_ipv4' | 'icmp_ipv6'
 const targetKeys: TargetKey[] = ['tcp_ipv4', 'tcp_ipv6', 'icmp_ipv4', 'icmp_ipv6']
 const emptyTargets = { tcp_ipv4: '', tcp_ipv6: '', icmp_ipv4: '', icmp_ipv6: '' }
-const defaultTargets = (protocol: string, family: string) => [['CT','4134'],['CU','4837'],['CM','9808']].map(([name, asn]) => `${name} ${family}.pek-${asn}.endpoint.nxtrace.org${protocol === 'tcp' ? ':80' : ''}`).join('\n')
 const emptySettings: ProbeSettings = { enabled: false, carrier_ping: true, carriers: [], tasks: [] }
 
 // Latency probing on this node: carrier points, custom tasks and line RTT.
@@ -35,7 +35,7 @@ export default function ProbePage() {
     if (q.data && !loaded) {
       const settings = q.data.settings
       const carrier_probe: CarrierProbeConfig = settings.carrier_probe ?? { protocol: 'tcp', family: 'ipv4', tcp_ipv4: settings.carriers ?? [] }
-      setS({ ...emptySettings, ...settings, carrier_probe, carriers: settings.carriers ?? [], tasks: settings.tasks ?? [] })
+      setS({ ...emptySettings, ...settings, carrier_probe: { ...carrier_probe, tcp_province: carrier_probe.tcp_province || 'bj' }, carriers: settings.carriers ?? [], tasks: settings.tasks ?? [] })
       setTargets(Object.fromEntries(targetKeys.map((key) => [key, carriersText(carrier_probe[key] ?? [])])) as typeof emptyTargets)
       setLoaded(true)
     }
@@ -65,13 +65,21 @@ export default function ProbePage() {
             <Switch label={t('probe.carrier')} description={t('probe.carrierHint')} disabled={readOnly} checked={s.carrier_ping} onChange={(e) => setS({ ...s, carrier_ping: e.currentTarget.checked })} />
           </Group>
           {s.carrier_ping && <>
-            <Group grow>
+            <SimpleGrid cols={{ base: 1, sm: mode.protocol === 'tcp' ? 3 : 2 }}>
               <Select label={t('probe.carrierProtocol')} disabled={readOnly} data={['TCP', 'ICMP'].map((label) => ({ value: label.toLowerCase(), label }))} value={mode.protocol} allowDeselect={false} onChange={(value) => setMode({ protocol: value as 'tcp' | 'icmp' })} />
               <Select label={t('probe.carrierFamily')} disabled={readOnly} data={[{ value: 'ipv4', label: 'IPv4' }, { value: 'ipv6', label: 'IPv6' }, { value: 'dual', label: 'IPv4 + IPv6' }]} value={mode.family} allowDeselect={false} onChange={(value) => setMode({ family: value as CarrierProbeConfig['family'] })} />
-            </Group>
+              {mode.protocol === 'tcp' && <Select label={t('probe.carrierProvince')} searchable disabled={readOnly} data={carrierProvinceCodes.map(value => ({ value, label: t(`probe.provinces.${value}`) }))} value={mode.tcp_province || 'bj'} allowDeselect={false} onChange={value => value && setMode({ tcp_province: value })} />}
+            </SimpleGrid>
             {families.map((family) => {
               const key = `${mode.protocol}_${family}` as TargetKey
-              return <Textarea key={key} label={`${t('probe.carriers')} · ${family === 'ipv6' ? 'IPv6' : 'IPv4'}`} description={mode.protocol === 'icmp' ? t('probe.carriersICMPHint') : t('probe.carriersTCPHint')} autosize minRows={3} placeholder={defaultTargets(mode.protocol, family)} disabled={readOnly} styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }} value={targets[key]} onChange={(e) => setTargets({ ...targets, [key]: e.currentTarget.value })} />
+              const custom = targets[key].trim().length > 0
+              return <Stack key={key} gap="xs">
+                <Textarea label={`${t('probe.carriers')} · ${family === 'ipv6' ? 'IPv6' : 'IPv4'}`} description={mode.protocol === 'icmp' ? t('probe.carriersICMPHint') : t('probe.carriersTCPHint')} autosize minRows={3} placeholder={defaultCarrierTargetText(mode.protocol, family, mode.tcp_province)} disabled={readOnly} styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }} value={targets[key]} onChange={(e) => setTargets({ ...targets, [key]: e.currentTarget.value })} />
+                {mode.protocol === 'tcp' && <Group justify="space-between" gap="xs">
+                  <Text size="xs" c={custom ? 'orange' : 'dimmed'}>{custom ? t('probe.carrierCustomActive') : t('probe.carrierPresetActive', { province: t(`probe.provinces.${mode.tcp_province || 'bj'}`) })}</Text>
+                  {custom && !readOnly && <Button variant="subtle" size="compact-xs" onClick={() => setTargets(current => ({ ...current, [key]: '' }))}>{t('probe.carrierRestorePreset')}</Button>}
+                </Group>}
+              </Stack>
             })}
           </>}
           <Text size="sm" fw={600} mt="xs">{t('probe.tasks')}</Text>

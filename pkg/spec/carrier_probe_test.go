@@ -22,7 +22,13 @@ func TestCarrierProbeDefaultsAndIdentity(t *testing.T) {
 			if i >= 3 {
 				wantFamily = "ipv6"
 			}
-			if task.Family != wantFamily || task.Type != protocol || task.IntervalSeconds != 10 || task.TCPReachability != (protocol == "tcp") || !strings.HasPrefix(task.Target, wantFamily+".pek-") || !ValidCarrierSeries(task.Series) || seen[task.Series] {
+			if task.Family != wantFamily || task.Type != protocol || task.IntervalSeconds != 10 || task.TCPReachability != (protocol == "tcp") || !ValidCarrierSeries(task.Series) || seen[task.Series] {
+				t.Fatal(task)
+			}
+			if protocol == "icmp" && !strings.HasPrefix(task.Target, wantFamily+".pek-") {
+				t.Fatal(task)
+			}
+			if protocol == "tcp" && !strings.HasPrefix(task.Target, "bj-") {
 				t.Fatal(task)
 			}
 			seen[task.Series] = true
@@ -48,7 +54,7 @@ func TestCarrierProbeDefaultsAndIdentity(t *testing.T) {
 
 func TestCarrierProbeValidationAndClone(t *testing.T) {
 	invalid := []CarrierProbeConfig{
-		{Protocol: "udp"}, {Family: "auto"},
+		{Protocol: "udp"}, {Family: "auto"}, {TCPProvince: "unknown"}, {TCPProvince: "../bj"},
 		{TCPIPv4: []Carrier{{"CT", "example.com"}}},
 		{TCPIPv4: []Carrier{{"CT", "[2001:db8::1]:80"}}},
 		{TCPIPv6: []Carrier{{"CT", "192.0.2.10:80"}}},

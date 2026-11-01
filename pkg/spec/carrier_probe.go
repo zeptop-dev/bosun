@@ -9,15 +9,18 @@ import (
 )
 
 // CarrierProbeConfig retains independent target lists while switching the
-// selected protocol and family. Empty lists use the NextTrace Beijing targets.
+// selected protocol and family. Empty TCP lists use Zstatic province targets;
+// empty ICMP lists use NextTrace Beijing targets.
 // Its presence supersedes the legacy CarrierPing/Carriers runtime settings.
 type CarrierProbeConfig struct {
-	Protocol string    `json:"protocol" yaml:"protocol"`
-	Family   string    `json:"family" yaml:"family"`
-	TCPIPv4  []Carrier `json:"tcp_ipv4,omitempty" yaml:"tcp_ipv4,omitempty"`
-	TCPIPv6  []Carrier `json:"tcp_ipv6,omitempty" yaml:"tcp_ipv6,omitempty"`
-	ICMPIPv4 []Carrier `json:"icmp_ipv4,omitempty" yaml:"icmp_ipv4,omitempty"`
-	ICMPIPv6 []Carrier `json:"icmp_ipv6,omitempty" yaml:"icmp_ipv6,omitempty"`
+	// Empty means Beijing. Kept optional for existing configuration round trips.
+	TCPProvince string    `json:"tcp_province,omitempty" yaml:"tcp_province,omitempty"`
+	Protocol    string    `json:"protocol" yaml:"protocol"`
+	Family      string    `json:"family" yaml:"family"`
+	TCPIPv4     []Carrier `json:"tcp_ipv4,omitempty" yaml:"tcp_ipv4,omitempty"`
+	TCPIPv6     []Carrier `json:"tcp_ipv6,omitempty" yaml:"tcp_ipv6,omitempty"`
+	ICMPIPv4    []Carrier `json:"icmp_ipv4,omitempty" yaml:"icmp_ipv4,omitempty"`
+	ICMPIPv6    []Carrier `json:"icmp_ipv6,omitempty" yaml:"icmp_ipv6,omitempty"`
 }
 
 // LegacyCarrierProbe preserves explicitly configured IPv6 literals while moving
@@ -59,6 +62,7 @@ func (c CarrierProbeConfig) Normalize() CarrierProbeConfig {
 	v := *c.Clone()
 	v.Protocol = strings.ToLower(strings.TrimSpace(v.Protocol))
 	v.Family = strings.ToLower(strings.TrimSpace(v.Family))
+	v.TCPProvince = strings.ToLower(strings.TrimSpace(v.TCPProvince))
 	if v.Protocol == "" {
 		v.Protocol = "tcp"
 	}
@@ -81,6 +85,9 @@ func (c CarrierProbeConfig) Validate() error {
 	}
 	if c.Family != "ipv4" && c.Family != "ipv6" && c.Family != "dual" {
 		return fmt.Errorf("carrier family must be ipv4, ipv6 or dual")
+	}
+	if !validCarrierProvince(c.EffectiveTCPProvince()) {
+		return fmt.Errorf("invalid TCP carrier province")
 	}
 	for _, group := range []struct {
 		protocol, family string
@@ -108,16 +115,84 @@ func (c CarrierProbeConfig) Validate() error {
 	return nil
 }
 
+// EffectiveTCPProvince returns the selected TCP province, defaulting to Beijing.
+func (c CarrierProbeConfig) EffectiveTCPProvince() string {
+	province := strings.ToLower(strings.TrimSpace(c.TCPProvince))
+	if province == "" {
+		return "bj"
+	}
+	return province
+}
+
+func validCarrierProvince(province string) bool {
+	switch province {
+	case "he", "sx", "ln", "jl", "hl", "js", "zj", "ah", "fj", "jx", "sd", "ha", "hb", "hn", "gd", "hi", "sc", "gz", "yn", "sn", "gs", "qh", "nm", "gx", "xz", "nx", "xj", "bj", "tj", "sh", "cq":
+		return true
+	}
+	return false
+}
+
+// PresetProvince is public display metadata only for an active TCP preset.
+// Custom destinations must never be guessed to belong to the selected province.
+func (c CarrierProbeConfig) PresetProvince(family string) string {
+	c = c.Normalize()
+	if c.Protocol != "tcp" || c.Validate() != nil || (c.Family != "dual" && c.Family != family) {
+		return ""
+	}
+	switch family {
+	case "ipv4":
+		if len(c.TCPIPv4) != 0 {
+			return ""
+		}
+	case "ipv6":
+		if len(c.TCPIPv6) != 0 {
+			return ""
+		}
+	default:
+		return ""
+	}
+	return c.EffectiveTCPProvince()
+}
+
+// Expanded materializes defaults for older agents which understand the four
+// target lists but not TCPProvince. The saved drafts and their empty-list
+// preset semantics are untouched. Invalid configurations have no runtime form.
+func (c *CarrierProbeConfig) Expanded() *CarrierProbeConfig {
+	if c == nil {
+		return nil
+	}
+	v := c.Normalize()
+	if v.Validate() != nil {
+		return nil
+	}
+	for _, group := range []struct {
+		protocol, family string
+		list             *[]Carrier
+	}{
+		{"tcp", "ipv4", &v.TCPIPv4}, {"tcp", "ipv6", &v.TCPIPv6},
+		{"icmp", "ipv4", &v.ICMPIPv4}, {"icmp", "ipv6", &v.ICMPIPv6},
+	} {
+		if len(*group.list) == 0 {
+			*group.list = carrierTargets(group.protocol, group.family, v.EffectiveTCPProvince())
+		}
+	}
+	return &v
+}
+
 // DefaultCarrierTargets does not guess endpoints for unsupported modes.
 func DefaultCarrierTargets(protocol, family string) []Carrier {
-	if (protocol != "tcp" && protocol != "icmp") || (family != "ipv4" && family != "ipv6") {
+	return carrierTargets(protocol, family, "bj")
+}
+
+func carrierTargets(protocol, family, province string) []Carrier {
+	if (protocol != "tcp" && protocol != "icmp") || (family != "ipv4" && family != "ipv6") || !validCarrierProvince(province) {
 		return nil
 	}
 	out := []Carrier{}
 	for _, target := range []struct{ name, asn string }{{"CT", "4134"}, {"CU", "4837"}, {"CM", "9808"}} {
 		addr := family + ".pek-" + target.asn + ".endpoint.nxtrace.org"
 		if protocol == "tcp" {
-			addr = net.JoinHostPort(addr, "80")
+			addr = net.JoinHostPort(province+"-"+strings.ToLower(target.name)+"-v"+strings.TrimPrefix(family, "ipv")+".ip.zstaticcdn.com", "80")
 		}
 		out = append(out, Carrier{Name: target.name, Addr: addr})
 	}
@@ -163,7 +238,7 @@ func (c CarrierProbeConfig) Tasks() []PingTask {
 			targets = c.ICMPIPv6
 		}
 		if len(targets) == 0 {
-			targets = DefaultCarrierTargets(c.Protocol, family)
+			targets = carrierTargets(c.Protocol, family, c.EffectiveTCPProvince())
 		}
 		for _, target := range targets {
 			out = append(out, PingTask{Name: target.Name, Type: c.Protocol, Target: target.Addr, Family: family, Series: CarrierSeries(c.Protocol, family, target.Name, target.Addr), IntervalSeconds: 10, TCPReachability: c.Protocol == "tcp"})
