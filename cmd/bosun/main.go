@@ -855,25 +855,17 @@ func cmdCore(args []string) error {
 		return err
 	}
 	rest = fs.Args()
-	dataDir := "/var/lib/bosun"
-	if cfg, err := config.Load(*cfgPath); err == nil {
-		if sub == "install" && cfg.NodeMode == spec.NodeMonitor {
-			return spec.ErrMonitorOnly
-		}
-		dataDir = cfg.DataDir
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	inst := coreinstall.New(filepath.Join(dataDir, "cores"), log)
-	if cfg, err := config.Load(*cfgPath); err == nil {
-		inst.Downloads, err = cfg.Downloads()
-		if err != nil {
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
 			return err
 		}
-		if cfg.Cores.RegistryToken != "" {
-			inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
-		}
+		cfg = nil // The absent standalone config is the only default-source case.
+	}
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	inst, err := coreCommandInstaller(cfg, sub == "install", log)
+	if err != nil {
+		return err
 	}
 
 	switch sub {
