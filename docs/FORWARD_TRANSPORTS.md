@@ -115,3 +115,21 @@ For a Linux host without Go, cross-compile this package's test binary using Go
 `-test.run='TestNFTLinux|TestRealmLinuxRuntime' -test.v -test.timeout=3m`. Build a
 race-enabled binary on a Linux host with a C compiler when race instrumentation
 is required; a static cross-compiled binary does not provide race coverage.
+
+Captain's `TestExportCompiledPathRouteTransportFixtures` can export its actual
+transactionally compiled UDP and `both` rules into a private temporary directory
+using `CAPTAIN_PATH_TRANSPORT_FIXTURES`. The fixture creates explicit loopback
+ingresses and two unequal branches (two hops and one hop). Consume those JSON
+files unchanged in this repository:
+
+```sh
+CAPTAIN_PATH_TRANSPORT_FIXTURES=/absolute/private/fixture-directory GOWORK=off \
+  go test -race ./internal/forward -run '^TestCompiledCompletePathTransports$' -v
+```
+
+The paired test exchanges real datagrams, checks equal-weight distribution for
+new source sessions, verifies affinity for repeated packets, and compares each
+hop's payload counter to reject cross-branch traversal. For `both`, it also sends
+actual TCP streams and checks their counters after close. It proves the compiled
+forwarding data path, not a proxy-core handshake, subscriber authorization,
+billing or production network reachability.
