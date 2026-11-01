@@ -322,6 +322,10 @@ random_port() { awk 'BEGIN{srand(); print 20000+int(rand()*40000)}'; }
 
 NODE_MODE_LINE=""
 [ "$NODE_MODE" != monitor ] || NODE_MODE_LINE="node_mode: monitor"
+# Old releases use strict configuration parsing. Their GitHub default must not
+# acquire a field introduced by the optional Captain delivery feature.
+DOWNLOAD_SOURCE_LINE=""
+[ "$DOWNLOAD_SOURCE" != captain ] || DOWNLOAD_SOURCE_LINE="    download_source: captain"
 FIRST_INSTALL=0
 [ -f /etc/bosun/config.yaml ] || FIRST_INSTALL=1
 if [ "$FIRST_INSTALL" = 1 ] && [ -z "$CAPTAIN" ]; then
@@ -362,7 +366,7 @@ if [ ! -f /etc/bosun/config.yaml ]; then
   captain:
     url: $(yaml_quote "$CAPTAIN")
     pair_code: $(yaml_quote "$PAIR")
-    download_source: $DOWNLOAD_SOURCE
+$DOWNLOAD_SOURCE_LINE
     token_file: $(yaml_quote "$TOKEN_FILE")"
   else
     PANEL="panel:

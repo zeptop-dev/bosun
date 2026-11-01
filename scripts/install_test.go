@@ -12,7 +12,72 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
+
+func TestGeneratedGitHubConfigurationRemainsCompatibleWithOldReleases(t *testing.T) {
+	start := strings.Index(Install, "NODE_MODE_LINE=\"\"")
+	if start < 0 {
+		t.Fatal("configuration generation start missing")
+	}
+	end := strings.Index(Install[start:], "\nif [ \"$MODE\" = docker ]; then")
+	quoteStart := strings.Index(Install, "yaml_quote()")
+	if end < 0 || quoteStart < 0 {
+		t.Fatal("configuration generation boundaries missing")
+	}
+	quoteEnd := strings.IndexByte(Install[quoteStart:], '\n')
+	for _, source := range []string{"github", "captain"} {
+		t.Run(source, func(t *testing.T) {
+			dir := t.TempDir()
+			body := Install[quoteStart:quoteStart+quoteEnd] + "\n" + Install[start:start+end]
+			body = strings.ReplaceAll(body, "/etc/bosun", filepath.Join(dir, "etc"))
+			body = strings.ReplaceAll(body, "/var/lib/bosun", filepath.Join(dir, "data"))
+			cmd := exec.Command("sh", "-eu", "-c", body)
+			cmd.Env = append(os.Environ(), "NODE_MODE=monitor", "CAPTAIN=https://example.com:18443", "PAIR=ABCD-EFGH", "DOWNLOAD_SOURCE="+source, "TOKEN_FILE="+filepath.Join(dir, "data", "captain.token"), "WEB_LISTEN=:2053")
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("configuration generation: %v %s", err, output)
+			}
+			raw, err := os.ReadFile(filepath.Join(dir, "etc", "config.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var cfg struct {
+				Panel struct {
+					Captain yaml.Node `yaml:"captain"`
+				} `yaml:"panel"`
+			}
+			if err := yaml.Unmarshal(raw, &cfg); err != nil {
+				t.Fatal(err)
+			}
+			captain, err := yaml.Marshal(&cfg.Panel.Captain)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if source == "github" {
+				// These are the Captain fields accepted by released v0.88.0.
+				var legacy struct {
+					URL       string `yaml:"url"`
+					PairCode  string `yaml:"pair_code"`
+					TokenFile string `yaml:"token_file"`
+				}
+				decoder := yaml.NewDecoder(strings.NewReader(string(captain)))
+				decoder.KnownFields(true)
+				if err := decoder.Decode(&legacy); err != nil {
+					t.Fatalf("GitHub default rejected by released configuration schema: %v", err)
+				}
+				if legacy.URL != "https://example.com:18443" || legacy.PairCode != "ABCD-EFGH" || legacy.TokenFile != filepath.Join(dir, "data", "captain.token") {
+					t.Fatalf("lost connection settings: %+v", legacy)
+				}
+			} else {
+				var fields map[string]string
+				if err := yaml.Unmarshal(captain, &fields); err != nil || fields["download_source"] != "captain" {
+					t.Fatalf("Captain source not retained: %v %+v", err, fields)
+				}
+			}
+		})
+	}
+}
 
 // Run the real bootstrap through its checksum stage, stopping immediately
 // before the first host mutation. Network calls use a local TLS Captain and
