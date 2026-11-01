@@ -82,7 +82,7 @@ if [ "$DOWNLOAD_SOURCE" = captain ]; then
     echo 'Cannot verify the destination of the existing node token. Use a fresh pairing code for installation or a current configured bosun for upgrades.' >&2; exit 1
   fi
   [ "$MODE" != docker ] || { echo 'Captain delivery supports native installation; Docker images require a reachable registry' >&2; exit 1; }
-  if [ -z "$PAIR" ] && [ ! -s "$TOKEN_FILE" ]; then echo 'Captain downloads require a pairing code or an existing node token' >&2; exit 1; fi
+  if [ "$ACTION" != uninstall ] && [ -z "$PAIR" ] && [ ! -s "$TOKEN_FILE" ]; then echo 'Captain downloads require a pairing code or an existing node token' >&2; exit 1; fi
 fi
 
 # In Captain mode no redirect may send bootstrap credentials to another host.

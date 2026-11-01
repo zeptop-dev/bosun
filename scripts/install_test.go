@@ -138,3 +138,34 @@ func TestCaptainBootstrapRefusesCredentialDestinationChangesBeforeNetworking(t *
 		})
 	}
 }
+
+func TestCaptainOfflineUninstallUsesCachedWorkerWithoutToken(t *testing.T) {
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "bin")
+	os.Mkdir(stub, 0755)
+	for name, body := range map[string]string{"uname": "echo Linux", "id": "echo 0", "stat": "echo 0", "curl": "echo unexpected-network >&2; exit 99"} {
+		os.WriteFile(filepath.Join(stub, name), []byte("#!/bin/sh\n"+body+"\n"), 0755)
+	}
+	cfg := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfg, []byte("existing"), 0600)
+	token := filepath.Join(dir, "deleted-token")
+	helper := filepath.Join(dir, "bosun")
+	os.WriteFile(helper, []byte("#!/bin/sh\nprintf 'captain\\nhttps://example.com:18443\\n"+token+"\\n'\n"), 0755)
+	worker := filepath.Join(dir, "worker")
+	marker := filepath.Join(dir, "uninstalled")
+	os.WriteFile(worker, []byte("#!/bin/sh\ncase \"$1\" in installer-version) echo 1;; uninstall) touch '"+marker+"';; *) exit 1;; esac\n"), 0755)
+	script := strings.ReplaceAll(Install, "NATIVE=/usr/local/bin/bosun", "NATIVE="+helper)
+	script = strings.ReplaceAll(script, "/etc/bosun/config.yaml", cfg)
+	script = strings.ReplaceAll(script, "/usr/local/lib/$PRODUCT-updater/worker", worker)
+	path := filepath.Join(dir, "install.sh")
+	os.WriteFile(path, []byte(script), 0600)
+	cmd := exec.Command("sh", path, "uninstall", "--yes", "--keep-data")
+	cmd.Env = append(os.Environ(), "PATH="+stub+string(os.PathListSeparator)+os.Getenv("PATH"))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("offline uninstall: %v %s", err, output)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatal("cached worker was not invoked")
+	}
+}
