@@ -52,6 +52,7 @@ type Core struct {
 	applied                *state
 	wireGuardDevices       bool
 	strictOutboundSecurity bool
+	rendered               core.RenderedTracker
 
 	online   *onlineWindowMap
 	pollStop context.CancelFunc
@@ -133,6 +134,7 @@ func (c *Core) check(ctx context.Context, path string) error {
 }
 
 func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
+	c.rendered.Forget("*")
 	if err := c.write(b); err != nil {
 		return err
 	}
@@ -152,11 +154,17 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 		go c.pollOnline(pctx)
 	}
 	c.mu.Unlock()
-	return sup.Start(ctx)
+	if err := sup.Start(ctx); err != nil {
+		return err
+	}
+	c.rendered.Activate(c.Name(), "*", b.Files, core.RenderedProcesses(c), time.Now().UTC())
+	c.rendered.Accept([]string{"*"})
+	return nil
 }
 
 // Apply writes the new config, then either hot-updates users or restarts.
 func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
+	c.rendered.Invalidate()
 	if err := c.write(b); err != nil {
 		return err
 	}
@@ -176,8 +184,19 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 			c.mu.Lock()
 			c.applied = next
 			c.mu.Unlock()
+			// These RPCs do not reload the startup file. Preserve its real
+			// digest and explicitly exclude later dynamic user updates.
+			for tag := range next.inbounds {
+				adds, removes := diffUsers(prev.users[tag], next.users[tag])
+				if len(adds)+len(removes) > 0 {
+					c.rendered.RuntimeUpdate("*")
+					break
+				}
+			}
+			c.rendered.Accept([]string{"*"})
 			return nil
 		} else {
+			c.rendered.Forget("*")
 			c.log.Warn("hot user update failed, restarting instead", "err", err)
 		}
 	}
@@ -185,7 +204,12 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	c.applied = next
 	c.mu.Unlock()
-	return sup.Restart(ctx)
+	if err := sup.Restart(ctx); err != nil {
+		return err
+	}
+	c.rendered.Activate(c.Name(), "*", b.Files, core.RenderedProcesses(c), time.Now().UTC())
+	c.rendered.Accept([]string{"*"})
+	return nil
 }
 
 func (c *Core) hotCapable(st *state) bool {
@@ -251,6 +275,7 @@ func diffUsers(prev, next map[string]spec.User) (adds []spec.User, removes []str
 }
 
 func (c *Core) Stop(ctx context.Context) error {
+	c.rendered.Invalidate()
 	c.mu.Lock()
 	sup := c.sup
 	conn := c.conn

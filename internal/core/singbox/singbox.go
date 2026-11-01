@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/zeptop-dev/bosun/internal/runas"
 
@@ -51,6 +52,7 @@ type Core struct {
 	aliases        map[string]string // wire login -> immutable accounting name
 	inboundAliases map[string]string // internal UDP listener -> logical inbound
 	applied        []byte            // the config the running process was started with
+	rendered       core.RenderedTracker
 
 	online *onlineTracker // client IPs per user, from the log (see online.go)
 }
@@ -185,6 +187,7 @@ func (c *Core) check(ctx context.Context, path string) error {
 }
 
 func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
+	c.rendered.Forget("*")
 	if err := c.write(b); err != nil {
 		return err
 	}
@@ -205,6 +208,8 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	c.applied = b.Files[b.Main]
 	c.mu.Unlock()
+	c.rendered.Activate(c.Name(), "*", b.Files, core.RenderedProcesses(c), time.Now().UTC())
+	c.rendered.Accept([]string{"*"})
 	return nil
 }
 
@@ -227,6 +232,7 @@ func (c *Core) keepLine(line string) bool {
 }
 
 func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
+	c.rendered.Invalidate()
 	if err := c.write(b); err != nil {
 		return err
 	}
@@ -244,6 +250,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	// because another core's apply keeps failing and the agent retries.
 	if next := b.Files[b.Main]; applied != nil && bytes.Equal(applied, next) && sup.Running() {
 		c.commitAccounting(b)
+		c.rendered.Accept([]string{"*"})
 		c.log.Info("config unchanged, keeping the running process")
 		return nil
 	}
@@ -255,10 +262,13 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	c.applied = b.Files[b.Main]
 	c.mu.Unlock()
+	c.rendered.Activate(c.Name(), "*", b.Files, core.RenderedProcesses(c), time.Now().UTC())
+	c.rendered.Accept([]string{"*"})
 	return nil
 }
 
 func (c *Core) Stop(ctx context.Context) error {
+	c.rendered.Invalidate()
 	c.mu.Lock()
 	sup := c.sup
 	conn := c.conn

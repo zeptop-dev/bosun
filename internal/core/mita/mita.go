@@ -48,6 +48,7 @@ type Core struct {
 
 	mu        sync.Mutex
 	instances map[string]*instance // by inbound tag
+	rendered  core.RenderedTracker
 }
 
 // instance is one running mita process serving one inbound.
@@ -223,6 +224,7 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.rendered.Invalidate()
 	want := map[string]bool{}
 	for _, tag := range tags(b) {
 		want[tag] = true
@@ -232,6 +234,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 			c.log.Info("inbound removed, stopping instance", "inbound", tag)
 			_ = in.stop(ctx)
 			delete(c.instances, tag)
+			c.rendered.Forget(tag)
 		}
 	}
 	var firstErr error
@@ -249,6 +252,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 			return err
 		}
 		var err error
+		activated := true
 		switch {
 		case !in.sup.Running():
 			in.bindings = b.Meta[tag]
@@ -256,6 +260,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 				err = in.waitStatus(ctx, statusRunning, readyTimeout)
 			}
 		case in.bindings == b.Meta[tag]:
+			activated = false
 			in.log.Info("applying user changes (hot reload)")
 			err = in.rpc(ctx, methodReload)
 		default:
@@ -264,11 +269,26 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 			err = in.cycle(ctx)
 		}
 		if err != nil {
+			// Start/cycle can load different bytes before readiness fails,
+			// and a Reload RPC can partially mutate users. A later hot-only
+			// retry cannot restore knowledge of the old activation files.
+			c.rendered.Forget(tag)
 			in.log.Error("apply failed", "err", err)
 			if firstErr == nil {
 				firstErr = fmt.Errorf("mita[%s]: %w", tag, err)
 			}
+		} else if activated {
+			// A successful proxy cycle can reload the same bytes in the same
+			// OS process. It is still a new activation boundary.
+			c.rendered.Forget(tag)
+			c.rendered.Activate(c.Name(), tag, map[string][]byte{filepath.Join(tag, configFile): cfg}, core.RenderedProcessSet(map[string]int{tag: in.sup.PID()}), time.Now().UTC())
+		} else {
+			// Reload changes users, not the startup listener configuration.
+			c.rendered.RuntimeUpdate(tag)
 		}
+	}
+	if firstErr == nil {
+		c.rendered.Accept(tags(b))
 	}
 	return firstErr
 }
@@ -276,6 +296,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 func (c *Core) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.rendered.Invalidate()
 	var firstErr error
 	for tag, in := range c.instances {
 		if err := in.stop(ctx); err != nil && firstErr == nil {

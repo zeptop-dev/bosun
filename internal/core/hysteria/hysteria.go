@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -47,10 +48,11 @@ type Core struct {
 	secret     string
 	stats      *statsClient
 
-	mu      sync.Mutex
-	auth    *authServer
-	sup     *subprocess.Supervisor
-	applied *state
+	mu       sync.Mutex
+	auth     *authServer
+	sup      *subprocess.Supervisor
+	applied  *state
+	rendered core.RenderedTracker
 }
 
 const (
@@ -134,6 +136,7 @@ func (c *Core) write(b *core.Bundle) error {
 }
 
 func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
+	c.rendered.Forget("*")
 	st, _ := b.Payload.(*state)
 	if st == nil {
 		return fmt.Errorf("hysteria: bundle without state")
@@ -178,12 +181,18 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 	if err := sup.Start(ctx); err != nil {
 		return err
 	}
-	return c.waitReady(ctx)
+	if err := c.waitReady(ctx); err != nil {
+		return err
+	}
+	c.rendered.Activate(c.Name(), "*", b.Files, core.RenderedProcesses(c), time.Now().UTC())
+	c.rendered.Accept([]string{"*"})
+	return nil
 }
 
 // Apply swaps the user set (no restart) and restarts only if the server
 // config itself changed. Users that disappeared are kicked.
 func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
+	c.rendered.Invalidate()
 	next, _ := b.Payload.(*state)
 	if next == nil {
 		return fmt.Errorf("hysteria: bundle without state")
@@ -217,20 +226,33 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	c.applied = next
 	c.mu.Unlock()
 	if prev != nil && prev.key == next.key {
+		if !reflect.DeepEqual(prev.users, next.users) {
+			c.rendered.RuntimeUpdate("*")
+		}
+		c.rendered.Accept([]string{"*"})
 		c.log.Info("users updated without restart", "users", len(next.users), "kicked", len(gone))
 		return nil
 	}
 	if err := c.write(b); err != nil {
+		c.rendered.Forget("*")
 		return err
 	}
 	c.log.Info("applying new server config (restart)")
 	if err := sup.Restart(ctx); err != nil {
+		c.rendered.Forget("*")
 		return err
 	}
-	return c.waitReady(ctx)
+	if err := c.waitReady(ctx); err != nil {
+		c.rendered.Forget("*")
+		return err
+	}
+	c.rendered.Activate(c.Name(), "*", b.Files, core.RenderedProcesses(c), time.Now().UTC())
+	c.rendered.Accept([]string{"*"})
+	return nil
 }
 
 func (c *Core) Stop(ctx context.Context) error {
+	c.rendered.Invalidate()
 	c.mu.Lock()
 	sup, auth := c.sup, c.auth
 	c.auth = nil

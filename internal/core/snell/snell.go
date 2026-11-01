@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/zeptop-dev/bosun/internal/runas"
 
@@ -35,6 +36,7 @@ type Core struct {
 
 	mu        sync.Mutex
 	instances map[string]*instance
+	rendered  core.RenderedTracker
 }
 
 type instance struct {
@@ -128,6 +130,7 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error { return c.Apply
 func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.rendered.Invalidate()
 	want := map[string]bool{}
 	for _, tag := range tags(b) {
 		want[tag] = true
@@ -137,6 +140,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 			c.log.Info("inbound removed, stopping instance", "inbound", tag)
 			_ = in.sup.Stop(ctx)
 			delete(c.instances, tag)
+			c.rendered.Forget(tag)
 		}
 	}
 	var firstErr error
@@ -167,6 +171,14 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 		if err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("snell[%s]: %w", tag, err)
 		}
+		if err == nil {
+			c.rendered.Activate(c.Name(), tag, map[string][]byte{filepath.Join(tag, configFile): cfg}, core.RenderedProcessSet(map[string]int{tag: in.sup.PID()}), time.Now().UTC())
+		} else {
+			c.rendered.Forget(tag)
+		}
+	}
+	if firstErr == nil {
+		c.rendered.Accept(tags(b))
 	}
 	return firstErr
 }
@@ -174,6 +186,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 func (c *Core) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.rendered.Invalidate()
 	var firstErr error
 	for tag, in := range c.instances {
 		if err := in.sup.Stop(ctx); err != nil && firstErr == nil {
