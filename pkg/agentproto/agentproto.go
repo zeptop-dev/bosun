@@ -83,6 +83,7 @@ type Report struct {
 	TrafficDelivery *TrafficDelivery      `json:"traffic_delivery,omitempty"`
 	PathHealth      *PathHealthReport     `json:"path_health,omitempty"`
 	ConfigReceipt   *ConfigReceipt        `json:"config_receipt,omitempty"`
+	RenderedConfig  *RenderedConfigReport `json:"rendered_config,omitempty"`
 	ServiceControl  *ServiceControlReport `json:"service_control,omitempty"`
 	// Hostname is freshly read for each report; omitted on lookup failure.
 	Hostname         string           `json:"hostname,omitempty"`
