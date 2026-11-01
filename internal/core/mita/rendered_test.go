@@ -86,7 +86,15 @@ func TestRenderedEvidenceMitaFailedCycleCannotResurrectOldFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	t.Cleanup(func() { _ = c.Stop(ctx) })
+	ownedSocket := socketPath(filepath.Join(c.opt.WorkDir, "example"))
+	t.Cleanup(func() {
+		_ = c.Stop(ctx)
+		// Long temporary paths use an adapter-owned socket under /tmp.
+		// Remove only the exact socket created by this fixture.
+		if ownedSocket != "" {
+			_ = os.Remove(ownedSocket)
+		}
+	})
 	name := filepath.Join("example", configFile)
 	b := &core.Bundle{Meta: map[string]string{"example": "listener-A"}, Files: map[string][]byte{name: []byte("{\"listeners\":\"A\",\"users\":\"private\"}")}}
 	if err := c.Apply(ctx, b); err != nil {
