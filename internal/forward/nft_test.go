@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"strings"
 	"testing"
 
@@ -214,5 +215,76 @@ func TestNFTIPv6AndFamilyMismatch(t *testing.T) {
 	}
 	if _, err := resolveNFTFamily(context.Background(), "198.51.100.20:443", "::"); err == nil {
 		t.Fatal("v6 listen with v4 target accepted")
+	}
+}
+
+func TestNFTPreflightFailureKeepsEntireInstalledTable(t *testing.T) {
+	oldRun, oldForward, oldResolver := nftRun, enableForwarding, net.DefaultResolver
+	t.Cleanup(func() { nftRun, enableForwarding, net.DefaultResolver = oldRun, oldForward, oldResolver })
+	var installed string
+	calls := 0
+	nftRun = func(_ context.Context, script string) error { installed = script; calls++; return nil }
+	enableForwarding = func(context.Context) error { return nil }
+	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(context.Context, string, string) (net.Conn, error) {
+		return nil, errors.New("fixture DNS unavailable")
+	}}
+	m := NewManager(slog.Default())
+	t.Cleanup(m.Stop)
+	f := spec.Forward{Tag: "existing", Listen: "192.0.2.10", Port: 18443, Protocol: "both", Target: "198.51.100.20:443", Backend: "nft"}
+	if err := m.Apply([]spec.Forward{f}); err != nil {
+		t.Fatal(err)
+	}
+	first := installed
+	changed := f
+	changed.Target = "203.0.113.30:443"
+	broken := spec.Forward{Tag: "new", Listen: "192.0.2.10", Port: 18444, Protocol: "udp", Target: "missing.example.invalid:443", Backend: "nft"}
+	for range 2 {
+		if err := m.Apply([]spec.Forward{changed, broken}); err == nil {
+			t.Fatal("DNS failure accepted")
+		}
+		if calls != 1 || installed != first || m.nftApplied != first {
+			t.Fatal("failed preflight replaced the installed table")
+		}
+		for _, s := range m.Snapshot() {
+			if s.Health != "down" || s.ProbeProtocol != "backend" {
+				t.Fatal("uninstalled intent claimed ready", s)
+			}
+		}
+	}
+	broken.Target = "198.51.100.20:443"
+	if err := m.Apply([]spec.Forward{changed, broken}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || installed == first || !strings.Contains(installed, "203.0.113.30:443") || !strings.Contains(installed, "18444") {
+		t.Fatal("repaired full table was not installed")
+	}
+}
+
+func TestNFTApplyUsesServiceControlPinnedResolution(t *testing.T) {
+	oldRun, oldForward, oldResolver := nftRun, enableForwarding, net.DefaultResolver
+	t.Cleanup(func() { nftRun, enableForwarding, net.DefaultResolver = oldRun, oldForward, oldResolver })
+	var installed string
+	nftRun = func(_ context.Context, script string) error { installed = script; return nil }
+	enableForwarding = func(context.Context) error { return nil }
+	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(context.Context, string, string) (net.Conn, error) {
+		return nil, errors.New("must use prepared answer")
+	}}
+	f := spec.Forward{Tag: "pinned", Listen: "192.0.2.10", Port: 18443, Protocol: "udp", Target: "pinned.example.invalid:443", Backend: "nft"}
+	m := NewManager(slog.Default())
+	t.Cleanup(m.Stop)
+	// The guard's previously resolved address remains authoritative for this
+	// exact desired rule, even if DNS has changed or become unavailable.
+	m.preparedNFT = map[string]nftTarget{f.Tag: {IP: "198.51.100.20", Port: 443}}
+	m.preparedNFTKeys = map[string]string{f.Tag: key(f)}
+	if err := m.Apply([]spec.Forward{f}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(installed, "198.51.100.20:443") {
+		t.Fatal("pinned guard target lost")
+	}
+	before := installed
+	f.Target = "changed.example.invalid:443"
+	if err := m.Apply([]spec.Forward{f}); err == nil || installed != before {
+		t.Fatal("changed rule reused stale pin or changed table", err)
 	}
 }
