@@ -20,6 +20,7 @@ var renderers = map[string]Renderer{
 var aliases = map[string]string{
 	"mihomo": "clash", "clashmeta": "clash", "clash-meta": "clash",
 	"sing-box": "singbox", "sfa": "singbox", "sfi": "singbox",
+	"nb4a": "singbox", "nekobox-android": "singbox",
 	"quantumultx": "qx", "quantumult-x": "qx", "quantumult": "qx",
 	"shadowrocket": "uri", "v2rayn": "uri", "v2rayng": "uri", "base64": "uri",
 	"wg": "wireguard", "wireguard-conf": "wireguard",

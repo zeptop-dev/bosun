@@ -3,6 +3,8 @@ package subscription
 import (
 	"fmt"
 	"strings"
+
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Stash is Clash-flavoured YAML with a few key differences from mihomo
@@ -19,7 +21,15 @@ func (s Stash) Render(lines []Line, acct Account) ([]byte, error) {
 }
 
 func (Stash) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
-	proxies, names := clashProxies(lines)
+	// Preserve Stash's existing SSH omission: its user field and versioned
+	// host-key support differ from mihomo's subscription schema.
+	supported := make([]Line, 0, len(lines))
+	for _, l := range lines {
+		if l.Inbound.Protocol != spec.SSH {
+			supported = append(supported, l)
+		}
+	}
+	proxies, names := clashProxies(supported)
 	for i, p := range proxies {
 		proxies[i] = stashProxy(p.(m))
 	}
