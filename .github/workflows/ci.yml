@@ -30,6 +30,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y nftables iproute2 util-linux python3
+          go test -c ./internal/probe -o /tmp/bosun-probe.test
+          sudo env BOSUN_TEST_PROBE_INTERFACE_NAMESPACE=1 unshare --net /tmp/bosun-probe.test -test.run '^TestBoundProbeNamespace$' -test.v -test.timeout 30s
           go test -c ./internal/forward -o /tmp/bosun-forward.test
           go test -c ./internal/egressguard -o /tmp/bosun-egress.test
           sudo env BOSUN_NFT_TEST=1 /tmp/bosun-forward.test -test.run '^TestNFTLinux(DualStackRelay|RuntimeTransactions)$' -test.v -test.timeout 3m
