@@ -673,6 +673,11 @@ an editor does not make a protected operation locally editable.
 cores are reconfigured or restarted as needed. Users get per-user quota and expiry,
 traffic counters, share links and a `/sub/<token>` subscription whose format follows the client (Clash/mihomo YAML, sing-box JSON, Surge, Loon, Quantumult X, Stash, Surfboard, else a base64 URI list; `?client=` forces one). The renderers live in `pkg/subscription`, which Captain imports too.
 
+SSH proxy entries are available in Mihomo and sing-box subscriptions with a
+pinned host public key and TCP-only transport. NekoBox Android's explicit
+`?client=nb4a` alias selects sing-box; client import/version limits are described
+under [SSH proxy](docs/CORE_MANAGEMENT.md#ssh-proxy).
+
 Users → Edit → Change ID assigns an unused positive integer (up to
 9007199254740991), preserving credentials, subscription URLs and traffic
 counters. The API is `PUT /api/users/{id}/id` with `{"id":42}`; it returns

@@ -45,6 +45,13 @@ func clashProxy(l Line) m {
 	ib := l.Inbound
 	p := m{"name": l.Name, "server": l.Host, "port": l.Port, "udp": true}
 	switch ib.Protocol {
+	case spec.SSH:
+		if ib.SSH == nil || ib.SSH.PublicKey == "" {
+			return nil
+		}
+		p["type"], p["username"], p["password"] = "ssh", proxyUsername(l), l.Password
+		p["host-key"] = []string{ib.SSH.PublicKey}
+		p["udp"] = false // SSH direct-tcpip does not provide a UDP transport.
 	case spec.VLESS:
 		p["type"] = "vless"
 		p["uuid"] = l.UUID

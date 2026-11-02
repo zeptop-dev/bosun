@@ -1090,7 +1090,7 @@
     "activate": "啟用",
     "activateHint": "啟用 {{core}} {{version}}？該核心上的連線會重新啟動。系統先檢查設定，啟動失敗時還原舊版本。僅下載不會切換核心。",
     "inbounds": "現有入站",
-    "sshHint": "SSH 代理僅支援 TCP 轉送，使用用戶密碼和自動產生的主機金鑰。請使用 sing-box 訂閱以驗證主機公鑰；不提供 shell、SFTP 或 UDP。",
+    "sshHint": "SSH 代理提供 TCP 轉送，使用訂閱用戶密碼和自動產生的主機公鑰固定值。請使用支援 SSH 的用戶端核心，透過 Mihomo（Clash Meta）或 sing-box 訂閱匯入；舊核心可能不支援。不提供 shell、SFTP 或 UDP。",
     "timeout": "操作等待逾時，請先重新整理查看節點狀態再重試。",
     "listenAddress": "此 Mieru 建置不能綁定指定監聽 IP，請使用 mita。"
   },
