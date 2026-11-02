@@ -1090,7 +1090,7 @@
     "activate": "Activate",
     "activateHint": "Activate {{core}} {{version}}? Connections on this core will restart. Configuration is checked first; startup failure restores the previous version. Downloading alone does not switch cores.",
     "inbounds": "Current inbounds",
-    "sshHint": "SSH proxy supports TCP forwarding only, with per-user passwords and a generated host key. Use sing-box subscriptions for host key verification; no shell, SFTP or UDP.",
+    "sshHint": "SSH proxy provides TCP forwarding with subscriber passwords and a generated host-key pin. Use Mihomo (Clash Meta) or sing-box subscriptions with an SSH-capable client core; older cores may not support it. No shell, SFTP or UDP.",
     "timeout": "Operation timed out. Refresh to check the node before retrying.",
     "listenAddress": "This Mieru build cannot bind a specific listening IP. Use mita."
   },

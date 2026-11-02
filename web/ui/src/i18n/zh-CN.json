@@ -1090,7 +1090,7 @@
     "activate": "启用",
     "activateHint": "启用 {{core}} {{version}}？该内核上的连接会重启。系统先检查配置，启动失败时恢复旧版本。仅下载不会切换内核。",
     "inbounds": "现有入站",
-    "sshHint": "SSH 代理仅支持 TCP 转发，使用用户密码和自动生成的主机密钥。请使用 sing-box 订阅以校验主机公钥；不提供 shell、SFTP 或 UDP。",
+    "sshHint": "SSH 代理提供 TCP 转发，使用订阅用户密码和自动生成的主机公钥固定值。请使用支持 SSH 的客户端内核，通过 Mihomo（Clash Meta）或 sing-box 订阅导入；旧内核可能不支持。不提供 shell、SFTP 或 UDP。",
     "timeout": "操作等待超时，请先刷新查看节点状态再重试。",
     "listenAddress": "此 Mieru 构建不能绑定指定监听 IP，请使用 mita。"
   },
