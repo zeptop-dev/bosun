@@ -39,6 +39,10 @@ func outcome(err error) string {
 	var cert *tls.CertificateVerificationError
 	var unknown x509.UnknownAuthorityError
 	switch {
+	case errors.Is(err, errProbeInterface):
+		return "interface"
+	case errors.Is(err, syscall.EOPNOTSUPP):
+		return "unsupported"
 	case errors.Is(err, context.Canceled):
 		return "canceled"
 	case errors.As(err, &dns):
@@ -86,14 +90,14 @@ func (r *Runner) tcpQuality(ctx context.Context, t spec.PingTask, reachability b
 	defer cancel()
 	var elapsed time.Duration
 	var err error
-	if t.SourceIP != "" && r.DialFrom != nil {
+	if t.SourceInterface == "" && t.SourceIP != "" && r.DialFrom != nil {
 		elapsed, err = r.DialFrom(ctx, t.SourceIP, addr)
-	} else if r.Dial != nil {
+	} else if t.SourceInterface == "" && r.Dial != nil {
 		elapsed, err = r.Dial(ctx, addr)
 	} else {
 		host, port, _ := net.SplitHostPort(addr)
 		start := time.Now()
-		ips, e := r.resolve(ctx, taskNetwork(t), host)
+		ips, e := r.resolveTask(ctx, t, host)
 		if e == nil && net.ParseIP(host) == nil {
 			m.Timings.DNS = duration(start)
 		}
@@ -104,6 +108,13 @@ func (r *Runner) tcpQuality(ctx context.Context, t spec.PingTask, reachability b
 		// Sequential attempts use the same deadline, including DNS. A different
 		// address is only tried after a connection failure, not to improve an RTT.
 		d := net.Dialer{}
+		if t.SourceInterface != "" {
+			if err := checkProbeInterface(t); err != nil {
+				m.Outcome = outcome(err)
+				return m
+			}
+			d.Control = probeInterfaceControl(t.SourceInterface)
+		}
 		if t.SourceIP != "" {
 			d.LocalAddr = &net.TCPAddr{IP: net.ParseIP(t.SourceIP)}
 		}
@@ -136,12 +147,20 @@ func (r *Runner) icmpQuality(ctx context.Context, t spec.PingTask) spec.ProbeMea
 	defer cancel()
 	start := time.Now()
 	// DNS and sockets use the requested family, never the other family.
-	ips, err := r.resolve(ctx, taskNetwork(t), t.Target)
+	ips, err := r.resolveTask(ctx, t, t.Target)
 	if err == nil && net.ParseIP(t.Target) == nil {
 		m.Timings.DNS = duration(start)
 	}
 	if err != nil || len(ips) == 0 {
 		m.Outcome = "dns"
+		return m
+	}
+	if t.SourceInterface != "" {
+		elapsed, err := boundICMP(ctx, t, ips[0])
+		m.Outcome = outcome(err)
+		if err == nil {
+			m.LatencyMs = millis(elapsed)
+		}
 		return m
 	}
 	if r.ICMP != nil {
@@ -412,4 +431,18 @@ func (r *Runner) resolve(ctx context.Context, network, host string) ([]net.IP, e
 		return nil, &net.DNSError{Err: "no address in requested family", Name: host}
 	}
 	return out, nil
+}
+
+// Bound tasks deliberately do not resolve hostnames: a router's local DNS
+// forwarder could leave over an unrelated interface despite socket binding.
+func (r *Runner) resolveTask(ctx context.Context, t spec.PingTask, host string) ([]net.IP, error) {
+	if t.SourceInterface != "" {
+		ip := net.ParseIP(host)
+		network := taskNetwork(t)
+		if ip == nil || network != "ip" && (ip.To4() != nil) != (network == "ip4") {
+			return nil, &net.DNSError{Err: "no address in requested family", Name: host}
+		}
+		return []net.IP{ip}, nil
+	}
+	return r.resolve(ctx, taskNetwork(t), host)
 }

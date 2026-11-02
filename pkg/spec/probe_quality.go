@@ -1,10 +1,14 @@
 package spec
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -54,7 +58,7 @@ type PingQuality struct {
 
 func ProbeOutcome(s string) bool {
 	switch s {
-	case "ok", "refused", "timeout", "dns", "tls", "permission", "unreachable", "http_status", "io", "invalid", "canceled", "empty":
+	case "ok", "refused", "timeout", "dns", "tls", "permission", "unreachable", "http_status", "io", "invalid", "canceled", "empty", "interface", "unsupported":
 		return true
 	}
 	return false
@@ -86,8 +90,37 @@ func (t PingTask) Validate() error {
 	if t.Family != "" && t.Family != "ipv4" && t.Family != "ipv6" {
 		return fmt.Errorf("probe family must be ipv4 or ipv6")
 	}
-	if t.Series != "" && (t.ID != 0 || !ValidCarrierSeries(t.Series)) {
-		return fmt.Errorf("invalid carrier series")
+	if t.Series != "" {
+		if t.SourceInterface != "" {
+			if !ValidProbeTaskSeries(t.Series) || t.Series != ProbeTaskSeries(t) {
+				return fmt.Errorf("invalid interface probe series")
+			}
+		} else if t.ID != 0 || !ValidCarrierSeries(t.Series) {
+			return fmt.Errorf("invalid carrier series")
+		}
+	}
+	if t.SourceInterface != "" {
+		if err := ValidateProbeInterface(t.SourceInterface); err != nil {
+			return err
+		}
+		if t.Type != "tcp" && t.Type != "icmp" {
+			return fmt.Errorf("interface binding requires TCP or ICMP")
+		}
+		host := t.Target
+		if t.Type == "tcp" {
+			h, port, err := net.SplitHostPort(host)
+			if err != nil {
+				return fmt.Errorf("interface-bound TCP target must be IP:port")
+			}
+			n, err := strconv.Atoi(port)
+			if err != nil || n < 1 || n > 65535 {
+				return fmt.Errorf("interface-bound TCP target requires a numeric port")
+			}
+			host = h
+		}
+		if net.ParseIP(host) == nil {
+			return fmt.Errorf("interface-bound target must be a literal IP address")
+		}
 	}
 	if t.Family != "" {
 		if t.Type != "tcp" && t.Type != "icmp" {
@@ -141,4 +174,38 @@ func (t PingTask) Validate() error {
 		return fmt.Errorf("type must be icmp, tcp, http or download")
 	}
 	return nil
+}
+
+// ValidateProbeInterface permits actual device names without shell or UCI syntax.
+func ValidateProbeInterface(name string) error {
+	if name == "" {
+		return nil
+	}
+	if len(name) > 15 || name == "." || name == ".." {
+		return fmt.Errorf("invalid probe interface name")
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-' || c == '.') {
+			return fmt.Errorf("invalid probe interface name")
+		}
+	}
+	return nil
+}
+
+// ProbeTaskSeries separates interface/path changes from earlier observations.
+// Empty-interface tasks retain their legacy identity and wire representation.
+func ProbeTaskSeries(t PingTask) string {
+	if t.SourceInterface == "" {
+		return ""
+	}
+	data, _ := json.Marshal([]any{t.ID, t.Name, strings.ToLower(t.Type), t.Target, t.Family, t.SourceIP, t.SourceInterface, t.TCPReachability})
+	sum := sha256.Sum256(data)
+	return "task:" + hex.EncodeToString(sum[:])
+}
+func ValidProbeTaskSeries(s string) bool {
+	if len(s) != 69 || !strings.HasPrefix(s, "task:") || strings.ToLower(s) != s {
+		return false
+	}
+	_, err := hex.DecodeString(s[5:])
+	return err == nil
 }

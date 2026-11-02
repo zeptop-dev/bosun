@@ -402,6 +402,9 @@ func ValidateProbe(p *ProbeSettings) error {
 	p.Carriers = carriers
 	tasks := []spec.PingTask{}
 	for i, t := range p.Tasks {
+		if t.SourceInterface != "" {
+			return fmt.Errorf("task %d: interface-bound tasks require Captain-managed monitoring", i+1)
+		}
 		if t.Series != "" {
 			return fmt.Errorf("task %d: carrier series is reserved", i+1)
 		}

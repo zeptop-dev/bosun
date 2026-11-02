@@ -628,16 +628,17 @@ func SplitInboundUser(s string) (name, tag string) {
 
 // SystemStatus is a host resource snapshot.
 type SystemStatus struct {
-	CarrierProbeVersion int             `json:"carrier_probe_version,omitempty"` // 1 = explicit TCP/ICMP and IPv4/IPv6 carrier series
-	Valid               *MetricValidity `json:"valid,omitempty"`
-	Resources           *Resources      `json:"resources,omitempty"`
-	CPUPercent          float64         `json:"cpu_percent,omitempty"`
-	MemTotal            uint64          `json:"mem_total,omitempty"`
-	MemUsed             uint64          `json:"mem_used,omitempty"`
-	SwapTotal           uint64          `json:"swap_total,omitempty"`
-	SwapUsed            uint64          `json:"swap_used,omitempty"`
-	DiskTotal           uint64          `json:"disk_total,omitempty"`
-	DiskUsed            uint64          `json:"disk_used,omitempty"`
+	ProbeInterfaceVersion int             `json:"probe_interface_version,omitempty"` // 1 = Linux device-bound TCP/ICMP tasks
+	CarrierProbeVersion   int             `json:"carrier_probe_version,omitempty"`   // 1 = explicit TCP/ICMP and IPv4/IPv6 carrier series
+	Valid                 *MetricValidity `json:"valid,omitempty"`
+	Resources             *Resources      `json:"resources,omitempty"`
+	CPUPercent            float64         `json:"cpu_percent,omitempty"`
+	MemTotal              uint64          `json:"mem_total,omitempty"`
+	MemUsed               uint64          `json:"mem_used,omitempty"`
+	SwapTotal             uint64          `json:"swap_total,omitempty"`
+	SwapUsed              uint64          `json:"swap_used,omitempty"`
+	DiskTotal             uint64          `json:"disk_total,omitempty"`
+	DiskUsed              uint64          `json:"disk_used,omitempty"`
 
 	// Probe fields (bosun >= 0.11); zero when the agent is older.
 	Load1        float64      `json:"load1,omitempty"`
@@ -693,6 +694,9 @@ type Probe struct {
 	CarrierPing  bool                `json:"carrier_ping,omitempty"` // TCP-connect latency to the carrier probe points
 	Carriers     []Carrier           `json:"carriers,omitempty"`     // empty = DefaultCarriers
 	Tasks        []PingTask          `json:"tasks,omitempty"`
+	// InterfaceTasks is separate so older agents cannot ignore the binding
+	// and accidentally execute these tasks through their default route.
+	InterfaceTasks []PingTask `json:"interface_tasks,omitempty"`
 }
 
 // Deprecated: retained only for decoding old configuration; ignored by bosun.
@@ -753,15 +757,17 @@ func DefaultCarriers() []Carrier {
 // PingTask is a panel-defined latency check the node runs.
 type PingTask struct {
 	Family          string `json:"family,omitempty" yaml:"family,omitempty"` // empty = legacy automatic selection
-	Series          string `json:"series,omitempty" yaml:"series,omitempty"` // generated carrier identity only
+	Series          string `json:"series,omitempty" yaml:"series,omitempty"` // generated carrier or interface-bound task identity
 	ID              int64  `json:"id" yaml:"id"`
 	Name            string `json:"name" yaml:"name"`
 	Type            string `json:"type" yaml:"type"`     // icmp | tcp | http | download
 	Target          string `json:"target" yaml:"target"` // host, host:port or URL (download: a large file URL)
 	IntervalSeconds int    `json:"interval_seconds,omitempty" yaml:"interval_seconds"`
-	// SourceIP binds the probe to a local address: measure a
-	// dedicated line from its own NIC instead of the default route.
+	// SourceIP binds a local address. It does not choose the outgoing device.
 	SourceIP string `json:"source_ip,omitempty" yaml:"source_ip"`
+	// SourceInterface is an actual Linux device name, not an OpenWrt UCI network.
+	// An unavailable device fails the attempt; it never falls back to another path.
+	SourceInterface string `json:"source_interface,omitempty" yaml:"source_interface,omitempty"`
 	// TCPReachability accepts refusal as proof of reachability, not service
 	// availability. Captain uses this for automatic dedicated-line checks.
 	TCPReachability bool `json:"tcp_reachability,omitempty" yaml:"tcp_reachability,omitempty"`

@@ -511,6 +511,7 @@ func (c *Client) Probe() *spec.Probe {
 	p.CarrierProbe = p.CarrierProbe.Clone()
 	p.Carriers = append([]spec.Carrier(nil), p.Carriers...)
 	p.Tasks = append([]spec.PingTask(nil), p.Tasks...)
+	p.InterfaceTasks = append([]spec.PingTask(nil), p.InterfaceTasks...)
 	return &p
 }
 

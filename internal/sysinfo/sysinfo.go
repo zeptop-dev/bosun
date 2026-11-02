@@ -79,6 +79,9 @@ func (p *Sampler) Sample(ctx context.Context) spec.SystemStatus {
 	options := p.options
 	p.mu.Unlock()
 	s := spec.SystemStatus{Valid: &spec.MetricValidity{}, CarrierProbeVersion: 1}
+	if runtime.GOOS == "linux" {
+		s.ProbeInterfaceVersion = 1
+	}
 	if vm, err := mem.VirtualMemoryWithContext(ctx); err == nil {
 		s.MemTotal, s.MemUsed = vm.Total, vm.Used
 		s.Valid.Memory = true

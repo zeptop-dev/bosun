@@ -85,6 +85,7 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 	if cfg != nil {
 		next = *cfg
 		next.Tasks = append([]spec.PingTask(nil), cfg.Tasks...)
+		next.InterfaceTasks = append([]spec.PingTask(nil), cfg.InterfaceTasks...)
 		next.Carriers = append([]spec.Carrier(nil), cfg.Carriers...)
 		next.CarrierProbe = cfg.CarrierProbe.Clone()
 	}
@@ -107,15 +108,27 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 		go r.qualityLoop(ctx, t, t.TCPReachability, r.epoch)
 	}
 	for _, t := range next.Tasks {
+		if t.SourceInterface != "" && t.Series == "" {
+			t.Series = spec.ProbeTaskSeries(t)
+		}
 		// Older Captains identify automatic line checks by negative ingress ID.
 		// Keep their reachability policy until both peers support the new flag.
 		reachability := t.TCPReachability || (t.ID < 0 && t.SourceIP != "" && strings.EqualFold(t.Type, "tcp"))
 		go r.qualityLoop(ctx, t, reachability, r.epoch)
 	}
+	for _, t := range next.InterfaceTasks {
+		if t.SourceInterface == "" {
+			continue
+		}
+		if t.Series == "" {
+			t.Series = spec.ProbeTaskSeries(t)
+		}
+		go r.qualityLoop(ctx, t, t.TCPReachability, r.epoch)
+	}
 }
 
 func sameConfig(a, b spec.Probe) bool {
-	if !reflect.DeepEqual(a.CarrierProbe, b.CarrierProbe) || a.Enabled != b.Enabled || a.CarrierPing != b.CarrierPing || len(a.Tasks) != len(b.Tasks) || len(a.Carriers) != len(b.Carriers) {
+	if !reflect.DeepEqual(a.CarrierProbe, b.CarrierProbe) || a.Enabled != b.Enabled || a.CarrierPing != b.CarrierPing || len(a.Tasks) != len(b.Tasks) || !reflect.DeepEqual(a.InterfaceTasks, b.InterfaceTasks) || len(a.Carriers) != len(b.Carriers) {
 		return false
 	}
 	for i := range a.Carriers {
