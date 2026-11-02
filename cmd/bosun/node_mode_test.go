@@ -31,3 +31,15 @@ func TestMonitorSetupDoesNotDownloadOrInitializeProxyCores(t *testing.T) {
 		t.Fatal("CLI bypass", err)
 	}
 }
+
+func TestOpenWrtRejectsProxyMode(t *testing.T) {
+	for _, mode := range []spec.NodeMode{spec.NodeMonitor, spec.NodeFull, ""} {
+		err := validateOpenWrtMode(mode, true)
+		if mode == spec.NodeMonitor && err != nil || mode != spec.NodeMonitor && err == nil {
+			t.Fatalf("mode %q: %v", mode, err)
+		}
+		if err := validateOpenWrtMode(mode, false); err != nil {
+			t.Fatalf("changed other Linux modes: %v", err)
+		}
+	}
+}

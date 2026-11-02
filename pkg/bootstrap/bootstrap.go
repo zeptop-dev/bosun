@@ -13,6 +13,8 @@ func File(name string) ([]byte, bool) {
 		return []byte(scripts.Install), true
 	case "bosun.service":
 		return []byte(deploy.Service), true
+	case "bosun.procd":
+		return []byte(deploy.Procd), true
 	case "bosun.initd":
 		return []byte(deploy.Initd), true
 	default:

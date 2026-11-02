@@ -34,7 +34,7 @@ func TestGeneratedGitHubConfigurationRemainsCompatibleWithOldReleases(t *testing
 			body = strings.ReplaceAll(body, "/etc/bosun", filepath.Join(dir, "etc"))
 			body = strings.ReplaceAll(body, "/var/lib/bosun", filepath.Join(dir, "data"))
 			cmd := exec.Command("sh", "-eu", "-c", body)
-			cmd.Env = append(os.Environ(), "NODE_MODE=monitor", "CAPTAIN=https://example.com:18443", "PAIR=ABCD-EFGH", "DOWNLOAD_SOURCE="+source, "TOKEN_FILE="+filepath.Join(dir, "data", "captain.token"), "WEB_LISTEN=:2053")
+			cmd.Env = append(os.Environ(), "NODE_MODE=monitor", "OPENWRT=0", "DATA_DIR="+filepath.Join(dir, "data"), "CAPTAIN=https://example.com:18443", "PAIR=ABCD-EFGH", "DOWNLOAD_SOURCE="+source, "TOKEN_FILE="+filepath.Join(dir, "data", "captain.token"), "WEB_LISTEN=:2053")
 			if output, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("configuration generation: %v %s", err, output)
 			}
@@ -129,7 +129,7 @@ func TestCaptainBootstrapDownloadsAndChecksWithoutGitHub(t *testing.T) {
 			for name, body := range map[string]string{"uname": "case \"$1\" in -s) echo Linux;; -m) echo x86_64;; esac", "id": "echo 0", "systemctl": "exit 0"} {
 				os.WriteFile(filepath.Join(stub, name), []byte("#!/bin/sh\n"+body+"\n"), 0755)
 			}
-			end := strings.Index(Install, "if [ \"$MODE\" = binary ]; then install -m 0755")
+			end := strings.Index(Install, "if [ \"$MODE\" = binary ]; then mkdir -p")
 			if end < 0 {
 				t.Fatal("installer mutation boundary not found")
 			}

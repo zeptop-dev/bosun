@@ -140,6 +140,9 @@ func cmdBackup(args []string) error {
 
 // serviceRunning is a best-effort look at systemd (or OpenRC on Alpine).
 func serviceRunning() bool {
+	if isOpenWrt() {
+		return exec.Command("/etc/init.d/bosun", "running").Run() == nil
+	}
 	if _, err := exec.LookPath("systemctl"); err != nil {
 		if _, err := exec.LookPath("rc-service"); err == nil {
 			out, _ := exec.Command("rc-service", "bosun", "status").CombinedOutput()

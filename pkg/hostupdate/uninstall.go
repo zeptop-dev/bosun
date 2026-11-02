@@ -44,6 +44,11 @@ func Uninstall(product string, args []string, network func(context.Context, stri
 			return err
 		}
 	}
+	if product == "bosun" {
+		if _, err := os.Stat("/etc/openwrt_release"); err == nil {
+			return uninstallOpenWrt(ctx, "", *keep, command)
+		}
+	}
 	return uninstall(ctx, product, *dir, *keep, command, network)
 }
 

@@ -8,3 +8,6 @@ var Service string
 
 //go:embed bosun.initd
 var Initd string
+
+//go:embed bosun.procd
+var Procd string

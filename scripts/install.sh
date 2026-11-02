@@ -1,5 +1,5 @@
 #!/bin/sh
-# bosun installer for Linux (systemd, or OpenRC on Alpine). Usage:
+# bosun installer for Linux (systemd, OpenRC, or OpenWrt monitor-only). Usage:
 #   sh install.sh                                   standalone: asks for the panel login and port
 #   sh install.sh --yes                             standalone with defaults (admin / random / :2053)
 #   sh install.sh --captain https://captain.example.com --pair ABCD-EFGH
@@ -23,8 +23,12 @@ have_tty() { ( exec 3>/dev/tty ) 2>/dev/null; }
 
 PRODUCT=bosun NATIVE=/usr/local/bin/bosun MODE="" WEB_UPGRADE=0 NODE_MODE=full
 REPO="zeptop-dev/bosun"
+OPENWRT=0
+[ ! -f /etc/openwrt_release ] || OPENWRT=1
+DATA_DIR=/var/lib/bosun
+[ "$OPENWRT" != 1 ] || DATA_DIR=/etc/bosun/data
 SAVED_DOWNLOADS_KNOWN=0 TOKEN_FILE_SET=0
-DOWNLOAD_SOURCE="" TOKEN_FILE="/var/lib/bosun/captain.token"
+DOWNLOAD_SOURCE="" TOKEN_FILE="$DATA_DIR/captain.token"
 CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN="" ACTION=install KEEP_DATA=0 YES=0 PANEL_USER="" PANEL_PASS=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -48,22 +52,76 @@ done
 [ "$(uname -s)" = Linux ] || { echo "Linux is required" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 
+# A router must never be turned into a managed proxy/firewall host by accident.
+if [ "$OPENWRT" = 1 ]; then
+  [ "$MODE" != docker ] || { echo 'OpenWrt supports native monitor-only installation.' >&2; exit 1; }
+  if [ "$ACTION" != uninstall ]; then
+    [ -x /sbin/procd ] && [ -f /etc/rc.common ] || { echo 'OpenWrt procd is required.' >&2; exit 1; }
+    if [ -f /etc/bosun/config.yaml ]; then
+      [ -x "$NATIVE" ] && [ "$("$NATIVE" installer-node-mode /etc/bosun/config.yaml 2>/dev/null)" = monitor ] || { echo 'Existing OpenWrt installation must be monitor-only; configuration was preserved.' >&2; exit 1; }
+      NODE_MODE=monitor
+    else
+      [ "$NODE_MODE" = monitor ] || { echo 'OpenWrt requires --monitor-only, --captain and --pair.' >&2; exit 1; }
+    fi
+  fi
+fi
+
+# OpenWrt base images may omit the install utility. Every destination here is
+# a fixed installer-owned file; refuse directories/symlinks before replacement.
+install_file() {
+  [ ! -L "$3" ] && [ ! -d "$3" ] || { echo 'unsafe installer destination' >&2; return 1; }
+  cp "$2" "$3"
+  chmod "$1" "$3"
+}
+
+move_file() {
+  [ ! -L "$2" ] && [ ! -d "$2" ] || { echo 'unsafe installer destination' >&2; return 1; }
+  mv -f "$1" "$2"
+}
+
+native_init() {
+  if [ "$OPENWRT" = 1 ]; then INIT=procd
+  elif command -v systemctl >/dev/null; then INIT=systemd
+  elif command -v rc-service >/dev/null; then INIT=openrc
+  else echo 'systemd, OpenRC or OpenWrt procd is required' >&2; exit 1; fi
+}
+native_service() {
+  case "$INIT" in
+    procd) /etc/init.d/bosun "$1" ;;
+    systemd) systemctl "$1" "$PRODUCT" ;;
+    openrc) rc-service "$PRODUCT" "$1" ;;
+  esac
+}
+
 # An offline uninstall can use the trusted local worker even when the running
 # application's config is unreadable. Copy before executing its capability
 # check so the same private file is used for the eventual uninstall.
 trusted_worker_file() {
-  [ -f "$1" ] && [ -x "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %u "$1" 2>/dev/null)" = 0 ] || return 1
+  [ -f "$1" ] && [ -x "$1" ] && [ ! -L "$1" ] || return 1
+  if [ "$OPENWRT" = 1 ]; then
+    # BusyBox often has no stat applet. Numeric ls ownership plus its fixed
+    # permission columns are sufficient; do not execute an untrusted helper
+    # merely to inspect the helper's own ownership.
+    worker_meta=$(LC_ALL=C ls -ldn "$1") || return 1
+    printf '%s\n' "$worker_meta" | awk '{exit !($3 == 0 && substr($1,6,1) != "w" && substr($1,9,1) != "w")}'
+    return $?
+  fi
+  [ "$(stat -c %u "$1" 2>/dev/null)" = 0 ] || return 1
   worker_mode=$(stat -c %a "$1" 2>/dev/null) || return 1
   case "$worker_mode" in ''|*[!0-7]*|*[2367][0-7]|*[2367]) return 1 ;; esac
 }
 copy_cached_worker() {
   candidate="/usr/local/lib/$PRODUCT-updater/worker"
-  trusted_worker_file "$candidate" || return 1
+  if ! trusted_worker_file "$candidate"; then
+    [ "$OPENWRT" = 1 ] && trusted_worker_file "$NATIVE" || return 1
+    candidate=$NATIVE
+  fi
   # Preserve owner/mode and symlinks while copying, then verify the private
   # copy too: a changed source cannot become trusted merely because root
   # created the destination file.
   if ! cp -pP "$candidate" "$TMP/$PRODUCT" || ! trusted_worker_file "$TMP/$PRODUCT" || ! chmod 0755 "$TMP/$PRODUCT"; then rm -f "$TMP/$PRODUCT"; return 1; fi
   if [ "$("$TMP/$PRODUCT" installer-version 2>/dev/null || true)" != 1 ]; then rm -f "$TMP/$PRODUCT"; return 1; fi
+  if [ "$OPENWRT" = 1 ] && [ "$("$TMP/$PRODUCT" installer-openwrt-supported 2>/dev/null || true)" != 1 ]; then rm -f "$TMP/$PRODUCT"; return 1; fi
   WORKER="$TMP/$PRODUCT"
 }
 
@@ -163,6 +221,9 @@ resolve_version() {
     fi
   fi
   printf '%s\n' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo 'invalid release version' >&2; exit 1; }
+  if [ "$OPENWRT" = 1 ]; then
+    printf '%s\n' "$VERSION" | awk -F. '{sub(/^v/,"",$1); exit !(($1+0)>0 || ($2+0)>=89)}' || { echo 'OpenWrt requires bosun v0.89.0 or newer; wait for its official release' >&2; exit 1; }
+  fi
   if [ "$DOWNLOAD_SOURCE" = captain ]; then
     printf '%s\n' "$VERSION" | awk -F. '{sub(/^v/,"",$1); exit !(($1+0)>0 || ($2+0)>=89)}' || { echo 'Captain delivery requires bosun v0.89.0 or newer; wait for its official release' >&2; exit 1; }
     BASE="$CAPTAIN/api/agent/downloads/bosun/$VERSION"
@@ -224,25 +285,29 @@ if [ "$ACTION" = upgrade ] || [ "$ACTION" = enable-web-upgrade ]; then
     "$WORKER" installer-check-layout "/etc/$PRODUCT/config.yaml"
     CURRENT=$(native_command version | awk '{print $2}')
     "$WORKER" installer-check-upgrade "$CURRENT" || { echo 'target must be a newer release' >&2; exit 1; }
-    install -m 0755 "$WORKER" "$TMP/next"
+    install_file 0755 "$WORKER" "$TMP/next"
     if [ "$PRODUCT" = captain ]; then chown captain:captain "$TMP/next"; fi
-    mkdir -p "/var/lib/$PRODUCT-updater/backups"
-    chmod 0700 "/var/lib/$PRODUCT-updater" "/var/lib/$PRODUCT-updater/backups"
-    BACKUP="/var/lib/$PRODUCT-updater/backups/binary-$(date +%Y%m%d%H%M%S)"
+    BACKUP_ROOT="/var/lib/$PRODUCT-updater"
+    [ "$OPENWRT" != 1 ] || BACKUP_ROOT=/etc/bosun-updater
+    mkdir -p "$BACKUP_ROOT/backups"
+    chmod 0700 "$BACKUP_ROOT" "$BACKUP_ROOT/backups"
+    BACKUP="$BACKUP_ROOT/backups/binary-$(date +%Y%m%d%H%M%S)"
     mkdir -m 0700 "$BACKUP"
     cp -p "$NATIVE" "$TMP/previous"
     printf '%s\n' "$CURRENT" > "$TMP/previous.version"
-    if command -v systemctl >/dev/null; then systemctl stop "$PRODUCT"; INIT=systemd
-    else rc-service "$PRODUCT" stop; INIT=openrc; fi
-    resume_old() { if [ "$INIT" = systemd ]; then systemctl start "$PRODUCT"; else rc-service "$PRODUCT" start; fi; }
-    if ! tar -czf "$BACKUP/data.tar.gz" -C / "etc/$PRODUCT" "var/lib/$PRODUCT"; then resume_old; echo 'backup failed; old service restarted' >&2; exit 1; fi
-    if ! { mv -T "$TMP/previous" "$NATIVE.backup" && mv -T "$TMP/previous.version" "$NATIVE.backup.version" && mv -T "$TMP/next" "$NATIVE"; }; then
+    native_init
+    native_service stop
+    resume_old() { native_service start; }
+    BACKUP_DATA="var/lib/$PRODUCT"
+    [ "$OPENWRT" != 1 ] || BACKUP_DATA="etc/bosun/data"
+    if ! tar -czf "$BACKUP/data.tar.gz" -C / "etc/$PRODUCT" "$BACKUP_DATA"; then resume_old; echo 'backup failed; old service restarted' >&2; exit 1; fi
+    if ! { move_file "$TMP/previous" "$NATIVE.backup" && move_file "$TMP/previous.version" "$NATIVE.backup.version" && move_file "$TMP/next" "$NATIVE"; }; then
       resume_old; echo 'binary replacement failed; existing service restarted' >&2; exit 1
     fi
     resume_old
     READY=0
     for _attempt in 1 2 3 4 5 6 7 8 9 10; do
-      if native_command healthcheck --version "$VERSION" >/dev/null 2>&1; then READY=1; break; fi
+      if native_command healthcheck --version "$VERSION" --data-dir "$DATA_DIR" >/dev/null 2>&1; then READY=1; break; fi
       sleep 2
     done
     [ "$READY" = 1 ] || { echo "New service did not become ready. Data backup: $BACKUP. No automatic database downgrade was attempted." >&2; exit 1; }
@@ -252,17 +317,17 @@ if [ "$ACTION" = upgrade ] || [ "$ACTION" = enable-web-upgrade ]; then
 fi
 
 if [ "$NODE_MODE" = monitor ]; then
-  [ -n "$CAPTAIN" ] && [ -n "$PAIR" ] || { echo '--monitor-only requires --captain and --pair' >&2; exit 1; }
-  [ ! -f /etc/bosun/config.yaml ] || { echo 'Existing installation: change node mode from Captain instead.' >&2; exit 1; }
+  if [ "$OPENWRT" != 1 ] || [ ! -f /etc/bosun/config.yaml ]; then
+    [ -n "$CAPTAIN" ] && [ -n "$PAIR" ] || { echo '--monitor-only requires --captain and --pair' >&2; exit 1; }
+    [ ! -f /etc/bosun/config.yaml ] || { echo 'Existing installation: change node mode from Captain instead.' >&2; exit 1; }
+  fi
 fi
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 # Binary mode uses the host init system; Docker installation does not require it.
 MODE=${MODE:-binary}
 case "$MODE" in docker|binary) ;; *) echo '--mode must be docker or binary' >&2; exit 1 ;; esac
 if [ "$MODE" = binary ]; then
-  if command -v systemctl >/dev/null; then INIT=systemd
-  elif command -v rc-service >/dev/null; then INIT=openrc
-  else echo 'systemd or OpenRC is required' >&2; exit 1; fi
+  native_init
 fi
 case "$(uname -m)" in
   x86_64|amd64) ARCH=amd64 ;;
@@ -288,7 +353,7 @@ if [ "$DOWNLOAD_SOURCE" = captain ] && [ -f /etc/bosun/config.yaml ]; then
     exit 1
   fi
 fi
-if [ "$MODE" = binary ]; then install -m 0755 "$TMP/bosun" /usr/local/bin/bosun.new; mv /usr/local/bin/bosun.new /usr/local/bin/bosun; fi
+if [ "$MODE" = binary ]; then mkdir -p /usr/local/bin; install_file 0755 "$TMP/bosun" /usr/local/bin/bosun.new; move_file /usr/local/bin/bosun.new /usr/local/bin/bosun; fi
 
 # nft and tc back the per-user speed limits, nft forwards and strict
 # ingress; minimal images (Debian cloud, Alpine) ship without them. Best
@@ -355,7 +420,8 @@ if [ "$FIRST_INSTALL" = 1 ] && [ -z "$CAPTAIN" ]; then
 fi
 [ -n "$WEB_LISTEN" ] || WEB_LISTEN=":2053"
 
-mkdir -p /etc/bosun /var/lib/bosun
+mkdir -p /etc/bosun "$DATA_DIR"
+[ "$OPENWRT" != 1 ] || chmod 0700 /etc/bosun "$DATA_DIR"
 if [ ! -f /etc/bosun/config.yaml ]; then
   if [ -n "$CAPTAIN" ] && [ -z "$PAIR" ] || [ -z "$CAPTAIN" ] && [ -n "$PAIR" ]; then
     echo "--captain and --pair go together" >&2; exit 1
@@ -376,7 +442,7 @@ web:
   listen: \"$WEB_LISTEN\""
   fi
   cat > /etc/bosun/config.yaml <<CFG
-data_dir: /var/lib/bosun
+data_dir: $DATA_DIR
 log_level: info
 ${NODE_MODE_LINE}
 metrics_listen: 127.0.0.1:9100
@@ -452,18 +518,26 @@ if [ "$INIT" = systemd ]; then
   if [ "$DOWNLOAD_SOURCE" = captain ]; then SERVICE_URL="$CAPTAIN/api/agent/downloads/bootstrap/bosun.service"
   else SERVICE_URL="https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.service"; fi
   fetch -o "$TMP/bosun.service" "$SERVICE_URL"
-  install -m 0644 "$TMP/bosun.service" /etc/systemd/system/bosun.service
+  install_file 0644 "$TMP/bosun.service" /etc/systemd/system/bosun.service
   systemctl daemon-reload
   systemctl enable --now bosun
   systemctl restart bosun
   sleep 2
   systemctl --no-pager --lines=5 status bosun || true
   echo "bosun $VERSION installed. Logs: journalctl -u bosun -f"
+elif [ "$INIT" = procd ]; then
+  if [ "$DOWNLOAD_SOURCE" = captain ]; then SERVICE_URL="$CAPTAIN/api/agent/downloads/bootstrap/bosun.procd"
+  else SERVICE_URL="https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.procd"; fi
+  fetch -o "$TMP/bosun.procd" "$SERVICE_URL"
+  install_file 0755 "$TMP/bosun.procd" /etc/init.d/bosun
+  /etc/init.d/bosun enable
+  /etc/init.d/bosun restart
+  echo "bosun $VERSION monitor installed. Logs: logread -e bosun"
 else
   if [ "$DOWNLOAD_SOURCE" = captain ]; then SERVICE_URL="$CAPTAIN/api/agent/downloads/bootstrap/bosun.initd"
   else SERVICE_URL="https://raw.githubusercontent.com/$REPO/$VERSION/deploy/bosun.initd"; fi
   fetch -o "$TMP/bosun.initd" "$SERVICE_URL"
-  install -m 0755 "$TMP/bosun.initd" /etc/init.d/bosun
+  install_file 0755 "$TMP/bosun.initd" /etc/init.d/bosun
   chmod 0755 /etc/init.d/bosun
   rc-update add bosun default >/dev/null 2>&1 || true
   rc-service bosun restart || rc-service bosun start

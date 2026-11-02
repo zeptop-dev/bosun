@@ -128,6 +128,18 @@ func main() {
 		} else {
 			err = hostupdate.CheckLayoutFile("bosun", os.Args[2])
 		}
+	case "installer-openwrt-supported":
+		fmt.Println("1")
+	case "installer-node-mode":
+		if len(os.Args) != 3 {
+			err = fmt.Errorf("config path required")
+		} else {
+			var cfg *config.Config
+			cfg, err = config.Load(os.Args[2])
+			if err == nil {
+				fmt.Println(cfg.NodeMode)
+			}
+		}
 	case "installer-download-config":
 		if len(os.Args) != 3 {
 			err = fmt.Errorf("installer-download-config requires a config path")
@@ -246,6 +258,12 @@ func setup(args []string) (*env, error) {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return nil, err
+	}
+	if err := validateOpenWrtMode(cfg.NodeMode, isOpenWrt()); err != nil {
+		return nil, err
+	}
+	if isOpenWrt() && (!selfupdate.ValidTag(cfg.MinVersion) || selfupdate.Newer("v0.89.0", cfg.MinVersion)) {
+		cfg.MinVersion = "v0.89.0"
 	}
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {

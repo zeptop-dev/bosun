@@ -192,7 +192,7 @@ internal/config/      YAML config
 internal/sysinfo/     host status snapshot
 ```
 
-## Install on a node (Linux: systemd, or OpenRC on Alpine)
+## Install on a node (Linux: systemd, OpenRC or OpenWrt monitoring)
 
 Standalone, with the built-in web panel on port 2053:
 
@@ -224,6 +224,40 @@ Cores are downloaded on first start. Use `... | sh -s -- upgrade` to upgrade wit
 `... | sh -s -- uninstall --yes` removes the installation and data.
 `--keep-data` retains configuration and data. Piped through
 `sh` the script itself never lands on disk.
+
+### OpenWrt observation point
+
+OpenWrt native installation supports **Captain-managed monitor-only mode** on
+x86-64 and ARM64, starting with bosun v0.89.0 (this development feature requires
+that release before using the stable installer). Other router architectures do
+not have official release binaries. Use a device with enough persistent storage
+for the binary, its upgrade backup and monitoring state; small flash-only routers
+may need an operator-configured persistent overlay first.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/install.sh | sh -s -- \
+  --monitor-only --captain https://captain.example.com --pair ABCD-EFGH
+```
+
+The router needs `curl` with trusted CA certificates and `sha256sum`. The installer
+does not install OS packages, proxy cores, proxy accounts or firewall rules.
+OpenWrt procd starts bosun at boot and restarts it after self-updates. Manage it
+with `/etc/init.d/bosun start|stop|restart|enable|disable`; read logs with
+`logread -e bosun`. Full-server mode and transitions into it are refused on OpenWrt.
+
+Configuration remains at `/etc/bosun/config.yaml`; data and the pairing token live
+under `/etc/bosun/data`, because OpenWrt `/var` is normally volatile. Native CLI
+upgrade preserves this layout and stores its backup under `/etc/bosun-updater`.
+Panel-requested binary updates use the existing self-update path and procd respawn.
+Local `uninstall --yes` stops/disables only bosun and removes its owned files;
+`--keep-data` preserves configuration, identity and backups. Panel-requested remote
+removal/conversion is not supported for this router layout; use local uninstall.
+
+A monitor-only router provides ICMP/TCP/HTTP observation, not a proxy client.
+A successful TCP connection is not proof of proxy authentication or a complete
+Internet path. Explicit interface binding constrains the observation socket but
+does not rewrite third-party transparent-proxy policy: verify routing and proxy
+exclusions on the router before interpreting results as direct-WAN measurements.
 
 ### Docker Compose
 

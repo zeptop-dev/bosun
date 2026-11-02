@@ -15,6 +15,7 @@ import (
 func standardLayout(product string, raw []byte) error {
 	var c struct {
 		Data     string `yaml:"data_dir"`
+		NodeMode string `yaml:"node_mode"`
 		Database struct {
 			DSN string `yaml:"dsn"`
 		} `yaml:"database"`
@@ -31,6 +32,11 @@ func standardLayout(product string, raw []byte) error {
 		return errors.New("cannot validate application data paths")
 	}
 	base := "/var/lib/" + product
+	// OpenWrt /var is volatile. This one exact monitor-only layout is backed
+	// up with /etc/bosun; arbitrary custom paths remain unsupported.
+	if product == "bosun" && c.NodeMode == "monitor" && c.Data == "/etc/bosun/data" {
+		base = c.Data
+	}
 	if c.Data != "" && filepath.Clean(c.Data) != base {
 		return errors.New("custom data_dir requires an operator-managed backup/upgrade/uninstall")
 	}
