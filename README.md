@@ -228,8 +228,7 @@ Cores are downloaded on first start. Use `... | sh -s -- upgrade` to upgrade wit
 ### OpenWrt observation point
 
 OpenWrt native installation supports **Captain-managed monitor-only mode** on
-x86-64 and ARM64, starting with bosun v0.89.0 (this development feature requires
-that release before using the stable installer). Other router architectures do
+x86-64 and ARM64, starting with bosun v0.89.0. Other router architectures do
 not have official release binaries. Use a device with enough persistent storage
 for the binary, its upgrade backup and monitoring state; small flash-only routers
 may need an operator-configured persistent overlay first.
