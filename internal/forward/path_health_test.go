@@ -275,10 +275,24 @@ func TestPathHealthNodeBudgetAndStopCancelQueuedAndActive(t *testing.T) {
 	m := NewManager(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	defer m.Stop()
 	fs := []spec.Forward{}
+	var reserved []net.Listener
 	for i := 0; i < 12; i++ {
-		f := healthRule(freePort(t), ln.Addr().String())
+		// Hold every port until all rules are built so the OS cannot reuse a
+		// just-closed reservation for another rule in the same Apply batch.
+		port, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { port.Close() })
+		reserved = append(reserved, port)
+		f := healthRule(port.Addr().(*net.TCPAddr).Port, ln.Addr().String())
 		f.PathHealth.TimeoutSeconds = 10
 		fs = append(fs, f)
+	}
+	for _, port := range reserved {
+		if err := port.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err = m.Apply(fs); err != nil {
 		t.Fatal(err)
