@@ -61,7 +61,8 @@ esac
 	if err := os.Mkdir(stub, 0755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"awk", "cat", "chmod", "cp", "cut", "date", "grep", "head", "ln", "mkdir", "mktemp", "mv", "rm", "sed", "sha256sum", "sleep", "tar"} {
+	// GNU tar invokes gzip through PATH, while macOS bsdtar compresses internally.
+	for _, name := range []string{"awk", "cat", "chmod", "cp", "cut", "date", "grep", "gzip", "head", "ln", "mkdir", "mktemp", "mv", "rm", "sed", "sha256sum", "sleep", "tar"} {
 		real, err := exec.LookPath(name)
 		if err != nil {
 			t.Fatal(err)
