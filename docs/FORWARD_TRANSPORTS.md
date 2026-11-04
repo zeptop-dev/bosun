@@ -133,3 +133,21 @@ hop's payload counter to reject cross-branch traversal. For `both`, it also send
 actual TCP streams and checks their counters after close. It proves the compiled
 forwarding data path, not a proxy-core handshake, subscriber authorization,
 billing or production network reachability.
+
+The paired TCP acceptance test also covers fallback after a compiled branch's
+first listener closes. First run Captain's `TestExportCompiledPathRouteTCPFixture`
+with `CAPTAIN_PATH_ROUTE_FIXTURE` pointing to a private temporary JSON file. The
+exporter must generate explicit loopback ingresses; the reader rejects wildcard
+listeners and never rewrites the compiled rules. Then, in this repository, run:
+
+```sh
+CAPTAIN_PATH_ROUTE_FIXTURE=/absolute/private/tcp-route.json GOWORK=off \
+  go test -race ./internal/forward -run '^TestCompiledCompletePathTCP$' -v
+```
+
+The test verifies twelve TCP streams split equally across the two complete
+branches, including each hop's payload counters, then stops the two-hop branch's
+first listener and verifies four more streams through the surviving branch.
+This checks first-hop failure fallback, not detection of a broken tail behind a
+still-reachable first listener. Both the exporter and reader must execute; the
+default skipped opt-in test alone is not cross-repository acceptance evidence.
