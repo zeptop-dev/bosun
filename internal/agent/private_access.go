@@ -87,7 +87,10 @@ func (a *Agent) preparePrivateAccess(ctx context.Context, node *spec.Node, limit
 		return errors.Join(dependencyFailure(err, dependencyEgress), a.stopPrivateCores(ctx))
 	}
 	if len(limits) > 0 && a.Shaper != nil && !hasWireGuardTransit(node) {
-		if err := a.Shaper.Apply(ctx, limits); err != nil {
+		err := a.Shaper.Apply(ctx, limits)
+		st := a.Shaper.Status()
+		a.setStatus(func(s *Status) { s.Shaper = &st })
+		if err != nil {
 			return errors.Join(dependencyFailure(err, dependencyShaper), a.stopPrivateCores(ctx))
 		}
 	}

@@ -190,10 +190,23 @@ func (a *Agent) syncWireGuardForwarding(ctx context.Context, links []spec.WireGu
 	return err
 }
 
-func (a *Agent) prepareWireGuardShaping(ctx context.Context, n *spec.Node, limits []shaper.Limit) error {
+func (a *Agent) prepareWireGuardShaping(ctx context.Context, n *spec.Node, limits []shaper.Limit) (err error) {
 	if a.wireGuard == nil {
 		return nil
 	}
+	// Shared shaping can fail before Root.Apply (device ownership, route,
+	// filters or cleanup). Never retain an earlier successful UI snapshot.
+	defer func() {
+		if err == nil {
+			return
+		}
+		st := a.wireGuard.shaping.Root().Status()
+		st.Supported = a.wireGuard.shaping.Root().Supported()
+		st.MissingTools = a.wireGuard.shaping.Root().MissingTools()
+		st.Users = len(limits)
+		st.Error = err.Error()
+		a.setStatus(func(s *Status) { s.Shaper = &st })
+	}()
 	var devices []string
 	for _, link := range n.WireGuardLinks {
 		if !link.Exit {

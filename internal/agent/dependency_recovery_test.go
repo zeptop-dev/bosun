@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/config"
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/egressguard"
+	"github.com/zeptop-dev/bosun/internal/runas"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -368,5 +370,97 @@ func TestDependencyRecoveryBoundsPreinstalledKernelFailures(t *testing.T) {
 				t.Fatal("exhausted retry performed writes")
 			}
 		})
+	}
+}
+
+func TestDependencyRecoveryCurrentFailureWinsOverOldSuccess(t *testing.T) {
+	a, _ := dependencyRig(t)
+	a.setStatus(func(s *Status) {
+		s.Shaper = &shaper.Status{Supported: true, Users: 1}
+		s.Egress = &egressguard.Status{Supported: true, Enabled: true}
+	})
+	a.recordDependencyApply(0, errors.Join(dependencyFailure(errors.New("new tc failure"), dependencyShaper), dependencyFailure(errors.New("new nft failure"), dependencyEgress)))
+	if a.dependencyRecovery.missing != dependencyShaper|dependencyEgress {
+		t.Fatal("stale success cleared current failure", a.dependencyRecovery)
+	}
+}
+
+func TestDependencyRecoveryPrivateUpdatePublishesCurrentFailure(t *testing.T) {
+	account, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if account.Uid == "0" {
+		account, err = user.LookupId("65534")
+		if err != nil {
+			t.Skip("no non-root account")
+		}
+	}
+	if err := runas.Set(account.Username); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runas.Clear)
+	for _, kind := range []string{"shaper", "egress"} {
+		t.Run(kind, func(t *testing.T) {
+			a, c := dependencyRig(t)
+			a.node.Inbounds[0].PrivateAccess = &spec.PrivateAccess{Mode: "internal"}
+			fail := false
+			a.Shaper.Run = func(context.Context, string, ...string) ([]byte, error) {
+				if fail && kind == "shaper" {
+					return nil, errors.New("tc update denied")
+				}
+				return nil, nil
+			}
+			a.Egress.Run = func(context.Context, string, string, ...string) ([]byte, error) {
+				if fail && kind == "egress" {
+					return nil, errors.New("nft update denied")
+				}
+				return nil, nil
+			}
+			ctx := context.Background()
+			if err := a.preparePrivateAccess(ctx, a.node, []shaper.Limit{{UserID: 1, Mbps: 10}}); err != nil {
+				t.Fatal(err)
+			}
+			old := a.Shaper.Status()
+			a.setStatus(func(s *Status) { s.Shaper = &old })
+			if a.Status().Shaper.Error != "" || a.Status().Egress.Error != "" {
+				t.Fatal("initial fixture failed")
+			}
+			c.running = true
+			fail = true
+			a.users[0].SpeedLimitMbps = 20
+			a.node.Inbounds[0].PrivateAccess = &spec.PrivateAccess{Mode: "custom", Rules: []spec.PrivateAccessRule{{CIDR: "10.10.0.2"}}}
+			err := a.preparePrivateAccess(ctx, a.node, []shaper.Limit{{UserID: 1, Mbps: 20}})
+			if err == nil || c.running {
+				t.Fatal("failed private update did not stop cores", err)
+			}
+			a.recordDependencyApply(0, err)
+			want := dependencyShaper
+			if kind == "egress" {
+				want = dependencyEgress
+			}
+			if a.dependencyRecovery.missing&want == 0 {
+				t.Fatal("new failure cleared by old status", a.dependencyRecovery)
+			}
+			st := a.Status()
+			if kind == "shaper" && (st.Shaper == nil || st.Shaper.Error == "") || kind == "egress" && (st.Egress == nil || st.Egress.Error == "") {
+				t.Fatal("Doctor would see stale success", st)
+			}
+		})
+	}
+}
+
+func TestDependencyRecoverySharedShapingEarlyFailureReplacesOldSuccess(t *testing.T) {
+	a, _ := dependencyRig(t)
+	a.initWireGuard()
+	a.Shaper.Interface = ""
+	a.Shaper.Run = func(context.Context, string, ...string) ([]byte, error) {
+		return nil, errors.New("route lookup denied")
+	}
+	a.setStatus(func(s *Status) { s.Shaper = &shaper.Status{Supported: true, Users: 1} })
+	n := &spec.Node{WireGuardLinks: []spec.WireGuardLink{{}}}
+	err := a.prepareWireGuardShaping(context.Background(), n, []shaper.Limit{{UserID: 1, Mbps: 20}})
+	if err == nil || a.Status().Shaper.Error == "" {
+		t.Fatal("shared early failure left old success", err, a.Status().Shaper)
 	}
 }
