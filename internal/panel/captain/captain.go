@@ -59,6 +59,7 @@ type Client struct {
 	fwdSeen        string // revision last returned by Forwards()
 	upgradeTo      string // from the last report response
 	addresses      *agentproto.PublicAddresses
+	addressesURL   string // observation epoch: never report against another origin
 	configSession  string // random per Client; never restored from a snapshot
 	configRejected bool   // delivery evidence is revoked even when offline recovery is disabled
 	nodeConfig     panel.ConfigState
@@ -468,7 +469,10 @@ func (c *Client) ConsumedRevisions() (nodeUsers, forwards string) {
 // Report implements panel.Reporter: one combined POST per push interval.
 func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error) {
 	c.mu.Lock()
-	rep.PublicAddresses = c.addresses
+	rep.PublicAddresses = nil
+	if c.addressesURL == c.cfg.URL {
+		rep.PublicAddresses = c.addresses
+	}
 	if c.state != nil {
 		rep.Revision = c.state.Revision
 	}
@@ -572,10 +576,14 @@ func (c *Client) TrafficIdentity() string {
 // One serial sampler per driver, including monitor-only nodes. Network I/O is
 // independent of reports and config pulls, and is cancelled on driver shutdown.
 func (c *Client) watchAddresses() {
-	c.watchAddressSamples(dns.ObservePublicAddresses)
+	origin := c.cfg.URL // immutable for this driver; reconnects create a new Client
+	c.watchAddressSamples(func(ctx context.Context) agentproto.PublicAddresses {
+		return dns.ObservePublicAddressesWithFallback(ctx, origin)
+	})
 }
 
 func (c *Client) watchAddressSamples(observe func(context.Context) agentproto.PublicAddresses) {
+	origin := c.cfg.URL
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -599,7 +607,10 @@ func (c *Client) watchAddressSamples(observe func(context.Context) agentproto.Pu
 			return
 		}
 		c.mu.Lock()
-		c.addresses = &sample
+		if c.cfg.URL == origin {
+			c.addresses = &sample
+			c.addressesURL = origin
+		}
 		c.mu.Unlock()
 		timer.Reset(addressProbeInterval(time.Since(started)))
 		select {

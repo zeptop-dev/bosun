@@ -80,3 +80,19 @@ func TestAddressSamplingCancelsInflightProbe(t *testing.T) {
 		}
 	})
 }
+
+func TestAddressSamplingDoesNotPublishAfterOriginChange(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := &Client{cfg: Config{URL: "https://example.com:2096"}, stop: make(chan struct{})}
+		go c.watchAddressSamples(func(context.Context) agentproto.PublicAddresses {
+			c.cfg.URL = "https://example.com:443"
+			return agentproto.PublicAddresses{SampledAt: time.Now().Unix(), FallbackIPv4: &agentproto.PublicAddressFallback{Address: "198.51.100.20", Origin: "https://example.com:2096"}}
+		})
+		synctest.Wait()
+		close(c.stop)
+		synctest.Wait()
+		if c.addresses != nil {
+			t.Fatal("observation crossed connection epoch")
+		}
+	})
+}

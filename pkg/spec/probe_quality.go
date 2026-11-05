@@ -51,6 +51,9 @@ type PingQuality struct {
 	Type            string      `json:"type"` // icmp | tcp | tcp_reachability | http | download
 	IntervalSeconds int         `json:"interval_seconds"`
 	Window          ProbeWindow `json:"window"`
+	// Earliest actual completion time included in Window, not a sequence/interval estimate.
+	// Zero means unknown; receivers must normalize it with the latest measurement clock.
+	WindowStartedAt int64 `json:"window_started_at,omitempty"`
 	// Recent contains up to 60 unacknowledged attempts on Captain beats only.
 	// Replays are deduplicated by (node, task, name, epoch, sequence).
 	Recent []ProbeMeasurement `json:"recent,omitempty"`

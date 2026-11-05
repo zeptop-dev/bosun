@@ -97,7 +97,7 @@ result in `/var/tmp/bosun-removal-JOB_ID/` with root-only permissions. See
 for retry and recovery. Selecting record-only deletion does not convert or stop
 bosun; its cached configuration can keep serving traffic.
 
-## Installer connectivity checks (unreleased)
+## Installer connectivity checks (v0.90.0)
 
 Before install or upgrade downloads, a supporting installer checks the configured
 Captain URL anonymously and reports DNS, connection, TLS, redirect or proxy
@@ -1498,6 +1498,21 @@ that family into automatic following; explicit NAT/line entries and WG endpoints
 are not overwritten. OS-level routing/VPNs can affect the observed exit address,
 which is not proof that a public listener is reachable there. See Captain's node
 guide for confirmation, freshness and automatic-DNS requirements.
+
+When the normal HTTPS sources fail, current bosun builds also try an anonymous
+`/cdn-cgi/trace` request on the configured Captain HTTPS origin, preserving its
+port (for example `https://example.com:2096`). This works when that origin is
+proxied by Cloudflare; a direct Captain or another reverse proxy may return 404.
+No extra setting, port scan, or external fallback URL is needed. The request uses
+normal TLS verification, forces IPv4 or IPv6, ignores environment proxies, and
+never sends Captain credentials or follows redirects.
+
+A successful trace is a **single-source advisory observation**. Captain displays
+it separately with its source and time; it is never eligible for automatic entry
+or DNS updates, even after repeated matching results. Older Captains ignore the
+new optional fields. Missing IPv6 connectivity remains unknown, and an OS VPN
+can still affect the observed exit. Fallback observations belong to the current
+Captain connection and are not restored across a driver restart.
 
 ### Three-carrier return-route diagnostics (Captain 1.21 / bosun 0.69)
 

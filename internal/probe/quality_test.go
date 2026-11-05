@@ -142,7 +142,7 @@ func TestResultsKeepTimeAndBatchUntilAcknowledged(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	first := r.Batch()
-	if len(first) != 1 || len(first[0].Quality.Recent) != 1 {
+	if len(first) != 1 || len(first[0].Quality.Recent) != 1 || first[0].Quality.WindowStartedAt != first[0].At {
 		t.Fatal(first)
 	}
 	if len(r.Results()[0].Quality.Recent) != 0 || len(r.Batch()[0].Quality.Recent) != 1 {
@@ -239,5 +239,36 @@ func TestLineAndServiceReachabilityRemainDistinct(t *testing.T) {
 				t.Fatalf("reachability policy: %+v", got)
 			}
 		})
+	}
+}
+
+func TestWindowStartedAtUsesActualIncludedSamples(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		samples []spec.ProbeMeasurement
+		want    int64
+	}{
+		{"empty", nil, 0},
+		{"gaps", []spec.ProbeMeasurement{{Sequence: 1, At: 100}, {Sequence: 4, At: 500}, {Sequence: 9, At: 900}}, 100},
+		{"backward clock", []spec.ProbeMeasurement{{Sequence: 1, At: 1000}, {Sequence: 2, At: 900}, {Sequence: 3, At: 950}}, 900},
+		{"unknown", []spec.ProbeMeasurement{{Sequence: 1, At: 100}, {Sequence: 2, At: 0}}, 0},
+		{"failed sample", []spec.ProbeMeasurement{{Sequence: 1, At: 100, LatencyMs: -1}, {Sequence: 2, At: 110, LatencyMs: 1}}, 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := windowStartedAt(tc.samples); got != tc.want {
+				t.Fatalf("got %d want %d", got, tc.want)
+			}
+		})
+	}
+	samples := make([]spec.ProbeMeasurement, ringSize+5)
+	for i := range samples {
+		samples[i] = spec.ProbeMeasurement{Sequence: uint64(i + 1), At: int64(i + 100)}
+	}
+	samples[0].At = 0 // An old unacknowledged sample is outside the statistical window.
+	if got := windowStartedAt(samples); got != 105 {
+		t.Fatalf("included pending samples outside window: %d", got)
+	}
+	if w := windowStats(samples); w.Attempts != ringSize {
+		t.Fatal(w)
 	}
 }

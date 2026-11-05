@@ -1,6 +1,9 @@
 # Changelog
 
-- **Unreleased** — Check a configured Captain endpoint anonymously before installer and upgrade downloads, with bounded TLS/HTTP checks and actionable proxy errors. Preserve older main listeners, HTTP/path-prefix endpoints, GitHub-only installations and offline uninstall. Ignore curlrc settings for credential-bearing downloads.
+- **v0.90.0** (2026-11-05) — Observe public IPs through the configured Captain HTTPS origin as an automatic, anonymous high-port fallback when normal independent sources fail. Keep single-source observations separate from authoritative address consensus and automatic entry/DNS updates; preserve strict TLS, family selection, no-proxy/no-redirect behavior and bounded requests.
+  - Report the actual first sample time of each rolling probe window so Captain can distinguish current-plan statistics from samples collected before a plan change. Keep the latest latency and original sample history independently usable.
+  - Check a configured Captain endpoint anonymously before installer and upgrade downloads, with bounded TLS/HTTP checks and actionable proxy errors. Preserve older main listeners, HTTP/path-prefix endpoints, GitHub-only installations and offline uninstall. Ignore curlrc settings for credential-bearing downloads.
+  - Add real compiled TCP path acceptance coverage, including per-hop payload evidence and first-hop failure fallback. Default proxy-core versions and existing protocol fields remain unchanged.
 
 One entry per release tag, newest first, condensed from the commit subjects
 between that tag and the previous one (`git log --format=%s <prev>..<tag>`).

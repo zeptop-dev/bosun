@@ -353,6 +353,25 @@ func (r *Runner) httpQuality(parent context.Context, t spec.PingTask) (m spec.Pr
 	return
 }
 
+// The reporting queue is longer than the statistical window. Only include the
+// same last ringSize samples as windowStats, and take the minimum wall time:
+// scheduler gaps and backward clock steps invalidate sequence-based estimates.
+func windowStartedAt(samples []spec.ProbeMeasurement) int64 {
+	if len(samples) > ringSize {
+		samples = samples[len(samples)-ringSize:]
+	}
+	var earliest int64
+	for _, m := range samples {
+		if m.At <= 0 {
+			return 0
+		}
+		if earliest == 0 || m.At < earliest {
+			earliest = m.At
+		}
+	}
+	return earliest
+}
+
 func windowStats(samples []spec.ProbeMeasurement) spec.ProbeWindow {
 	if len(samples) > ringSize {
 		samples = samples[len(samples)-ringSize:]
