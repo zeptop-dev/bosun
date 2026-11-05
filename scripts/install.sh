@@ -286,8 +286,9 @@ captain_preflight() {
 
 # In Captain mode no redirect may send bootstrap credentials to another host.
 # The permanent token is read from a private header file, never put in argv/URL.
+# Ignore curlrc: it can add extra URLs, credentials or TLS overrides to a fetch.
 fetch() {
-  if [ "$DOWNLOAD_SOURCE" != captain ]; then curl -fsSL "$@"; return; fi
+  if [ "$DOWNLOAD_SOURCE" != captain ]; then curl -q -fsSL "$@"; return; fi
   auth_file=$(umask 077; mktemp "$TMP/captain-headers.XXXXXX")
   if [ -z "$PAIR" ] && [ -s "$TOKEN_FILE" ]; then
     token=$(cat "$TOKEN_FILE")
@@ -298,7 +299,7 @@ fetch() {
     case "$PAIR" in *[!a-zA-Z0-9_-]*|'') rm -f "$auth_file"; echo 'invalid pairing code' >&2; return 1 ;; esac
     printf 'X-Bosun-Pair-Code: %s\n' "$PAIR" > "$auth_file"
   fi
-  if curl -fsSL --globoff --max-redirs 0 --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 600 --header "@$auth_file" "$@"; then
+  if curl -q -fsSL --globoff --max-redirs 0 --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 600 --header "@$auth_file" "$@"; then
     rm -f "$auth_file"; return 0
   else
     result=$?; rm -f "$auth_file"; return "$result"
