@@ -609,7 +609,12 @@ func uniq(in []string) []string {
 func checkShaper(_ context.Context, d *Deps) []Check {
 	c := Check{ID: "shaper", Name: "Per-user speed limits", Status: Skip, Detail: "no user speed limits configured; shaping has not been verified"}
 	requested := 0
+	planIncomplete := false
 	if d.Node != nil {
+		planned := map[int64]int{}
+		for _, u := range d.Users {
+			planned[u.ID] = d.Node.EffectiveSpeedLimit(u)
+		}
 		seen := map[int64]bool{}
 		count := func(users []spec.User) {
 			for _, u := range users {
@@ -621,7 +626,13 @@ func checkShaper(_ context.Context, d *Deps) []Check {
 		}
 		count(d.Users)
 		for _, ib := range d.Node.Inbounds {
-			count(ib.EffectiveUsers(d.Users))
+			users := ib.EffectiveUsers(d.Users)
+			count(users)
+			for _, u := range users {
+				if want := d.Node.EffectiveSpeedLimit(u); want > 0 && planned[u.ID] != want {
+					planIncomplete = true
+				}
+			}
 		}
 	} else if d.Shaper != nil {
 		requested = d.Shaper.Users
@@ -649,6 +660,8 @@ func checkShaper(_ context.Context, d *Deps) []Check {
 		c.Detail = fmt.Sprintf("%d users shaped on %s, upload only — %s", st.Users, st.Interface, st.DownloadError)
 	case st.Users == 0:
 		c.Status, c.Detail = Warn, "user speed limits requested; no users have an applied shaping result"
+	case planIncomplete || st.Users != requested:
+		c.Status, c.Detail = Warn, "some requested user or inbound-specific speed limits are not represented by the applied shaping result"
 	default:
 		c.Status, c.Detail = OK, fmt.Sprintf("%d users shaped on %s", st.Users, st.Interface)
 	}

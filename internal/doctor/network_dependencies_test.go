@@ -60,3 +60,17 @@ func TestIsolationDiagnosticsSeparateAccountAndFirewall(t *testing.T) {
 		})
 	}
 }
+
+func TestShapingDiagnosticsDoNotApprovePartialScopedLimits(t *testing.T) {
+	for _, scoped := range []spec.User{{ID: 2, SpeedLimitMbps: 20}, {ID: 1, SpeedLimitMbps: 20}} {
+		d := Deps{
+			Node:   &spec.Node{Inbounds: []spec.Inbound{{ScopedUsers: true, Users: []spec.User{scoped}}}},
+			Users:  []spec.User{{ID: 1, SpeedLimitMbps: 10}},
+			Shaper: &shaper.Status{Supported: true, Users: 1, Interface: "eth0"},
+		}
+		c := checkShaper(context.Background(), &d)[0]
+		if c.Status != Warn || !strings.Contains(c.Detail, "inbound-specific") {
+			t.Fatalf("partial scoped limit approved: %+v", c)
+		}
+	}
+}
