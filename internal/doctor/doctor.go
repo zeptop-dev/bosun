@@ -607,24 +607,62 @@ func uniq(in []string) []string {
 
 // checkShaper reports on per-user speed limits.
 func checkShaper(_ context.Context, d *Deps) []Check {
-	c := Check{ID: "shaper", Name: "Per-user speed limits", Status: Skip, Detail: "no limits configured"}
+	c := Check{ID: "shaper", Name: "Per-user speed limits", Status: Skip, Detail: "no user speed limits configured; shaping has not been verified"}
+	requested := 0
+	if d.Node != nil {
+		seen := map[int64]bool{}
+		count := func(users []spec.User) {
+			for _, u := range users {
+				if d.Node.EffectiveSpeedLimit(u) > 0 && !seen[u.ID] {
+					seen[u.ID] = true
+					requested++
+				}
+			}
+		}
+		count(d.Users)
+		for _, ib := range d.Node.Inbounds {
+			count(ib.EffectiveUsers(d.Users))
+		}
+	} else if d.Shaper != nil {
+		requested = d.Shaper.Users
+	}
 	if d.Shaper == nil {
+		if requested > 0 {
+			c.Status, c.Detail = Warn, fmt.Sprintf("speed limits requested for %d users; no applied shaping result yet", requested)
+		}
 		return []Check{c}
 	}
+	st := d.Shaper
 	switch {
-	case !d.Shaper.Supported:
-		c.Status, c.Detail = Warn, "limits are configured but this host cannot shape (needs Linux with nft and tc); users run unlimited"
-	case d.Shaper.Error != "":
-		c.Status, c.Detail = Fail, d.Shaper.Error
-	case d.Shaper.DownloadError != "":
-		// Upload is limited, download is not: worth a warning, not a
-		// failure, and the operator needs to know which half is missing.
+	case requested == 0 && !st.Supported:
+		c.Detail += "; " + shapingDependencyDetail(st)
+	case !st.Supported:
+		c.Status, c.Detail = Warn, "user speed limits are not applied; "+shapingDependencyDetail(st)
+	case st.Error != "":
+		c.Status, c.Detail = Fail, "could not apply or remove speed-limit rules: "+st.Error+"; on LXC, check host network capabilities and kernel support (HTB/IFB/tc actions)"
+	case requested == 0 && st.Users > 0:
+		c.Status, c.Detail = Warn, "no user speed limits requested; previous shaping state is awaiting reconciliation"
+	case requested == 0:
+		// Ready tools alone are not evidence of working traffic shaping.
+	case st.DownloadError != "":
 		c.Status = Warn
-		c.Detail = fmt.Sprintf("%d users shaped on %s, upload only — %s", d.Shaper.Users, d.Shaper.Interface, d.Shaper.DownloadError)
+		c.Detail = fmt.Sprintf("%d users shaped on %s, upload only — %s", st.Users, st.Interface, st.DownloadError)
+	case st.Users == 0:
+		c.Status, c.Detail = Warn, "user speed limits requested; no users have an applied shaping result"
 	default:
-		c.Status, c.Detail = OK, fmt.Sprintf("%d users shaped on %s", d.Shaper.Users, d.Shaper.Interface)
+		c.Status, c.Detail = OK, fmt.Sprintf("%d users shaped on %s", st.Users, st.Interface)
 	}
 	return []Check{c}
+}
+
+func shapingDependencyDetail(st *shaper.Status) string {
+	if len(st.MissingTools) > 0 {
+		return "missing executable(s) in bosun service PATH: " + strings.Join(st.MissingTools, ", ")
+	}
+	if st.Error != "" {
+		return st.Error
+	}
+	return "requires Linux with nft, tc and ip"
 }
 
 // checkIsolation reports whether the cores run as their own account and
@@ -640,11 +678,17 @@ func checkIsolation(_ context.Context, d *Deps) []Check {
 	case d.CoreUser == "":
 		c.Status, c.Detail = Warn, "cores run as bosun (root); set cores.user (the installer does for new nodes) so they get only CAP_NET_BIND_SERVICE"
 	case d.Egress == nil:
-		c.Status, c.Detail = Warn, fmt.Sprintf("cores run as %s; egress guard is off (cores.egress_guard)", d.CoreUser)
+		c.Status, c.Detail = Warn, fmt.Sprintf("core account %s is configured; no applied egress-guard result", d.CoreUser)
 	case !d.Egress.Supported:
-		c.Status, c.Detail = Warn, fmt.Sprintf("cores run as %s; egress guard needs Linux with nft: %s", d.CoreUser, d.Egress.Error)
+		detail := d.Egress.Error
+		if len(d.Egress.MissingTools) > 0 {
+			detail = "missing executable(s) in bosun service PATH: " + strings.Join(d.Egress.MissingTools, ", ")
+		} else if detail == "" {
+			detail = "requires Linux with nft"
+		}
+		c.Status, c.Detail = Warn, fmt.Sprintf("core account %s is configured; egress guard is not applied: %s", d.CoreUser, detail)
 	case d.Egress.Error != "":
-		c.Status, c.Detail = Fail, d.Egress.Error
+		c.Status, c.Detail = Fail, fmt.Sprintf("core account %s is configured; egress-guard rule application failed: %s; on LXC, check host network capabilities and nftables kernel support", d.CoreUser, d.Egress.Error)
 	case !d.Egress.Enabled:
 		c.Status, c.Detail = Warn, fmt.Sprintf("destination guard is disabled; root-only control ports: %s", joinPorts(d.Egress.Protected))
 	default:
@@ -655,7 +699,7 @@ func checkIsolation(_ context.Context, d *Deps) []Check {
 		if n := len(d.Egress.Protected); n > 0 {
 			extra += fmt.Sprintf("; the cores' own control ports (%s) are root-only", joinPorts(d.Egress.Protected))
 		}
-		c.Status, c.Detail = OK, fmt.Sprintf("cores run as %s (uid %d); new connections to private, link-local and metadata ranges are dropped (%d exemption(s))%s", d.CoreUser, d.Egress.UID, d.Egress.Allowed+d.Egress.Upstreams, extra)
+		c.Status, c.Detail = OK, fmt.Sprintf("core account %s (uid %d) is configured; egress-guard rules applied: new connections to private, link-local and metadata ranges are dropped (%d exemption(s))%s", d.CoreUser, d.Egress.UID, d.Egress.Allowed+d.Egress.Upstreams, extra)
 	}
 	return []Check{c}
 }

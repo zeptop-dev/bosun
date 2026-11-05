@@ -32,10 +32,11 @@ type Limit struct {
 
 // Status is what the UI and doctor show.
 type Status struct {
-	Supported bool   `json:"supported"`
-	Interface string `json:"interface,omitempty"`
-	Users     int    `json:"users"`
-	Error     string `json:"error,omitempty"`
+	Supported    bool     `json:"supported"`
+	Interface    string   `json:"interface,omitempty"`
+	Users        int      `json:"users"`
+	Error        string   `json:"error,omitempty"`
+	MissingTools []string `json:"missing_tools,omitempty"`
 	// NestedUnder is set when someone else already shapes this interface
 	// (a VPS init script capping the line, say) and the per-user classes
 	// hang under their class instead of replacing their root qdisc.
@@ -112,17 +113,24 @@ func (s *Shaper) Status() Status {
 	return s.status
 }
 
-// Supported reports whether this host can shape at all.
-func (s *Shaper) Supported() bool {
-	if runtime.GOOS != "linux" && s.Run == nil {
-		return false
-	}
+// MissingTools lists executables absent from the agent's current PATH.
+// Finding them is only a prerequisite; kernel permissions are checked by Apply.
+func (s *Shaper) MissingTools() []string {
 	if s.Run != nil {
-		return true
+		return nil
 	}
-	_, e1 := exec.LookPath("nft")
-	_, e2 := exec.LookPath("tc")
-	return e1 == nil && e2 == nil
+	var missing []string
+	for _, name := range []string{"nft", "tc", "ip"} {
+		if _, err := exec.LookPath(name); err != nil {
+			missing = append(missing, name)
+		}
+	}
+	return missing
+}
+
+// Supported checks local prerequisites, not whether the kernel will accept rules.
+func (s *Shaper) Supported() bool {
+	return s.Run != nil || (runtime.GOOS == "linux" && len(s.MissingTools()) == 0)
 }
 
 // Apply installs exactly these limits (an empty list removes everything).
@@ -143,11 +151,16 @@ func (s *Shaper) Apply(ctx context.Context, limits []Limit) error {
 	}
 	s.mu.Unlock()
 	if !s.Supported() {
-		s.setStatus(Status{Supported: false, Users: len(limits), Error: "needs Linux with nft and tc"})
+		missing := s.MissingTools()
+		detail := "requires Linux with nft, tc and ip"
+		if runtime.GOOS == "linux" && len(missing) > 0 {
+			detail = "missing executable(s) in bosun service PATH: " + strings.Join(missing, ", ")
+		}
+		s.setStatus(Status{Supported: false, Users: len(limits), MissingTools: missing, Error: detail})
 		if len(limits) == 0 {
 			return nil
 		}
-		return errors.New("shaper: needs Linux with nft and tc")
+		return errors.New("shaper: " + detail)
 	}
 	if len(limits) == 0 {
 		err := s.clear(ctx)

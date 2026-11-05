@@ -34,14 +34,15 @@ import (
 
 // Status is what the doctor shows.
 type Status struct {
-	Enabled   bool   `json:"enabled"`
-	Upstreams int    `json:"upstreams"`
-	Supported bool   `json:"supported"`
-	UID       int    `json:"uid"`
-	Allowed   int    `json:"allowed"`
-	Loopback  bool   `json:"loopback"`  // loopback closed except LoopbackPorts
-	Protected []int  `json:"protected"` // control ports only root may reach
-	Error     string `json:"error,omitempty"`
+	Enabled      bool     `json:"enabled"`
+	Upstreams    int      `json:"upstreams"`
+	Supported    bool     `json:"supported"`
+	UID          int      `json:"uid"`
+	Allowed      int      `json:"allowed"`
+	Loopback     bool     `json:"loopback"`  // loopback closed except LoopbackPorts
+	Protected    []int    `json:"protected"` // control ports only root may reach
+	Error        string   `json:"error,omitempty"`
+	MissingTools []string `json:"missing_tools,omitempty"`
 }
 
 const table = "bosun_egress"
@@ -105,16 +106,20 @@ func (g *Guard) run(ctx context.Context, stdin string, name string, args ...stri
 	return out.Bytes(), nil
 }
 
-// Supported reports whether this host can enforce at all.
-func (g *Guard) Supported() bool {
+// MissingTools checks the running service's PATH without changing kernel rules.
+func (g *Guard) MissingTools() []string {
 	if g.Run != nil {
-		return true
+		return nil
 	}
-	if runtime.GOOS != "linux" {
-		return false
+	if _, err := exec.LookPath("nft"); err != nil {
+		return []string{"nft"}
 	}
-	_, err := exec.LookPath("nft")
-	return err == nil
+	return nil
+}
+
+// Supported checks prerequisites; Apply establishes whether kernel access works.
+func (g *Guard) Supported() bool {
+	return g.Run != nil || (runtime.GOOS == "linux" && len(g.MissingTools()) == 0)
 }
 
 // Status returns the last known state.
@@ -239,11 +244,16 @@ func (g *Guard) Apply(ctx context.Context, uid int, opt Options) error {
 		return nil
 	}
 	if !g.Supported() {
-		g.set(Status{Supported: false, UID: uid, Allowed: len(opt.Allow), Error: "needs Linux with nft"})
+		missing := g.MissingTools()
+		detail := "requires Linux with nft"
+		if runtime.GOOS == "linux" && len(missing) > 0 {
+			detail = "missing executable in bosun service PATH: nft"
+		}
+		g.set(Status{Supported: false, UID: uid, Allowed: len(opt.Allow), MissingTools: missing, Error: detail})
 		if script == "" {
 			return nil
 		}
-		return fmt.Errorf("egressguard: needs Linux with nft")
+		return fmt.Errorf("egressguard: %s", detail)
 	}
 	var err error
 	if script == "" {
