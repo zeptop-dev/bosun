@@ -206,7 +206,7 @@ func (r *Runner) qualityLoop(ctx context.Context, t spec.PingTask, reachability 
 			kind = "tcp_reachability"
 		}
 		w := windowStats(rec.samples)
-		rec.result = spec.PingResult{TaskID: t.ID, Name: t.Name, Family: t.Family, Series: t.Series, At: m.At, LatencyMs: m.LatencyMs, Mbps: m.Mbps, Loss: float64(w.Failed) * 100 / float64(w.Attempts), Quality: &spec.PingQuality{ProbeMeasurement: m, Epoch: epoch, Type: kind, IntervalSeconds: int(iv / time.Second), Window: w}}
+		rec.result = spec.PingResult{TaskID: t.ID, Name: t.Name, Family: t.Family, Series: t.Series, At: m.At, LatencyMs: m.LatencyMs, Mbps: m.Mbps, Loss: float64(w.Failed) * 100 / float64(w.Attempts), Quality: &spec.PingQuality{ProbeMeasurement: m, Epoch: epoch, Type: kind, IntervalSeconds: int(iv / time.Second), Window: w, WindowStartedAt: windowStartedAt(rec.samples)}}
 		r.mu.Unlock()
 		select {
 		case <-ctx.Done():
