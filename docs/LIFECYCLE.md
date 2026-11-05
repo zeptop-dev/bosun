@@ -109,3 +109,28 @@ Captain-requested node upgrades use this same host service. Without registration
 Docker nodes keep refusing binary replacement. Host uninstall additionally clears
 bosun-owned nft/tc rules and tracked firewall openings after stopping its processes;
 shared ingress filters and unrelated firewall rules are preserved.
+
+## Captain connectivity preflight
+
+Supporting install and upgrade scripts anonymously check a known Captain URL
+before dependency or update-worker downloads. `/api/agent/health` must return
+`ok: true` and `service: captain-agent`; on a missing or non-Agent route the
+installer tries `/api/health` for the older main-listener contract. Existing
+HTTP and path-prefix origins remain supported for GitHub-mode configurations.
+TLS certificates are verified normally. Credentials, query strings and fragments
+are forbidden in the URL. A failed check stops before sending the pairing code
+or node token in subsequent downloads; the initial bootstrap script download
+necessarily happened earlier.
+
+Each request has a five-second connection limit, ten-second total limit and a
+bounded small response. Redirects, HTML, oversized or malformed responses do not
+count as success. Errors distinguish DNS, connection, timeout and TLS failures
+from HTTP 521/522/525/526 origin failures without printing remote content or the
+configured URL. This is an immediate endpoint check, not a guarantee that every
+package exists or future requests will succeed. Both anonymous checks and
+subsequent downloads ignore local curlrc configuration.
+
+No Captain URL means no Captain check; plain GitHub/standalone installs work as
+before. `uninstall` and `enable-web-upgrade` skip this preflight so offline cached
+worker removal remains available. Existing token destination checks run first.
+The script does not rewrite the saved origin or migrate token-bound journals.

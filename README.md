@@ -97,6 +97,15 @@ result in `/var/tmp/bosun-removal-JOB_ID/` with root-only permissions. See
 for retry and recovery. Selecting record-only deletion does not convert or stop
 bosun; its cached configuration can keep serving traffic.
 
+## Installer connectivity checks (unreleased)
+
+Before install or upgrade downloads, a supporting installer checks the configured
+Captain URL anonymously and reports DNS, connection, TLS, redirect or proxy
+failures. Both the dedicated Agent health route and older main health route are
+supported. No-Captain GitHub installations and offline uninstall skip the check.
+The initial script download happens before these checks; a passed health check
+is not proof that all later packages are available. See [lifecycle checks](docs/LIFECYCLE.md#captain-connectivity-preflight).
+
 ## Captain package delivery
 
 With bosun v0.89.0 or newer and a Captain that supports agent downloads, the
