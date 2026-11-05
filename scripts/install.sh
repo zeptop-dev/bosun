@@ -1,4 +1,5 @@
 #!/bin/sh
+# bosun-installer-feature: system-packages-v1
 # bosun installer for Linux (systemd, OpenRC, or OpenWrt monitor-only). Usage:
 #   sh install.sh                                   standalone: asks for the panel login and port
 #   sh install.sh --yes                             standalone with defaults (admin / random / :2053)
@@ -7,6 +8,7 @@
 #   sh install.sh uninstall [--keep-data]     remove the service, binary, config (and data)
 #   sh install.sh upgrade [--version vX.Y.Z]
 #   sh install.sh --mode docker [--web-upgrade]
+#   sh install.sh --system-packages auto|install|skip  # install/reinstall only
 #   sh install.sh enable-web-upgrade
 # Re-running upgrades the binary and keeps /etc/bosun/config.yaml. Piped
 # through sh the script never touches the disk.
@@ -28,7 +30,7 @@ OPENWRT=0
 DATA_DIR=/var/lib/bosun
 [ "$OPENWRT" != 1 ] || DATA_DIR=/etc/bosun/data
 SAVED_DOWNLOADS_KNOWN=0 TOKEN_FILE_SET=0
-DOWNLOAD_SOURCE="" TOKEN_FILE="$DATA_DIR/captain.token"
+DOWNLOAD_SOURCE="" TOKEN_FILE="$DATA_DIR/captain.token" SYSTEM_PACKAGES=auto
 CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN="" ACTION=install KEEP_DATA=0 YES=0 PANEL_USER="" PANEL_PASS=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -40,6 +42,7 @@ while [ $# -gt 0 ]; do
     --yes|-y) YES=1; shift ;;
     --captain) CAPTAIN="$2"; shift 2 ;;
     --download-source) DOWNLOAD_SOURCE="$2"; shift 2 ;;
+    --system-packages) SYSTEM_PACKAGES="${2:-}"; [ $# -ge 2 ] || { echo "--system-packages requires auto, install or skip" >&2; exit 2; }; shift 2 ;;
     --token-file) TOKEN_FILE="$2"; TOKEN_FILE_SET=1; shift 2 ;;
     --pair) PAIR="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
@@ -49,6 +52,11 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+case "$SYSTEM_PACKAGES" in auto|install|skip) ;; *) echo "--system-packages must be auto, install or skip" >&2; exit 2 ;; esac
+if [ "$ACTION" != install ] && [ "$SYSTEM_PACKAGES" != auto ]; then
+  echo '--system-packages install/skip is only supported for install/reinstall; upgrade and uninstall preserve their existing lifecycle.' >&2
+  exit 2
+fi
 [ "$(uname -s)" = Linux ] || { echo "Linux is required" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 
@@ -455,23 +463,128 @@ if [ "$DOWNLOAD_SOURCE" = captain ] && [ -f /etc/bosun/config.yaml ]; then
 fi
 if [ "$MODE" = binary ]; then mkdir -p /usr/local/bin; install_file 0755 "$TMP/bosun" /usr/local/bin/bosun.new; move_file /usr/local/bin/bosun.new /usr/local/bin/bosun; fi
 
-# nft and tc back the per-user speed limits, nft forwards and strict
-# ingress; minimal images (Debian cloud, Alpine) ship without them. Best
-# effort: bosun runs without them and the doctor says what is missing.
-if [ "$NODE_MODE" = full ] && [ "$MODE" = binary ] && { ! command -v nft >/dev/null || ! command -v tc >/dev/null || ! command -v ip >/dev/null || ! command -v wg >/dev/null; }; then
-  if [ "$DOWNLOAD_SOURCE" = captain ]; then
-    echo 'Captain delivers bosun and managed cores. Missing nftables/iproute2/wireguard-tools must be installed from a reachable OS package repository; automatic OS downloads are skipped.' >&2
-  else
-  echo "installing nftables, iproute2 and wireguard-tools (network enforcement and managed tunnels)"
-  if command -v apt-get >/dev/null; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables iproute2 wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
-  elif command -v apk >/dev/null; then
-    apk add -q nftables iproute2 iproute2-tc wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
-  elif command -v dnf >/dev/null; then
-    dnf install -y -q nftables iproute iproute-tc wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
+# System packages belong to the host's package manager, independently of the
+# bosun/core download source. The historical defaults remain: GitHub attempts
+# installation; Captain skips it unless the operator opts in explicitly.
+missing_network_tools() {
+  for network_tool in nft tc ip; do
+    command -v "$network_tool" >/dev/null 2>&1 || printf '%s ' "$network_tool"
+  done
+}
+
+# Never print or retain raw package-manager output: repository/proxy URLs can
+# contain credentials. Stream it into fixed diagnostic categories, so logs stay
+# bounded even for a very noisy package manager. Preserve its exit status through
+# a private side file (POSIX sh has no pipefail).
+package_attempt() {
+  package_label=$1; shift
+  (
+    umask 077
+    (if LC_ALL=C "$@"; then printf '0' > "$TMP/system-packages.rc"; else printf '%s' "$?" > "$TMP/system-packages.rc"; fi) 2>&1 |
+      LC_ALL=C awk '
+        { line=tolower($0)
+          if (line ~ /no space left|not enough (free )?space/) space=1
+          if (line ~ /could not get lock|unable to lock|database is locked|lock.*held/) lock=1
+          if (line ~ /permission denied|operation not permitted/) permission=1
+          if (line ~ /certificate|signature|no_pubkey|not signed|verification failed/) verification=1
+          if (line ~ /resolve|network is unreachable|failed to connect|timed out|timeout|temporary failure|connection refused/) network=1
+          if (line ~ /unable to locate|no installation candidate|no such package|unable to select packages|404|not found|no match for argument/) missing_package=1
+        }
+        END {
+          if (space) print "insufficient disk space"
+          else if (lock) print "another package manager holds the lock; retry after it finishes"
+          else if (permission) print "permission denied by the container or host"
+          else if (verification) print "repository TLS or signature verification failed; verification was not disabled"
+          else if (network) print "OS repository DNS or network access failed"
+          else if (missing_package) print "package or package index unavailable; check repository configuration and indexes"
+          else print "package manager failed; check the configured OS repositories"
+        }' > "$TMP/system-packages.reason"
+  )
+  package_rc=$(cat "$TMP/system-packages.rc")
+  if [ "$package_rc" != 0 ]; then
+    package_reason=$(cat "$TMP/system-packages.reason")
+    printf 'System packages: %s failed (exit %s): %s.\n' "$package_label" "$package_rc" "$package_reason" >&2
   fi
+  rm -f "$TMP/system-packages.rc" "$TMP/system-packages.reason"
+  return "$package_rc"
+}
+
+network_package_help() {
+  case "$network_manager" in
+    apt) echo 'Install manually: apt-get update && apt-get install -y nftables iproute2' >&2 ;;
+    apk) echo 'Install manually: apk add --update-cache nftables iproute2 iproute2-tc' >&2 ;;
+    dnf) echo 'Install manually: dnf install -y nftables iproute iproute-tc' >&2 ;;
+    *) echo 'Install nftables and the ip/tc utilities from the OS repositories (Alpine also needs iproute2-tc).' >&2 ;;
+  esac
+}
+
+prepare_system_packages() {
+  # No package changes on Docker hosts, monitor-only nodes or OpenWrt routers.
+  [ "$NODE_MODE" = full ] && [ "$MODE" = binary ] && [ "$OPENWRT" != 1 ] || return 0
+  network_install=$SYSTEM_PACKAGES
+  if [ "$network_install" = auto ]; then
+    if [ "$DOWNLOAD_SOURCE" = captain ]; then network_install=skip; else network_install=install; fi
   fi
-fi
+  network_manager=unknown
+  if command -v apt-get >/dev/null 2>&1; then network_manager=apt
+  elif command -v apk >/dev/null 2>&1; then network_manager=apk
+  elif command -v dnf >/dev/null 2>&1; then network_manager=dnf
+  fi
+  network_missing=$(missing_network_tools)
+  if [ -n "$network_missing" ]; then
+    printf 'Network dependencies missing from installer PATH: %s\n' "$network_missing" >&2
+    if [ "$network_install" = install ]; then
+      echo 'Installing network dependencies from the configured OS repositories.'
+      case "$network_manager" in
+        apt)
+          if ! DEBIAN_FRONTEND=noninteractive package_attempt 'apt-get network dependencies' apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o DPkg::Lock::Timeout=30 install -y -qq nftables iproute2; then
+            # Minimal Debian 11/12/13 templates often have absent/stale indexes.
+            # Refresh once and retry; optional WG packages are a separate step.
+            if package_attempt 'apt-get index refresh' apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update; then
+              DEBIAN_FRONTEND=noninteractive package_attempt 'apt-get network dependencies retry' apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o DPkg::Lock::Timeout=30 install -y -qq nftables iproute2 || true
+            fi
+          fi
+          ;;
+        apk) package_attempt 'apk network dependencies' apk add --update-cache -q nftables iproute2 iproute2-tc || true ;;
+        dnf) package_attempt 'dnf network dependencies' dnf install -y -q nftables iproute iproute-tc || true ;;
+        *) echo 'No supported OS package manager found; dependencies were not installed.' >&2 ;;
+      esac
+    else
+      echo 'OS package installation skipped. Captain distributes bosun and managed cores, not OS packages. Use --system-packages install to opt in.' >&2
+    fi
+    network_missing=$(missing_network_tools)
+    if [ -n "$network_missing" ]; then
+      printf 'Network dependencies still missing: %s\n' "$network_missing" >&2
+      network_package_help
+      echo 'Affected protection/limits are not ready. After installing dependencies, reapply the configuration or restart bosun; check Doctor for the actual result.' >&2
+    fi
+  fi
+  # WG tooling is optional for these checks. A failed WG package must never
+  # prevent nft/tc/ip from being installed successfully.
+  if ! command -v wg >/dev/null 2>&1; then
+    if [ "$network_install" = install ]; then
+      case "$network_manager" in
+        apt) DEBIAN_FRONTEND=noninteractive package_attempt 'apt-get optional WireGuard tools' apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o DPkg::Lock::Timeout=30 install -y -qq wireguard-tools || true ;;
+        apk) package_attempt 'apk optional WireGuard tools' apk add --update-cache -q wireguard-tools || true ;;
+        dnf) package_attempt 'dnf optional WireGuard tools' dnf install -y -q wireguard-tools || true ;;
+      esac
+    fi
+    command -v wg >/dev/null 2>&1 || echo 'Optional wg utility missing: managed WireGuard tunnels need wireguard-tools; this does not determine nft/tc readiness.' >&2
+  fi
+  if [ -z "$network_missing" ]; then
+    echo 'Network tools found: nft, tc and ip. Actual rule installation and traffic shaping are not yet verified.'
+  fi
+  if command -v nft >/dev/null 2>&1; then
+    if ! command -v timeout >/dev/null 2>&1; then
+      echo 'nft kernel access not checked: timeout utility unavailable. Doctor will report the applied configuration.' >&2
+    elif timeout 5 nft list tables >/dev/null 2>&1; then
+      echo 'nft kernel read access works. This does not prove rule-write permission or HTB/IFB traffic-shaping support.'
+    else
+      echo 'nft is installed but the kernel read check failed or timed out. In LXC, check host-granted network permissions and kernel support; installing packages alone may not resolve this.' >&2
+    fi
+  fi
+}
+prepare_system_packages
 
 # ask prints a prompt on the terminal and reads the answer from /dev/tty, so
 # the questions work even when the script itself arrives through a pipe.
