@@ -55,14 +55,22 @@ func (a *Agent) missingNetworkDependencies() uint8 {
 	return missing
 }
 
-func (a *Agent) recordDependencyApply(missing uint8) {
+func (a *Agent) recordDependencyApply(missing uint8, applyErr error) {
 	if !a.dependencyRecoveryAllowed() {
 		a.dependencyRecovery = dependencyRecovery{}
 		return
 	}
 	r := &a.dependencyRecovery
-	r.missing |= missing
+	r.missing |= missing | dependencyFailureMask(applyErr)
 	st := a.Status()
+	// Deferred shaping/egress helpers report partial enforcement instead of
+	// returning an apply error. Bound those real kernel failures as well.
+	if st.Egress != nil && st.Egress.Error != "" {
+		r.missing |= dependencyEgress
+	}
+	if st.Shaper != nil && (st.Shaper.Supported || st.Shaper.Users > 0) && (st.Shaper.Error != "" || st.Shaper.DownloadError != "") {
+		r.missing |= dependencyShaper
+	}
 	if r.missing&dependencyEgress != 0 && missing&dependencyEgress == 0 && st.Egress != nil && st.Egress.Supported && st.Egress.Error == "" {
 		r.missing &^= dependencyEgress
 	}
@@ -124,14 +132,17 @@ func (a *Agent) reconcileAfterPull(ctx context.Context, changed bool, at time.Ti
 
 // Mark only hard errors from helper initialization. A simultaneous, unrelated
 // core render/start error must retain the existing retry path.
-type networkDependencyError struct{ error }
+type networkDependencyError struct {
+	error
+	helper uint8
+}
 
 func (e *networkDependencyError) Unwrap() error { return e.error }
-func dependencyFailure(err error) error {
+func dependencyFailure(err error, helper uint8) error {
 	if err == nil {
 		return nil
 	}
-	return &networkDependencyError{err}
+	return &networkDependencyError{error: err, helper: helper}
 }
 func isDependencyFailure(err error) bool {
 	if err == nil {
@@ -156,4 +167,24 @@ func isDependencyFailure(err error) bool {
 		return isDependencyFailure(wrapped.Unwrap())
 	}
 	return false
+}
+
+func dependencyFailureMask(err error) uint8 {
+	if err == nil {
+		return 0
+	}
+	if e, ok := err.(*networkDependencyError); ok {
+		return e.helper
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var mask uint8
+		for _, e := range joined.Unwrap() {
+			mask |= dependencyFailureMask(e)
+		}
+		return mask
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return dependencyFailureMask(wrapped.Unwrap())
+	}
+	return 0
 }

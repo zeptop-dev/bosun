@@ -86,7 +86,11 @@ func (a *Agent) prepareWireGuard(ctx context.Context) error {
 			ready = a.wireGuard.ready()
 		}
 		if !ready {
-			return dependencyFailure(fmt.Errorf("reverse WireGuard requires Linux root, ip/wg/nft/tc, non-root cores and enabled egress protection"))
+			err := fmt.Errorf("reverse WireGuard requires Linux root, ip/wg/nft/tc, non-root cores and enabled egress protection")
+			if missing := a.missingNetworkDependencies(); missing != 0 {
+				return dependencyFailure(err, missing)
+			}
+			return err
 		}
 		if a.wireGuard == nil {
 			return fmt.Errorf("reverse WireGuard requires a persistent data directory")

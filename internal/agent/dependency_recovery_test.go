@@ -309,11 +309,64 @@ func TestDependencyRecoveryDoesNotSuppressIndependentCoreFailure(t *testing.T) {
 }
 
 func TestDependencyFailureClassificationPreservesIndependentCleanupErrors(t *testing.T) {
-	dependency := dependencyFailure(errors.New("nft denied"))
+	dependency := dependencyFailure(errors.New("nft denied"), dependencyEgress)
 	if !isDependencyFailure(errors.Join(dependency, nil)) {
 		t.Fatal("dependency error lost through cleanup join")
 	}
 	if isDependencyFailure(errors.Join(dependency, errors.New("accounting checkpoint failed"))) {
 		t.Fatal("independent cleanup failure lost its retry path")
+	}
+}
+
+func TestDependencyRecoveryBoundsPreinstalledKernelFailures(t *testing.T) {
+	for _, kind := range []string{"egress-hard", "shaper-partial"} {
+		t.Run(kind, func(t *testing.T) {
+			a, c := dependencyRig(t)
+			ctx := context.Background()
+			commands := 0
+			a.Egress.Run = func(context.Context, string, string, ...string) ([]byte, error) {
+				commands++
+				if kind == "egress-hard" {
+					return nil, errors.New("permission denied")
+				}
+				return nil, nil
+			}
+			a.Shaper.Run = func(context.Context, string, ...string) ([]byte, error) {
+				commands++
+				if kind == "shaper-partial" {
+					return nil, errors.New("ifb not supported")
+				}
+				return nil, nil
+			}
+			if missing := a.missingNetworkDependencies(); missing != 0 {
+				t.Fatal("tools should be installed", missing)
+			}
+			err := a.apply(ctx)
+			if kind == "egress-hard" && (err == nil || !a.coreDependencyFailure) {
+				t.Fatal("expected hard helper failure", err)
+			}
+			if kind == "shaper-partial" && err != nil {
+				t.Fatal(err)
+			}
+			if a.dependencyRecovery.missing == 0 {
+				t.Fatal("kernel failure was not armed")
+			}
+			at := time.Now()
+			for i := 0; i < dependencyRecoveryMax; i++ {
+				if !a.reconcileAfterPull(ctx, false, at) {
+					t.Fatal("missing attempt", i)
+				}
+				at = at.Add(5 * time.Minute)
+			}
+			beforeCommands, beforeRenders := commands, c.renders
+			for i := 0; i < 5; i++ {
+				if a.reconcileAfterPull(ctx, false, at.Add(time.Duration(i)*time.Hour)) {
+					t.Fatal("permanent kernel failure retried forever")
+				}
+			}
+			if beforeCommands != commands || beforeRenders != c.renders {
+				t.Fatal("exhausted retry performed writes")
+			}
+		})
 	}
 }

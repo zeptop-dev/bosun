@@ -122,7 +122,7 @@ func (a *Agent) apply(ctx context.Context) (err error) {
 		a.serviceControlPending.Store(a.coreDirty || a.forwardDirty || a.modeChanging.Load())
 	}()
 	missing := a.missingNetworkDependencies()
-	defer func() { a.recordDependencyApply(missing) }()
+	defer func() { a.recordDependencyApply(missing, err) }()
 	a.lastAttempt = time.Now()
 	err = a.wireGuardFailure(ctx, a.applyInner(ctx))
 	a.coreDirty = err != nil
@@ -311,7 +311,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 			a.configUserLimitsOmitted = true
 			a.statusMu.Unlock()
 			if node.HasPrivateAccess() || hasWireGuard(node) {
-				return errors.Join(dependencyFailure(fmt.Errorf("private access with speed limits requires Linux nft and tc")), a.stopPrivateCores(ctx))
+				return errors.Join(dependencyFailure(fmt.Errorf("private access with speed limits requires Linux nft and tc"), dependencyShaper), a.stopPrivateCores(ctx))
 			}
 			cp := *node
 			cp.UserSpeedLimitMbps = 0
@@ -334,7 +334,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		return err
 	}
 	if err := a.prepareWireGuardShaping(ctx, node, limits); err != nil {
-		return dependencyFailure(err)
+		return dependencyFailure(err, dependencyShaper)
 	}
 	if runas.SetNetAdmin(len(limits) > 0 || node.HasDualPrivateAccess()) && runas.Active() {
 		a.log.Info("core capabilities changed, restarting cores", "net_admin", len(limits) > 0)

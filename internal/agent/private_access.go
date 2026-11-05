@@ -54,7 +54,7 @@ func (a *Agent) preparePrivateAccess(ctx context.Context, node *spec.Node, limit
 		// core, including when the first received policy has no grants.
 		if a.privatePolicyKey == "" && a.Egress != nil && a.Egress.Supported() {
 			if err := a.applyEgress(ctx, node); err != nil {
-				return errors.Join(dependencyFailure(err), a.stopPrivateCores(ctx))
+				return errors.Join(dependencyFailure(err, dependencyEgress), a.stopPrivateCores(ctx))
 			}
 			a.privatePolicyKey = "null"
 		}
@@ -66,7 +66,7 @@ func (a *Agent) preparePrivateAccess(ctx context.Context, node *spec.Node, limit
 	}
 	if err != nil {
 		if a.missingNetworkDependencies() != 0 {
-			err = dependencyFailure(err)
+			err = dependencyFailure(err, dependencyEgress)
 		}
 		return errors.Join(err, a.stopPrivateCores(ctx))
 	}
@@ -84,11 +84,11 @@ func (a *Agent) preparePrivateAccess(ctx context.Context, node *spec.Node, limit
 		}
 	}
 	if err := a.applyEgress(ctx, node); err != nil {
-		return errors.Join(dependencyFailure(err), a.stopPrivateCores(ctx))
+		return errors.Join(dependencyFailure(err, dependencyEgress), a.stopPrivateCores(ctx))
 	}
 	if len(limits) > 0 && a.Shaper != nil && !hasWireGuardTransit(node) {
 		if err := a.Shaper.Apply(ctx, limits); err != nil {
-			return errors.Join(dependencyFailure(err), a.stopPrivateCores(ctx))
+			return errors.Join(dependencyFailure(err, dependencyShaper), a.stopPrivateCores(ctx))
 		}
 	}
 	a.privatePolicyKey = string(key)
