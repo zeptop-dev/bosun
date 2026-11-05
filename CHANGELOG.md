@@ -1,5 +1,7 @@
 # Changelog
 
+- **Unreleased** — Observe public IPs through the configured Captain HTTPS origin as an automatic, anonymous high-port fallback when normal independent sources fail. Keep these single-source results separate from authoritative address consensus and automatic entry/DNS updates; preserve strict TLS, family selection, no-proxy/no-redirect behavior and bounded requests.
+
 One entry per release tag, newest first, condensed from the commit subjects
 between that tag and the previous one (`git log --format=%s <prev>..<tag>`).
 Merge commits and formatting-only commits are left out. Binaries and
