@@ -187,10 +187,108 @@ if [ "$DOWNLOAD_SOURCE" = captain ]; then
   if [ "$ACTION" != uninstall ] && [ -z "$PAIR" ] && [ ! -s "$TOKEN_FILE" ]; then echo 'Captain downloads require a pairing code or an existing node token' >&2; exit 1; fi
 fi
 
+# Probe before downloading anything or constructing a credential header. The
+# dedicated listener and older main listeners intentionally use different health
+# contracts. A missing dedicated route alone never means Captain is unreachable.
+captain_preflight() {
+  case "$ACTION" in install|upgrade) ;; *) return 0 ;; esac
+  [ -n "$CAPTAIN" ] || return 0
+  # A URL carrying userinfo, query data or fragments must not reach curl, logs or
+  # a proxy. Keep historical HTTP and path-prefixed main endpoints working.
+  case "$CAPTAIN" in
+    *[[:space:][:cntrl:]]*) echo 'Captain preflight: invalid endpoint; whitespace and control characters are not allowed.' >&2; return 1 ;;
+  esac
+  printf '%s\n' "$CAPTAIN" | LC_ALL=C grep -Eq '^https?://(\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+)(:[0-9]+)?(/[a-zA-Z0-9._~/-]*)?$' || {
+    echo 'Captain preflight: invalid endpoint; use an HTTP(S) URL without credentials, query or fragment.' >&2; return 1
+  }
+  command -v curl >/dev/null || { echo 'Captain preflight: curl is required.' >&2; return 1; }
+  check_dir=$(umask 077; mktemp -d)
+  check_ok=0
+  for check_path in /api/agent/health /api/health; do
+    check_rc=0
+    # -q must be curl's first argument: local curlrc headers/auth must not turn
+    # an anonymous check into a credential-bearing request. Never follow redirects
+    # and never print curl diagnostics, response bodies or the supplied endpoint.
+    # ulimit also bounds chunked bodies on old curl versions whose max-filesize
+    # only checks Content-Length. It applies only to this short-lived subprocess.
+    check_http=$( (ulimit -f 16 || exit 1; curl -q -s --globoff --max-redirs 0 --proto '=http,https' --connect-timeout 5 --max-time 10 --max-filesize 4096 --output "$check_dir/body" --write-out '%{http_code}' "${CAPTAIN%/}$check_path") 2>/dev/null) || check_rc=$?
+    # Error pages can exceed the body cap. The HTTP status is still useful
+    # evidence, so classify it before a size/write error hides a proxy failure.
+    check_reason=""
+    case "$check_http" in
+      404|405) continue ;;
+      3??) check_reason='redirect refused; use the final Captain endpoint and check reverse-proxy rules.' ;;
+      521) check_reason='HTTP 521: the proxy could not connect to the origin listener.' ;;
+      522) check_reason='HTTP 522: the proxy timed out connecting to the origin; check the origin port and firewall.' ;;
+      525) check_reason='HTTP 525: TLS handshake failed between the proxy and origin.' ;;
+      526) check_reason='HTTP 526: the proxy rejected the origin certificate.' ;;
+      4??|5??) check_reason="HTTP $check_http: check reverse-proxy routing and access rules." ;;
+    esac
+    if [ -n "$check_reason" ]; then
+      echo "Captain preflight: $check_reason No pairing code or node token was sent." >&2
+      rm -rf "$check_dir"; return 1
+    fi
+    if [ "$check_rc" != 0 ]; then
+      case "$check_rc" in
+        5|6) check_reason='DNS resolution failed; check the Captain hostname and DNS resolver.' ;;
+        7) check_reason='connection failed; check the listener, published port and firewall from this node.' ;;
+        28) check_reason='connection or response timed out; check routing, port restrictions and firewall from this node.' ;;
+        35|51|58|59|60|64|66|77|80|82|83|90|91) check_reason='TLS verification or handshake failed; check hostname, certificate chain and system clock.' ;;
+        23|63|152|153) check_reason='health response exceeded the size limit; this may not be a Captain endpoint.' ;;
+        *) check_reason='HTTP transport failed before a valid health response.' ;;
+      esac
+      echo "Captain preflight: $check_reason No pairing code or node token was sent." >&2
+      rm -rf "$check_dir"; return 1
+    fi
+    if [ "$(wc -c < "$check_dir/body")" -gt 4096 ]; then
+      echo 'Captain preflight: health response exceeded the size limit; no credentials were sent.' >&2
+      rm -rf "$check_dir"; return 1
+    fi
+    case "$check_http" in
+      200)
+        # A small, flat health object is required, not a login/SPA/HTML page
+        # containing a success word. Unknown scalar fields are tolerated.
+        if awk -v kind="$check_path" '
+          { body=body $0 "\n" }
+          END {
+            # Health contract strings contain no whitespace. Preserve line breaks
+            # until checking quoted strings, then normalize JSON line whitespace.
+            for (i=1;i<=length(body);i++) {
+              ch=substr(body,i,1)
+              if (ch=="\"") quoted=!quoted
+              else if (quoted && ch ~ /[[:space:]]/) exit 1
+            }
+            gsub(/\n/," ",body)
+            if (body !~ /^[ \t\r\n]*\{/ || body !~ /\}[ \t\r\n]*$/) exit 1
+            sub(/^[ \t\r\n]*\{/,"",body); sub(/\}[ \t\r\n]*$/,"",body)
+            n=split(body,fields,","); ok=0; service=0; clock=0
+            for (i=1;i<=n;i++) {
+              if (fields[i] !~ /^[ \t\r\n]*"[a-zA-Z_]+"[ \t\r\n]*:[ \t\r\n]*("[a-zA-Z0-9_.:-]*"|true|false|null|-?[0-9]+)[ \t\r\n]*$/) exit 1
+              split(fields[i],parts,"\""); key=parts[2]
+              if (seen[key]++) exit 1
+              if (key=="ok") ok=(fields[i] ~ /:[ \t\r\n]*true[ \t\r\n]*$/)
+              if (key=="service") service=(fields[i] ~ /:[ \t\r\n]*"captain-agent"[ \t\r\n]*$/)
+              if (key=="time") clock=(fields[i] ~ /:[ \t\r\n]*[0-9]+[ \t\r\n]*$/)
+            }
+            if (kind=="/api/agent/health") exit !(ok && service)
+            exit !(ok && clock)
+          }' "$check_dir/body"; then check_ok=1; break; fi
+        ;;
+      *) echo 'Captain preflight: unexpected HTTP response; no pairing code or node token was sent.' >&2; rm -rf "$check_dir"; return 1 ;;
+    esac
+  done
+  rm -rf "$check_dir"
+  [ "$check_ok" = 1 ] || {
+    echo 'Captain preflight: neither Agent nor main health returned a compatible Captain response; check the endpoint and reverse-proxy paths. No pairing code or node token was sent.' >&2; return 1
+  }
+  echo 'Captain endpoint check passed (no credentials sent).'
+}
+
 # In Captain mode no redirect may send bootstrap credentials to another host.
 # The permanent token is read from a private header file, never put in argv/URL.
+# Ignore curlrc: it can add extra URLs, credentials or TLS overrides to a fetch.
 fetch() {
-  if [ "$DOWNLOAD_SOURCE" != captain ]; then curl -fsSL "$@"; return; fi
+  if [ "$DOWNLOAD_SOURCE" != captain ]; then curl -q -fsSL "$@"; return; fi
   auth_file=$(umask 077; mktemp "$TMP/captain-headers.XXXXXX")
   if [ -z "$PAIR" ] && [ -s "$TOKEN_FILE" ]; then
     token=$(cat "$TOKEN_FILE")
@@ -201,7 +299,7 @@ fetch() {
     case "$PAIR" in *[!a-zA-Z0-9_-]*|'') rm -f "$auth_file"; echo 'invalid pairing code' >&2; return 1 ;; esac
     printf 'X-Bosun-Pair-Code: %s\n' "$PAIR" > "$auth_file"
   fi
-  if curl -fsSL --globoff --max-redirs 0 --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 600 --header "@$auth_file" "$@"; then
+  if curl -q -fsSL --globoff --max-redirs 0 --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 600 --header "@$auth_file" "$@"; then
     rm -f "$auth_file"; return 0
   else
     result=$?; rm -f "$auth_file"; return "$result"
@@ -267,6 +365,7 @@ if [ "$ACTION" = upgrade ] || [ "$ACTION" = enable-web-upgrade ]; then
   fi
   case "$MODE" in docker|binary) ;; *) echo '--mode must be docker or binary' >&2; exit 1 ;; esac
   [ "$DOWNLOAD_SOURCE" != captain ] || [ "$MODE" != docker ] || { echo 'Captain delivery cannot upgrade Docker images' >&2; exit 1; }
+  captain_preflight
   prepare_worker
   if [ "$MODE" = docker ]; then
     # One-time registration is also available to old Docker installations.
@@ -336,6 +435,7 @@ case "$(uname -m)" in
 esac
 
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+captain_preflight
 resolve_version
 echo "downloading bosun $VERSION ($ARCH) via $DOWNLOAD_SOURCE"
 fetch -o "$TMP/bosun" "$BASE/bosun-linux-$ARCH"

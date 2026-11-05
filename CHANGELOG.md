@@ -1,5 +1,7 @@
 # Changelog
 
+- **Unreleased** — Check a configured Captain endpoint anonymously before installer and upgrade downloads, with bounded TLS/HTTP checks and actionable proxy errors. Preserve older main listeners, HTTP/path-prefix endpoints, GitHub-only installations and offline uninstall. Ignore curlrc settings for credential-bearing downloads.
+
 One entry per release tag, newest first, condensed from the commit subjects
 between that tag and the previous one (`git log --format=%s <prev>..<tag>`).
 Merge commits and formatting-only commits are left out. Binaries and
