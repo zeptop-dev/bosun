@@ -9,8 +9,14 @@ import (
 // A periodic WireGuard/core-only reconcile must neither clear a failed
 // forward apply nor postpone its retry by continually resetting lastAttempt.
 func (a *Agent) applyRetryDue(at time.Time) bool {
-	return a.coreDirty && at.Sub(a.lastAttempt) >= retryFloor ||
+	return a.coreApplyRetryDue(at) ||
 		a.forwardDirty && at.Sub(a.lastForwardAttempt) >= retryFloor
+}
+
+// Dependency recovery owns the core retry budget until it succeeds or the
+// desired state changes. Keep coreDirty visible without retrying forever.
+func (a *Agent) coreApplyRetryDue(at time.Time) bool {
+	return a.coreDirty && (!a.coreDependencyFailure || a.dependencyRecovery.missing == 0) && at.Sub(a.lastAttempt) >= retryFloor
 }
 
 func (a *Agent) consumedRevisions() (string, string) {

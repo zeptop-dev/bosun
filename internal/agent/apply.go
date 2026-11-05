@@ -110,6 +110,7 @@ func (a *Agent) resolveCerts(ctx context.Context, node *spec.Node) {
 func (a *Agent) apply(ctx context.Context) (err error) {
 	a.statusMu.Lock()
 	a.configCorePartial = false
+	a.configUserLimitsOmitted = false
 	a.statusMu.Unlock()
 	a.serviceControlPending.Store(true)
 	revision, _ := a.consumedRevisions()
@@ -120,9 +121,12 @@ func (a *Agent) apply(ctx context.Context) (err error) {
 		}
 		a.serviceControlPending.Store(a.coreDirty || a.forwardDirty || a.modeChanging.Load())
 	}()
+	missing := a.missingNetworkDependencies()
+	defer func() { a.recordDependencyApply(missing) }()
 	a.lastAttempt = time.Now()
 	err = a.wireGuardFailure(ctx, a.applyInner(ctx))
 	a.coreDirty = err != nil
+	a.coreDependencyFailure = isDependencyFailure(err)
 	a.dirty = a.coreDirty || a.forwardDirty
 	if err != nil {
 		a.applyErrors.Add(1)
@@ -279,6 +283,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	// Per-user speed limits: the kernel shaper must exist for the marks
 	// the cores stamp to mean anything; without it the limits are ignored
 	// (and the doctor says so).
+	renderUsers := a.users
 	var limits []shaper.Limit
 	for _, u := range a.users {
 		if l := node.EffectiveSpeedLimit(u); l > 0 {
@@ -306,7 +311,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 			a.configUserLimitsOmitted = true
 			a.statusMu.Unlock()
 			if node.HasPrivateAccess() || hasWireGuard(node) {
-				return errors.Join(fmt.Errorf("private access with speed limits requires Linux nft and tc"), a.stopPrivateCores(ctx))
+				return errors.Join(dependencyFailure(fmt.Errorf("private access with speed limits requires Linux nft and tc")), a.stopPrivateCores(ctx))
 			}
 			cp := *node
 			cp.UserSpeedLimitMbps = 0
@@ -316,7 +321,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 				u.SpeedLimitMbps = 0
 				users = append(users, u)
 			}
-			a.users = users
+			renderUsers = users
 			a.log.Warn("speed limits configured but shaping is unavailable on this host (needs Linux with nft and tc)")
 		}
 		limits = nil
@@ -329,7 +334,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		return err
 	}
 	if err := a.prepareWireGuardShaping(ctx, node, limits); err != nil {
-		return err
+		return dependencyFailure(err)
 	}
 	if runas.SetNetAdmin(len(limits) > 0 || node.HasDualPrivateAccess()) && runas.Active() {
 		a.log.Info("core capabilities changed, restarting cores", "net_admin", len(limits) > 0)
@@ -366,7 +371,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	// is still reported dirty (and retried) but the healthy cores serve.
 	var errs []error
 	for _, name := range a.reg.Names() {
-		err := a.applyCore(ctx, name, node, assign[name], restart)
+		err := a.applyCore(ctx, name, node, assign[name], renderUsers, restart)
 		a.statusMu.Lock()
 		if a.appliedCores == nil {
 			a.appliedCores = map[string][]string{}
@@ -386,7 +391,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inbounds []spec.Inbound, restart bool) error {
+func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inbounds []spec.Inbound, users []spec.User, restart bool) error {
 	c, _ := a.reg.Get(name)
 	if len(inbounds) == 0 && !(name == "xray" && len(node.ReverseClients) > 0) {
 		if c.Running() {
@@ -397,7 +402,18 @@ func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inb
 		}
 		return nil
 	}
-	bundle, err := c.Render(node, inbounds, a.users)
+	// Scoped users must use the same degraded render without mutating the
+	// accepted authorization. The next apply can then restore its limits.
+	if a.configUserLimitsOmitted {
+		inbounds = append([]spec.Inbound(nil), inbounds...)
+		for i := range inbounds {
+			inbounds[i].Users = append([]spec.User(nil), inbounds[i].Users...)
+			for j := range inbounds[i].Users {
+				inbounds[i].Users[j].SpeedLimitMbps = 0
+			}
+		}
+	}
+	bundle, err := c.Render(node, inbounds, users)
 	if err != nil {
 		return fmt.Errorf("%s: render: %w", name, err)
 	}

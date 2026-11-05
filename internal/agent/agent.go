@@ -76,7 +76,7 @@ type Agent struct {
 	appliedForwardConfig    panel.ConfigState
 	configReceiptSequence   uint64
 	configCorePartial       bool // omitted configuration or a nonfatal helper failure
-	configUserLimitsOmitted bool // persists until a fresh user list replaces degraded local users
+	configUserLimitsOmitted bool // current render omitted requested speed limits
 
 	// Upgrade is called (in its own goroutine, once per requested version)
 	// when the panel asks the node to move to another release.
@@ -142,11 +142,13 @@ type Agent struct {
 	// dirty is set when the last apply failed part-way; the next pull tick
 	// retries even though the panel revision did not move (with a floor
 	// between attempts so a broken core is not restarted every second).
-	dirty              bool
-	coreDirty          bool
-	forwardDirty       bool
-	lastAttempt        time.Time
-	lastForwardAttempt time.Time
+	dirty                 bool
+	coreDirty             bool
+	coreDependencyFailure bool
+	forwardDirty          bool
+	lastAttempt           time.Time
+	lastForwardAttempt    time.Time
+	dependencyRecovery    dependencyRecovery
 	// kernelNode/kernelByTag are what the last apply handed to the kernel
 	// helpers, so forwards applied afterwards can refresh the firewall.
 	privatePolicyKey    string
@@ -442,16 +444,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-pull.C:
 			if changed, err := a.pull(ctx); err != nil {
 				a.log.Warn("pull failed", "err", err)
-			} else if changed || a.applyRetryDue(time.Now()) {
-				if a.dirty && !changed {
-					a.log.Info("retrying the last apply that failed")
-				}
-				if err := a.apply(ctx); err != nil {
-					a.log.Error("apply failed", "err", err)
-				}
-				if err := a.applyForwards(ctx); err != nil {
-					a.log.Error("forwards", "err", err)
-				}
+			} else if a.reconcileAfterPull(ctx, changed, time.Now()) {
 				// Same reason as in the kick branch: exporters first, then
 				// the self-check that reports on them.
 				reconfigureBeat()
@@ -473,7 +466,7 @@ func (a *Agent) Run(ctx context.Context) error {
 					a.log.Warn("offline traffic protection reconcile", "err", err)
 				}
 			}
-			if a.wireGuardActive.Load() && a.node != nil && !a.modeChanging.Load() {
+			if a.wireGuardActive.Load() && a.node != nil && !a.modeChanging.Load() && a.dependencyRecovery.missing == 0 {
 				if err := a.apply(ctx); err != nil {
 					a.log.Error("WireGuard health reconcile", "err", err)
 				}
@@ -594,6 +587,8 @@ func (a *Agent) pull(ctx context.Context) (bool, error) {
 		a.log.Info("user list updated", "users", len(users))
 	}
 	if changed {
+		// Recovery belongs to the consumed state, never an earlier grant.
+		a.dependencyRecovery = dependencyRecovery{}
 		a.rebuildUserIndex()
 	}
 	a.setStatus(func(s *Status) {

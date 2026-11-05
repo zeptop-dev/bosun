@@ -141,7 +141,7 @@ func (a *Agent) refreshServiceControl(ctx context.Context) error {
 	a.shaperMu.Lock()
 	err := a.reconcileServiceControl(ctx)
 	offline := a.offlineRecoveryGuard || a.node != nil && a.node.ServiceControl != nil && a.node.ServiceControl.Offline != nil
-	resume := err == nil && offline && !a.serviceControlPaused() && (wasPaused || wasActive != a.serviceControlActive() || a.coreDirty || a.forwardDirty)
+	resume := err == nil && offline && !a.serviceControlPaused() && (wasPaused || wasActive != a.serviceControlActive() || (a.coreDirty || a.forwardDirty) && a.dependencyRecovery.missing == 0)
 	if err == nil && offline && a.serviceControlPaused() {
 		err = a.stopControlledServices(ctx)
 	}
