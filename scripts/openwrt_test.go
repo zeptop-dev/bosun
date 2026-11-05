@@ -62,7 +62,7 @@ esac
 		t.Fatal(err)
 	}
 	// GNU tar invokes gzip through PATH, while macOS bsdtar compresses internally.
-	for _, name := range []string{"awk", "cat", "chmod", "cp", "cut", "date", "grep", "gzip", "head", "ln", "mkdir", "mktemp", "mv", "rm", "sed", "sha256sum", "sleep", "tar"} {
+	for _, name := range []string{"awk", "cat", "chmod", "cp", "cut", "date", "grep", "gzip", "head", "ln", "mkdir", "mktemp", "mv", "rm", "sed", "sha256sum", "sleep", "tar", "wc"} {
 		real, err := exec.LookPath(name)
 		if err != nil {
 			t.Fatal(err)
@@ -81,10 +81,11 @@ esac
 	put(filepath.Join(stub, "curl"), `#!/bin/sh
 out=
 while [ "$#" -gt 0 ]; do
- case "$1" in -o) out=$2; shift 2;; --header|--proto|--proto-redir|--max-redirs|--connect-timeout|--max-time) shift 2;; -*) shift;; *) url=$1; shift;; esac
+ case "$1" in -o|--output) out=$2; shift 2;; --header|--proto|--proto-redir|--max-redirs|--connect-timeout|--max-time|--max-filesize|--write-out) shift 2;; -*) shift;; *) url=$1; shift;; esac
 done
 printf 'fetch %s\n' "$url" >> "$TEST_TRACE"
 case "$url" in
+ */api/agent/health) printf '{"ok":true,"service":"captain-agent"}' > "$out"; printf 200;;
  */releases/latest) echo '{"tag_name":"v0.89.0"}';;
  */bosun-linux-amd64) cp "$TEST_ROOT/release" "$out";;
  */SHA256SUMS) cp "$TEST_ROOT/checksums" "$out";;

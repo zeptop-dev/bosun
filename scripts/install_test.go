@@ -91,6 +91,13 @@ func TestCaptainBootstrapDownloadsAndChecksWithoutGitHub(t *testing.T) {
 			hits := []string{}
 			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				hits = append(hits, r.URL.Path)
+				if r.URL.Path == "/api/agent/health" {
+					if r.Header.Get("Authorization") != "" || r.Header.Get("X-Bosun-Pair-Code") != "" {
+						t.Error("preflight sent credentials")
+					}
+					fmt.Fprint(w, `{"ok":true,"service":"captain-agent"}`)
+					return
+				}
 				if r.Header.Get("Authorization") != "" {
 					t.Error("old permanent token sent during fresh pairing")
 				}
@@ -144,7 +151,7 @@ func TestCaptainBootstrapDownloadsAndChecksWithoutGitHub(t *testing.T) {
 				if err != nil || !strings.Contains(string(output), "verified") {
 					t.Fatalf("bootstrap: %v %s", err, output)
 				}
-				if len(hits) != 3 {
+				if len(hits) != 4 || hits[0] != "/api/agent/health" {
 					t.Fatalf("hits %v", hits)
 				}
 			} else if err == nil {
