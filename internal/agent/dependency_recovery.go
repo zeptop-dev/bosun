@@ -75,7 +75,7 @@ func (a *Agent) recordDependencyApply(missing uint8, applyErr error) {
 	if r.missing&dependencyEgress != 0 && (missing|failed)&dependencyEgress == 0 && st.Egress != nil && st.Egress.Supported && st.Egress.Error == "" {
 		r.missing &^= dependencyEgress
 	}
-	if r.missing&dependencyShaper != 0 && (missing|failed)&dependencyShaper == 0 && !a.configUserLimitsOmitted && st.Shaper != nil && st.Shaper.Supported && st.Shaper.Error == "" && st.Shaper.DownloadError == "" {
+	if r.missing&dependencyShaper != 0 && (missing|failed)&dependencyShaper == 0 && !a.configUserLimitsOmitted && (a.shaperCleanupApplied || st.Shaper != nil && st.Shaper.Supported && st.Shaper.Error == "" && st.Shaper.DownloadError == "") {
 		r.missing &^= dependencyShaper
 	}
 	if r.missing == 0 {

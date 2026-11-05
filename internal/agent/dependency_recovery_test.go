@@ -464,3 +464,45 @@ func TestDependencyRecoverySharedShapingEarlyFailureReplacesOldSuccess(t *testin
 		t.Fatal("shared early failure left old success", err, a.Status().Shaper)
 	}
 }
+
+func TestDependencyRecoverySuccessfulCleanupCompletesPendingFailure(t *testing.T) {
+	a, _ := dependencyRig(t)
+	a.users = nil
+	a.Egress = nil
+	fail := true
+	a.Shaper.Run = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if fail {
+			return nil, errors.New("tc cleanup denied")
+		}
+		if name == "tc" && len(args) > 0 && args[0] == "-j" {
+			return []byte("[]"), nil
+		}
+		return nil, nil
+	}
+	ctx := context.Background()
+	if err := a.apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if a.dependencyRecovery.missing != dependencyShaper || a.Status().Shaper == nil || a.Status().Shaper.Error == "" {
+		t.Fatal("cleanup failure not tracked", a.Status())
+	}
+	fail = false
+	if !a.reconcileAfterPull(ctx, false, time.Now()) {
+		t.Fatal("cleanup was not retried")
+	}
+	if a.Status().Shaper != nil || a.dependencyRecovery.missing != 0 {
+		t.Fatal("successful empty apply retained recovery", a.dependencyRecovery, a.Status().Shaper)
+	}
+	if a.reconcileAfterPull(ctx, false, time.Now().Add(time.Hour)) {
+		t.Fatal("successful cleanup retried again")
+	}
+	// A later early failure cannot reuse the previous successful cleanup.
+	a.dependencyRecovery.missing = dependencyShaper
+	a.node.Inbounds[0].PrivateAccess = &spec.PrivateAccess{Mode: "invalid"}
+	if err := a.apply(ctx); err == nil {
+		t.Fatal("expected early validation failure")
+	}
+	if a.dependencyRecovery.missing != dependencyShaper {
+		t.Fatal("earlier cleanup cleared a new skipped apply")
+	}
+}

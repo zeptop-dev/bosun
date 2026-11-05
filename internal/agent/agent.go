@@ -149,6 +149,7 @@ type Agent struct {
 	lastAttempt           time.Time
 	lastForwardAttempt    time.Time
 	dependencyRecovery    dependencyRecovery
+	shaperCleanupApplied  bool // successful empty shaping apply in the current attempt
 	// kernelNode/kernelByTag are what the last apply handed to the kernel
 	// helpers, so forwards applied afterwards can refresh the firewall.
 	privatePolicyKey    string

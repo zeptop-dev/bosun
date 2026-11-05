@@ -121,6 +121,7 @@ func (a *Agent) apply(ctx context.Context) (err error) {
 		}
 		a.serviceControlPending.Store(a.coreDirty || a.forwardDirty || a.modeChanging.Load())
 	}()
+	a.shaperCleanupApplied = false
 	missing := a.missingNetworkDependencies()
 	defer func() { a.recordDependencyApply(missing, err) }()
 	a.lastAttempt = time.Now()
@@ -342,11 +343,13 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	}
 	defer func() {
 		if a.Shaper != nil && !hasWireGuardTransit(node) {
-			if err := a.Shaper.Apply(ctx, limits); err != nil {
+			err := a.Shaper.Apply(ctx, limits)
+			if err != nil {
 				a.partialConfig()
 				a.log.Error("speed limit shaper", "err", err)
 			}
 			st := a.Shaper.Status()
+			a.shaperCleanupApplied = err == nil && st.Supported && st.Users == 0 && st.Error == ""
 			a.setStatus(func(s *Status) {
 				if st.Users == 0 && st.Error == "" {
 					s.Shaper = nil
