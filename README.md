@@ -141,9 +141,10 @@ upstream behavior for old configurations and standalone/Xboard deployments.
 
 OS packages and Docker registries are separate. Captain mode supports native
 installation and native upgrades; it refuses Docker installation/image upgrades
-and skips automatic apt/apk/dnf dependency installation. Install missing
-nftables, iproute2 and wireguard-tools from a reachable OS repository when their
-features are needed. Certificate issuance and diagnostics' actual network
+and skips automatic apt/apk/dnf dependency installation by default.
+`--system-packages install` explicitly permits installation from the configured
+OS repositories, independently of the bosun download source; `skip` disables it
+even with GitHub downloads. See [network dependencies and LXC](docs/LXC_NETWORK_DEPENDENCIES.md). Certificate issuance and diagnostics' actual network
 checks still contact their destinations directly.
 
 Re-running the installer preserves the existing configuration. It refuses a
