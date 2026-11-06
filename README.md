@@ -1518,14 +1518,14 @@ normal TLS verification, forces IPv4 or IPv6, ignores environment proxies, and
 never sends Captain credentials or follows redirects.
 
 A successful trace remains a **single-source observation**, displayed separately
-with its source and time. The development extension reports whether it conflicts
+with its source and time. bosun v0.92.0 reports whether it conflicts
 with any successful normal source and attaches a random per-family `run_id` to
 each uninterrupted sequence. Failure, conflict, changed source/address and driver
 restart break continuity even if an intermediate sample is replaced before a
 panel report. Single-source results never enter the original dual-source IPv4/IPv6
 fields.
 
-An updated Captain can explicitly allow that family to follow the fallback after
+Captain v1.58.0 or later can explicitly allow that family to follow the fallback after
 repeated confirmation across at least 120 seconds. The option defaults to off;
 the normal automatic-follow switch must also be enabled. Older agents without
 the new evidence remain observation-only, and older Captains ignore the extension.
