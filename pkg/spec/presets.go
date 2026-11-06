@@ -203,12 +203,7 @@ func validatePresetOutbound(o Outbound) error {
 		if v := o.Balancer.Strategy; v != "" && v != "urltest" && v != "random" {
 			return fmt.Errorf("invalid balancer strategy")
 		}
-		seen := map[string]bool{}
 		for _, v := range o.Balancer.Members {
-			if seen[v] {
-				return fmt.Errorf("duplicate balancer member %q", v)
-			}
-			seen[v] = true
 			if !ValidTag(v) || v == o.Tag {
 				return fmt.Errorf("invalid balancer member")
 			}
@@ -231,13 +226,6 @@ func ValidateRoutingReferences(outs []Outbound, rules []RouteRule, def string) e
 			edges[o.Tag] = append(edges[o.Tag], o.ProxyTag)
 		}
 		if o.Balancer != nil {
-			seen := map[string]bool{}
-			for _, member := range o.Balancer.Members {
-				if seen[member] {
-					return fmt.Errorf("outbound %q: duplicate balancer member %q", o.Tag, member)
-				}
-				seen[member] = true
-			}
 			edges[o.Tag] = append(edges[o.Tag], o.Balancer.Members...)
 		}
 	}

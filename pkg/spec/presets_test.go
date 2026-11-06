@@ -2,6 +2,7 @@ package spec
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -101,17 +102,36 @@ func TestPresetEveryCore(t *testing.T) {
 	}
 }
 
-func TestRoutingRejectsDuplicateBalancerMembers(t *testing.T) {
-	for _, members := range [][]string{{"direct", "direct"}, {"direct", "exit", "direct"}} {
-		outs := []Outbound{{Tag: "exit", Protocol: "direct"}, {Tag: "pool", Balancer: &Balancer{Members: members}}}
-		if err := ValidateRoutingReferences(outs, nil, "pool"); err == nil || !strings.Contains(err.Error(), "duplicate balancer member") {
-			t.Fatalf("duplicate accepted: %v", err)
-		}
-		if err := validatePresetOutbound(outs[1]); err == nil {
-			t.Fatal("preset accepted duplicate")
+// Repeated members were valid before sing-box tightened its parser. The shared
+// contract cannot remove them for older sing-box or other runtime adapters.
+func TestRoutingPreservesRepeatedBalancerMembers(t *testing.T) {
+	for _, strategy := range []string{"", "urltest", "random"} {
+		for _, members := range [][]string{{"direct", "direct"}, {"direct", "pool-a", "direct"}} {
+			outs := []Outbound{{Tag: "pool-a", Balancer: &Balancer{Members: []string{"direct"}}}, {Tag: "pool", Balancer: &Balancer{Strategy: strategy, Members: members}}}
+			before, _ := json.Marshal(outs)
+			if err := ValidateRoutingReferences(outs, nil, "pool"); err != nil {
+				t.Fatalf("legacy routing rejected: %v", err)
+			}
+			after, _ := json.Marshal(outs)
+			if string(before) != string(after) {
+				t.Fatal("routing validation altered repeated members")
+			}
+			preset := ConfigPreset{Name: "legacy members", Kind: "outbounds", Payload: before}
+			if err := preset.Normalize(); err != nil {
+				t.Fatalf("legacy preset rejected: %v", err)
+			}
+			var normalized []Outbound
+			if err := json.Unmarshal(preset.Payload, &normalized); err != nil {
+				t.Fatal(err)
+			}
+			if len(normalized) != 2 || normalized[1].Balancer.Strategy != strategy || !reflect.DeepEqual(normalized[1].Balancer.Members, members) {
+				t.Fatal("preset normalization altered repeated members")
+			}
 		}
 	}
-	if err := ValidateRoutingReferences([]Outbound{{Tag: "pool", Balancer: &Balancer{Members: []string{"direct"}}}}, nil, "pool"); err != nil {
-		t.Fatal(err)
+	for _, members := range [][]string{{"missing", "missing"}, {"pool", "pool"}} {
+		if err := ValidateRoutingReferences([]Outbound{{Tag: "pool", Balancer: &Balancer{Members: members}}}, nil, "pool"); err == nil {
+			t.Fatal("legacy compatibility accepted unknown or cyclic references")
+		}
 	}
 }

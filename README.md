@@ -1725,10 +1725,11 @@ The reviewed `1.14.4-r1` package builds upstream commit
 statistics API and pinned security dependency updates. Each package includes
 corresponding source, resolved module manifests, license and build instructions.
 
-New routing saves reject repeated balancer members. Existing configurations,
-including native JSON overrides, must pass the candidate core's configuration
-check before activation. Correct duplicate urltest/selector members explicitly;
-this upgrade does not silently deduplicate stored routes. Existing explicit core
+Routing saves and presets preserve the existing repeated-member contract for
+older cores and other adapters. sing-box 1.14.4 rejects duplicate urltest/selector
+members during its real configuration check, including native JSON overrides.
+Correct those members explicitly before activating this version; bosun does not
+silently deduplicate stored routes. Existing explicit core
 versions remain selectable, and downloading a package does not activate it.
 Unpinned installations resolve to the new default on startup: check their saved
 configuration before upgrading bosun. This release does not enable MASQUE or
