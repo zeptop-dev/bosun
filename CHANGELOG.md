@@ -1,5 +1,7 @@
 # Changelog
 
+- **Unreleased** — Report whether high-port fallback public-IP observations conflict with any successful normal source, and track each uninterrupted per-family observation run. This lets an updated Captain explicitly opt into repeated single-source confirmation while older panels retain advisory-only behavior. Failures, conflicts and restarts break continuity even when intermediate samples are not reported; original IPv4/IPv6 fields still require dual-source agreement.
+
 - **v0.91.4** (2026-11-06) — Correct release build provenance by keeping downloaded test cores and coverage output outside the Git checkout. Reject tracked or untracked source changes before compiling release binaries, and require the exact commit plus clean VCS metadata afterward. Product Go source, shared module behavior and the separately verified sing-box packages are unchanged from v0.91.3; Captain v1.57.1 remains compatible without another panel release.
 
 - **v0.91.3** (2026-11-06; native artifacts failed the clean-VCS acceptance check; use v0.91.4) — Rebuild the compatible standard sing-box 1.14.1 core as immutable `1.14.1-r3` with Go 1.26.10 and reviewed dependency security updates. Make it the tested default and retain affected r1/r2 identities as broken; an existing explicitly selected package is not silently replaced.

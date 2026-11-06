@@ -1517,12 +1517,21 @@ No extra setting, port scan, or external fallback URL is needed. The request use
 normal TLS verification, forces IPv4 or IPv6, ignores environment proxies, and
 never sends Captain credentials or follows redirects.
 
-A successful trace is a **single-source advisory observation**. Captain displays
-it separately with its source and time; it is never eligible for automatic entry
-or DNS updates, even after repeated matching results. Older Captains ignore the
-new optional fields. Missing IPv6 connectivity remains unknown, and an OS VPN
-can still affect the observed exit. Fallback observations belong to the current
-Captain connection and are not restored across a driver restart.
+A successful trace remains a **single-source observation**, displayed separately
+with its source and time. The development extension reports whether it conflicts
+with any successful normal source and attaches a random per-family `run_id` to
+each uninterrupted sequence. Failure, conflict, changed source/address and driver
+restart break continuity even if an intermediate sample is replaced before a
+panel report. Single-source results never enter the original dual-source IPv4/IPv6
+fields.
+
+An updated Captain can explicitly allow that family to follow the fallback after
+repeated confirmation across at least 120 seconds. The option defaults to off;
+the normal automatic-follow switch must also be enabled. Older agents without
+the new evidence remain observation-only, and older Captains ignore the extension.
+Missing IPv6 connectivity remains unknown, and an OS VPN can still affect the
+observed exit. Fallback observations belong to the current Captain connection
+and are not restored across a driver restart.
 
 ### Three-carrier return-route diagnostics (Captain 1.21 / bosun 0.69)
 
