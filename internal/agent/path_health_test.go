@@ -72,6 +72,23 @@ func TestPathHealthAgentReportsOriginalSampleAndPauseStopsProbe(t *testing.T) {
 		t.Fatal("revoked lease attested probe")
 	}
 	p.leaseError = nil
+	// Exercise the actual relay, rather than only the independent path probe,
+	// before checking that pause removes its listening socket.
+	client, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), time.Second)
+	if err != nil {
+		t.Fatal("relay was not listening before pause", err)
+	}
+	client.SetDeadline(time.Now().Add(time.Second))
+	if _, err := client.Write([]byte{5, 1, 2}); err != nil {
+		client.Close()
+		t.Fatal(err)
+	}
+	var response [2]byte
+	_, err = io.ReadFull(client, response[:])
+	client.Close()
+	if err != nil || response != [2]byte{5, 2} {
+		t.Fatal("relay failed SOCKS5 handshake before pause", response, err)
+	}
 	var script string
 	fail := false
 	a.ServiceControl = &servicecontrol.Manager{Dir: t.TempDir(), Run: serviceControlTestRunner(&script, &fail)}
@@ -80,10 +97,14 @@ func TestPathHealthAgentReportsOriginalSampleAndPauseStopsProbe(t *testing.T) {
 	if len(a.fwd.PathHealthSnapshot()) != 0 || len(a.buildReport(nil, spec.SystemStatus{}).PathHealth.Samples) != 0 {
 		t.Fatal("pause retained probing evidence")
 	}
-	if c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 100*time.Millisecond); err == nil {
-		c.Close()
-		t.Fatal("pause kept relay listener")
+	// A dial to a closed ephemeral port can self-connect on Linux when the
+	// kernel chooses that same source port. Rebinding directly verifies that
+	// the relay released its listener before Apply returned.
+	rebound, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		t.Fatal("pause did not release relay listener", err)
 	}
+	rebound.Close()
 	if !strings.Contains(script, "counter drop") {
 		t.Fatal("pause omitted independent guard")
 	}
