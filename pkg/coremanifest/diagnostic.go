@@ -3,12 +3,14 @@ package coremanifest
 // DiagnosticRelease is the pinned optional geocheck helper. It is not a
 // selectable proxy core, but uses the same authenticated artifact delivery.
 func DiagnosticRelease() Release {
-	base := RegistryBase + "v0.57.0/"
+	// v0.90.0 contains the Go 1.26.10 / x/net v0.62.0 security rebuild.
+	// Give it a new cache identity; existing r1 binaries must not be reused.
+	base := RegistryBase + "v0.90.0/"
 	assets := map[string]Asset{}
 	for _, arch := range []string{"amd64", "arm64"} {
 		assets["linux/"+arch] = Asset{URL: base + "geocheck-linux-" + arch, SumsURL: base + "SHA256SUMS", Archive: "raw"}
 	}
-	return Release{Core: "geocheck", Version: "0.3.0-r1", Assets: assets}
+	return Release{Core: "geocheck", Version: "0.3.0-r2", Assets: assets}
 }
 
 // RouteToolRelease describes the optional upstream NextTrace executable. Its

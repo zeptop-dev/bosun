@@ -26,7 +26,6 @@ import (
 //go:embed geocheck-MIT.txt
 var geoCheckLicense []byte
 
-const geoCheckVersion = "0.3.0-r1"
 const maxExitReport = 128 << 10
 
 func geoCheckArgs(in spec.DiagnosticRequest) []string {
@@ -47,7 +46,8 @@ func privateToolDir(root string) (string, error) {
 	}
 	// Every executable parent below tools must be owned by this service user;
 	// otherwise a writable data volume could replace a root-run executable.
-	for _, path := range []string{dir, filepath.Join(dir, "geocheck"), filepath.Join(dir, "geocheck", geoCheckVersion)} {
+	release := coremanifest.DiagnosticRelease()
+	for _, path := range []string{dir, filepath.Join(dir, release.Core), filepath.Join(dir, release.Core, release.Version)} {
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
 			continue
@@ -69,7 +69,8 @@ func ensureGeoCheck(ctx context.Context, root string) (string, error) {
 	}
 	installer := coreinstall.New(dir, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	installer.Downloads = agentdownload.FromContext(ctx)
-	path := installer.Path("geocheck", geoCheckVersion)
+	release := coremanifest.DiagnosticRelease()
+	path := installer.Path(release.Core, release.Version)
 	licensePath := filepath.Join(dir, "geocheck-LICENSE.txt")
 	f, e := os.OpenFile(licensePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if e == nil {
@@ -109,7 +110,7 @@ func ensureGeoCheck(ctx context.Context, root string) (string, error) {
 	}
 	installCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	return installer.Install(installCtx, coremanifest.DiagnosticRelease())
+	return installer.Install(installCtx, release)
 }
 func runExit(ctx context.Context, in spec.DiagnosticRequest, root string) (json.RawMessage, string) {
 	if root == "" || runtime.GOOS != "linux" {

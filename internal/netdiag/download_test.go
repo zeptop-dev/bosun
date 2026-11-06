@@ -54,12 +54,20 @@ func TestDiagnosticToolsUseCaptainChannel(t *testing.T) {
 				if runtime.GOOS != "linux" {
 					t.Skip("GeoCheck production install requires Linux")
 				}
+				old := writeOldGeoCheckCache(t, dir)
 				path, err := ensureGeoCheck(ctx, dir)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if got, _ := os.ReadFile(path); string(got) != string(data) {
 					t.Fatal("wrong tool content")
+				}
+				want := filepath.Join(dir, "tools", release.Core, release.Version, release.Core)
+				if path != want || path == old {
+					t.Fatalf("downloaded tool cache: got %q want %q", path, want)
+				}
+				if got, err := os.ReadFile(old); err != nil || string(got) != "old diagnostic tool" {
+					t.Fatalf("old cache was changed: %q %v", got, err)
 				}
 			} else {
 				if err := installRouteTool(ctx, dir); err == nil || !strings.Contains(err.Error(), "checksum") {
