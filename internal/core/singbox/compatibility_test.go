@@ -168,19 +168,37 @@ func TestRealSingboxAccountingAndReload(t *testing.T) {
 			}
 		}
 	}
-	// A candidate config rejected by the new parser must not affect the
-	// running process or its accepted configuration.
-	badNode := *node
-	badNode.Outbounds = []spec.Outbound{{Tag: "duplicate", Balancer: &spec.Balancer{Members: []string{"direct", "direct"}}}}
-	badBundle, err := c.Render(&badNode, ins, users)
+	// Core-management activation stages the candidate in a separate work
+	// directory. Exercise that real Check boundary without overwriting the
+	// active process's startup file; Agent activation/persistence is tested
+	// separately by TestCoreActivationPreflightRollbackAndPersistence.
+	acceptedPID := c.ListenerPIDs()["*"]
+	if acceptedPID <= 0 {
+		t.Fatal("active core has no supervised process")
+	}
+	acceptedConfig, err := os.ReadFile(c.configPath(b))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = c.Check(ctx, badBundle); err == nil {
+	candidate, err := New(Options{Binary: binary, WorkDir: t.TempDir(), StatsListen: stats}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	badNode := *node
+	badNode.Outbounds = []spec.Outbound{{Tag: "duplicate", Balancer: &spec.Balancer{Members: []string{"direct", "direct"}}}}
+	badBundle, err := candidate.Render(&badNode, ins, users)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = candidate.Check(ctx, badBundle); err == nil {
 		t.Fatal("duplicate group passed candidate preflight")
 	}
-	if !c.Running() {
-		t.Fatal("candidate preflight stopped active core")
+	if !c.Running() || c.ListenerPIDs()["*"] != acceptedPID {
+		t.Fatal("candidate preflight stopped or replaced active core")
+	}
+	stillAccepted, err := os.ReadFile(c.configPath(b))
+	if err != nil || !bytes.Equal(acceptedConfig, stillAccepted) {
+		t.Fatal("candidate preflight changed active startup configuration", err)
 	}
 	if err = transfer(ins[0], users[0]); err != nil {
 		t.Fatalf("active config changed by preflight: %v", err)

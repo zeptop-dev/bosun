@@ -122,8 +122,8 @@ var Manifest = []Release{
 			Modules: []string{"golang.org/x/crypto@v0.56.0", "golang.org/x/text@v0.41.0", "golang.org/x/mod@v0.40.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0"}, Package: "./cmd/sing-box", Version: "v1.14.1-extended-2.7.2", Tags: singboxTags, LDFlags: "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=1.14.1-extended-2.7.2"},
 	},
 	{
-		Core: "singbox", Version: "1.14.4-r1", Status: StatusTested,
-		Note: "upstream v1.14.4, Go 1.26.10 with reviewed security dependency updates and per-user stats; duplicate outbound-group members must be corrected before activation",
+		Core: "singbox", Version: "1.14.4-r1", Status: StatusCaution,
+		Note: "upstream v1.14.4, Go 1.26.10 with reviewed security dependency updates and per-user stats; explicit activation required because duplicate outbound-group members must be corrected first",
 		Assets: map[string]Asset{
 			"linux/amd64": singboxCI("1.14.4-r1", "amd64"),
 			"linux/arm64": singboxCI("1.14.4-r1", "arm64"),

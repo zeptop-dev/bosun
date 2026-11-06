@@ -222,9 +222,13 @@ func TestResolvePrefersTestedRebuild(t *testing.T) {
 }
 
 func TestSingboxSecurityRevisionResolution(t *testing.T) {
-	r, ok := Resolve("singbox", "")
-	if !ok || r.Version != "1.14.4-r1" || r.Status != StatusTested {
-		t.Fatalf("default sing-box: %+v", r)
+	current, ok := Resolve("singbox", "")
+	if !ok || current.Version != "1.14.1-r2" || current.Status != StatusTested {
+		t.Fatalf("unpinned startup changed core semantics: %+v", current)
+	}
+	r, ok := Resolve("singbox", "1.14.4-r1")
+	if !ok || r.Version != "1.14.4-r1" || r.Status != StatusCaution {
+		t.Fatalf("explicit sing-box upgrade: %+v", r)
 	}
 	if r.Build == nil || r.Build.Commit != "c005f35300ce76427dc285481ec5695f5b179cd2" || len(r.Build.Modules) == 0 {
 		t.Fatal("source fallback lost security pins")

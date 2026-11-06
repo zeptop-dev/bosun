@@ -1731,6 +1731,8 @@ members during its real configuration check, including native JSON overrides.
 Correct those members explicitly before activating this version; bosun does not
 silently deduplicate stored routes. Existing explicit core
 versions remain selectable, and downloading a package does not activate it.
-Unpinned installations resolve to the new default on startup: check their saved
-configuration before upgrading bosun. This release does not enable MASQUE or
-Sudoku.
+This package is marked `caution` and does not replace the default on an
+unpinned bosun restart. Download it, correct incompatible group members, then
+explicitly activate it through core management so the candidate configuration
+is checked before the running instance is stopped. This release does not enable
+MASQUE or Sudoku.

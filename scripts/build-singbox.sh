@@ -50,5 +50,5 @@ Tags: with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme,wi
 Linker: -s -w -X github.com/sagernet/sing-box/constant.Version=1.14.4
 Dependencies: golang.org/x/crypto@v0.57.0 golang.org/x/net@v0.60.0 golang.org/x/text@v0.42.0 golang.org/x/mod@v0.41.0 google.golang.org/grpc@v1.83.2 github.com/go-chi/chi/v5@v5.3.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2
 Source: upstream Go sources unchanged; go.mod/go.sum updated with the pins above. Corresponding source archive, resolved module manifests and GPL license included.
-Activation: existing explicit selections remain unchanged; correct duplicate outbound-group members before selecting this package. Download alone does not activate it.
+Activation: caution package; unpinned installations retain the compatible default. Correct duplicate outbound-group members and explicitly activate through core management. Download alone does not activate it.
 BUILD
