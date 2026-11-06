@@ -1,5 +1,9 @@
 # Changelog
 
+- **v0.91.3** (2026-11-06) — Rebuild the compatible standard sing-box 1.14.1 core as immutable `1.14.1-r3` with Go 1.26.10 and reviewed dependency security updates. Make it the tested default and retain affected r1/r2 identities as broken; an existing explicitly selected package is not silently replaced.
+  - Add the reviewed `1.14.4-r1` package as caution, requiring explicit activation and configuration preflight. Preserve accepted routing-group member lists in the shared API; the newer upstream parser rejects duplicate members, so unpinned installations must not automatically switch to it.
+  - Build and validate candidate core artifacts before product tests, including real parser, accounting, revocation, private-access and isolated Linux checks. Include corresponding source, resolved manifests, license, build instructions and checksums; retain fixed source-build identities.
+
 - **v0.91.2** (2026-11-06) — Publish the native network-dependency recovery and reviewed security builds prepared below. Correct a legacy pause test to verify a real relay handshake and immediate release of its listening port; a successful TCP loopback dial can be a Linux self-connection even without a listener. Runtime pause behavior is unchanged.
 
 - **v0.91.1** (2026-11-06; tag only, publication blocked by an intermittent pause-test assertion; use v0.91.2) — Publish the native network-dependency and runtime recovery changes prepared for v0.91.0 after updating the required Extended build to immutable `1.14.1-extended-2.7.2-r4`. Pin Brotli 1.2.7 and compress 1.20.2 for GO-2026-6888 and GO-2026-6865; retain old core assets and mark affected r1–r3 builds broken. Existing explicit core selections require an administrator to switch.
