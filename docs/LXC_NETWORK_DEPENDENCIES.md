@@ -1,5 +1,9 @@
 # Network dependencies and LXC
 
+The installer choices and runtime recovery described here ship in bosun v0.91.0.
+Captain v1.57.0 exposes the separate OS-package choice; older Captain releases
+can continue managing upgraded agents through the existing protocol.
+
 The installer prepares dependencies before starting a full native bosun service.
 Package availability, kernel permissions, and applied protection are separate
 results. A container running as root does not guarantee host kernel support.
