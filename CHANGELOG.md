@@ -1,6 +1,8 @@
 # Changelog
 
-- **v0.91.3** (2026-11-06) — Rebuild the compatible standard sing-box 1.14.1 core as immutable `1.14.1-r3` with Go 1.26.10 and reviewed dependency security updates. Make it the tested default and retain affected r1/r2 identities as broken; an existing explicitly selected package is not silently replaced.
+- **v0.91.4** (2026-11-06) — Correct release build provenance by keeping downloaded test cores and coverage output outside the Git checkout. Reject tracked or untracked source changes before compiling release binaries, and require the exact commit plus clean VCS metadata afterward. Product Go source, shared module behavior and the separately verified sing-box packages are unchanged from v0.91.3; Captain v1.57.1 remains compatible without another panel release.
+
+- **v0.91.3** (2026-11-06; native artifacts failed the clean-VCS acceptance check; use v0.91.4) — Rebuild the compatible standard sing-box 1.14.1 core as immutable `1.14.1-r3` with Go 1.26.10 and reviewed dependency security updates. Make it the tested default and retain affected r1/r2 identities as broken; an existing explicitly selected package is not silently replaced.
   - Add the reviewed `1.14.4-r1` package as caution, requiring explicit activation and configuration preflight. Preserve accepted routing-group member lists in the shared API; the newer upstream parser rejects duplicate members, so unpinned installations must not automatically switch to it.
   - Build and validate candidate core artifacts before product tests, including real parser, accounting, revocation, private-access and isolated Linux checks. Include corresponding source, resolved manifests, license, build instructions and checksums; retain fixed source-build identities.
 
