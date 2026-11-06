@@ -63,17 +63,33 @@ func publicAddressClient(v6 bool) *http.Client {
 }
 
 func observeFamilyWithFallback(ctx context.Context, client *http.Client, urls []string, origin string, v6 bool) (string, *agentproto.PublicAddressFallback) {
-	value := observeFamily(ctx, client, urls, v6)
+	values := observeFamilySources(ctx, client, urls, v6)
+	value := addressConsensus(values)
 	if value != "" || ctx.Err() != nil {
 		return value, nil
 	}
-	return "", observeTrace(ctx, client, origin, v6)
+	fallback := observeTrace(ctx, client, origin, v6)
+	if fallback == nil || fallback.Address == "" || fallback.Error != "" || ctx.Err() != nil || len(values) < 2 {
+		return "", fallback
+	}
+	// Failed responders are unavailable evidence, not agreement. Keep every
+	// successful response so one failed source cannot conceal a disagreement
+	// between another source and the fallback, or between the regular sources.
+	fallback.CheckStatus = agentproto.PublicAddressFallbackCheckNoConflict
+	for _, observed := range values {
+		if observed != "" && observed != fallback.Address {
+			fallback.CheckStatus = agentproto.PublicAddressFallbackCheckConflict
+			break
+		}
+	}
+	return "", fallback
 }
 
 func observeFamily(ctx context.Context, client *http.Client, urls []string, v6 bool) string {
-	if len(urls) < 2 {
-		return ""
-	}
+	return addressConsensus(observeFamilySources(ctx, client, urls, v6))
+}
+
+func observeFamilySources(ctx context.Context, client *http.Client, urls []string, v6 bool) []string {
 	// Parallel requests preserve two-source agreement while reserving time for
 	// the bounded fallback inside the driver's 12-second sampling deadline.
 	values := make([]string, len(urls))
@@ -100,6 +116,13 @@ func observeFamily(ctx context.Context, client *http.Client, urls []string, v6 b
 		}()
 	}
 	wg.Wait()
+	return values
+}
+
+func addressConsensus(values []string) string {
+	if len(values) < 2 {
+		return ""
+	}
 	for _, value := range values {
 		if value == "" || value != values[0] {
 			return ""

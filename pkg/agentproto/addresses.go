@@ -9,13 +9,19 @@ type PublicAddresses struct {
 	IPv4      string `json:"ipv4,omitempty"`
 	IPv6      string `json:"ipv6,omitempty"`
 
-	// Single-source fallback observations are advisory only. Older Captains ignore
-	// these fields; they must never enter the consensus IPv4/IPv6 slots above.
+	// Single-source observations remain separate from consensus. Older Captains
+	// ignore them; newer panels may use them only under an explicit follow policy.
+	// They must never enter the consensus IPv4/IPv6 slots above.
 	FallbackIPv4 *PublicAddressFallback `json:"fallback_ipv4,omitempty"`
 	FallbackIPv6 *PublicAddressFallback `json:"fallback_ipv6,omitempty"`
 }
 
 const PublicAddressFallbackSource = "captain_cloudflare_trace"
+
+const (
+	PublicAddressFallbackCheckNoConflict = "no_conflict"
+	PublicAddressFallbackCheckConflict   = "conflict"
+)
 
 // PublicAddressFallback records one anonymous observation through the configured
 // Captain origin, not independent consensus or proof of inbound reachability.
@@ -26,6 +32,14 @@ type PublicAddressFallback struct {
 	Origin    string `json:"origin"`
 	SampledAt int64  `json:"sampled_at"`
 	Error     string `json:"error,omitempty"`
+	// CheckStatus covers this sample's completed independent-source checks and
+	// the fallback result. No conflict is not independent consensus; an omitted
+	// value (including reports from older agents) provides no follow evidence.
+	CheckStatus string `json:"check_status,omitempty"`
+	// RunID binds successive successful samples from one uninterrupted sampler
+	// run. Failures, conflicts, source/address changes and restarts replace it.
+	// It is not a second source and never substitutes for sample timestamps.
+	RunID string `json:"run_id,omitempty"`
 }
 
 func ValidPublicAddress(value string, v6 bool) bool {

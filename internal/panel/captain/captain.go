@@ -594,6 +594,7 @@ func (c *Client) watchAddressSamples(observe func(context.Context) agentproto.Pu
 		}
 	}()
 	started := time.Now()
+	var fallbackRuns addressFallbackRuns
 	timer := time.NewTimer(addressProbeInterval(0))
 	defer timer.Stop()
 	for {
@@ -602,10 +603,12 @@ func (c *Client) watchAddressSamples(observe func(context.Context) agentproto.Pu
 		}
 		sampleCtx, done := context.WithTimeout(ctx, 12*time.Second)
 		sample := observe(sampleCtx)
+		complete := sampleCtx.Err() == nil
 		done()
 		if ctx.Err() != nil {
 			return
 		}
+		fallbackRuns.annotate(&sample, complete, time.Now())
 		c.mu.Lock()
 		if c.cfg.URL == origin {
 			c.addresses = &sample

@@ -193,6 +193,10 @@ func TestTraceForcesAddressFamily(t *testing.T) {
 	if got == nil || got.Address != "2001:db8::10" || got.Error != "" {
 		t.Fatalf("tcp6 observation: %+v", got)
 	}
+	value, fallback := observeFamilyWithFallback(context.Background(), v6Client, []string{v6Server.URL + "/a", v6Server.URL + "/b"}, v6Server.URL, true)
+	if value != "" || fallback == nil || fallback.Address != "2001:db8::10" || fallback.CheckStatus != agentproto.PublicAddressFallbackCheckNoConflict {
+		t.Fatalf("tcp6 fallback follow evidence: %q %+v", value, fallback)
+	}
 	v4Client := publicAddressClient(false)
 	defer v4Client.CloseIdleConnections()
 	trustTraceServer(v4Client, v6Server)
@@ -223,7 +227,7 @@ func TestConsensusWinsAndFallbackNeverPromotes(t *testing.T) {
 	urls := []string{srv.URL + "/a", srv.URL + "/b"}
 	for range 3 {
 		value, fallback := observeFamilyWithFallback(context.Background(), client, urls, srv.URL, false)
-		if value != "" || fallback == nil || fallback.Address != "198.51.100.20" {
+		if value != "" || fallback == nil || fallback.Address != "198.51.100.20" || fallback.CheckStatus != agentproto.PublicAddressFallbackCheckConflict {
 			t.Fatalf("single source promoted: %s %+v", value, fallback)
 		}
 	}
