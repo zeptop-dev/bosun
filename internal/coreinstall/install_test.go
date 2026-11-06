@@ -46,6 +46,24 @@ func TestManifestSanity(t *testing.T) {
 	}
 }
 
+// Security rebuilds change implicit selection without making explicitly pinned
+// legacy installations disappear from the catalog.
+func TestExtendedSecurityRevisionResolution(t *testing.T) {
+	r, ok := Resolve("singbox-extended", "")
+	if !ok || r.Version != "1.14.1-extended-2.7.2-r4" || r.Status != StatusCaution {
+		t.Fatalf("implicit Extended selection: %+v, found=%v", r, ok)
+	}
+	if _, ok := Tested("singbox-extended"); ok {
+		t.Fatal("Extended must still require the caution fallback")
+	}
+	for _, version := range []string{"1.14.1-extended-2.7.2-r1", "1.14.1-extended-2.7.2-r2", "1.14.1-extended-2.7.2-r3"} {
+		r, ok := Resolve("singbox-extended", version)
+		if !ok || r.Version != version || r.Status != StatusBroken {
+			t.Fatalf("explicit legacy selection %s: %+v, found=%v", version, r, ok)
+		}
+	}
+}
+
 func tarGz(t *testing.T, name string, content []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer

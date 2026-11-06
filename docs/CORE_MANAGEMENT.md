@@ -193,7 +193,7 @@ the dedicated privileged, isolated-network shaping test.
 cores:
   singbox: {}
   singbox_extended:
-    version: 1.14.1-extended-2.7.2-r3
+    version: 1.14.1-extended-2.7.2-r4
     stats_listen: 127.0.0.1:9105
 ```
 
@@ -201,7 +201,7 @@ The build pins [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box
 
 Linux amd64/arm64 packages are produced by the reusable release workflow. Before those assets are published, or on other platforms, the installer can build from the pinned source when Go and git are available. The source build applies the same dependency pins. The release workflow checks the exact source/build tags for reachable vulnerabilities and exercises the real binary; a bare Go module advisory is not evidence that its affected package is compiled into the executable.
 
-The `-r3` package keeps the same upstream commit and reviewed October dependency pins, and uses Go 1.26.10 for the certificate security update. Previous `-r1`/`-r2` assets remain immutable; existing explicitly activated installations retain their selection until the administrator switches versions.
+The `-r4` package keeps the same upstream commit and Go 1.26.10, and adds `github.com/andybalholm/brotli@v1.2.7` and `github.com/klauspost/compress@v1.20.2` to address [GO-2026-6888](https://vuln.go.dev/ID/GO-2026-6888) and [GO-2026-6865](https://vuln.go.dev/ID/GO-2026-6865). Previous `-r1`/`-r2`/`-r3` assets remain immutable and are marked `broken` because their pinned dependencies are affected. This status does not block an explicitly selected old version; administrators must switch existing installations to `-r4`. The new package remains `caution` and does not replace the default sing-box distribution.
 
 ### WARP outbound
 
