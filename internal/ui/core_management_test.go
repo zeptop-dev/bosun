@@ -20,7 +20,7 @@ func TestCoreManagementAccess(t *testing.T) {
 	defer srv.Close()
 	jar, _ := cookiejar.New(nil)
 	c := &client{t: t, srv: srv, http: &http.Client{Jar: jar}}
-	body := map[string]any{"action": "activate", "distribution": "singbox", "version": "1.14.1-r2", "revision": 1}
+	body := map[string]any{"action": "activate", "distribution": "singbox", "version": "1.14.1-r3", "revision": 1}
 	if code, _ := c.do("POST", "/api/core-management", body); code != 401 {
 		t.Fatal(code)
 	}

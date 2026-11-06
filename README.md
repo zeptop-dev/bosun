@@ -793,8 +793,10 @@ Current manifest:
 
 | core | version | status | note |
 |---|---|---|---|
-| singbox | 1.14.1-r2 | tested | upstream 1.14.1 rebuilt with Go 1.26.8 (`-r1` was compiled with Go 1.26.0) |
-| singbox | 1.14.1-r1 | tested | upstream 1.14.1 built with `with_v2ray_api` and `with_wireguard` (WARP); WireGuard endpoints survive network changes |
+| singbox | 1.14.1-r3 | tested | compatible default: upstream 1.14.1 with Go 1.26.10, security dependency pins, stats and WARP |
+| singbox | 1.14.4-r1 | caution | optional parser upgrade with the same security pins; repeated group members require correction before explicit activation |
+| singbox | 1.14.1-r2 | broken | legacy Go 1.26.8 and dependencies have reachable vulnerabilities; use 1.14.1-r3 |
+| singbox | 1.14.1-r1 | broken | legacy Go 1.26.0 and dependencies have known vulnerabilities; use 1.14.1-r3 |
 | singbox | 1.14.0-r2 | tested | upstream 1.14.0 built with `with_v2ray_api` and `with_wireguard` (WARP) |
 | singbox | 1.14.0 | caution | first build without `with_wireguard`; WARP outbounds fail |
 | xray | 26.3.27-r1 | tested | upstream 26.3.27 rebuilt by bosun CI with Go 1.26.8 (the official binary is Go 1.26.1); REALITY works with mihomo and sing-box clients |
@@ -813,9 +815,12 @@ Current manifest:
 ## sing-box and Xray binaries, and CI
 
 Official sing-box release builds do **not** include the V2Ray stats API, which
-per-user accounting needs. `scripts/build-singbox.sh` builds the unmodified
-upstream tag with the extra tags (`with_v2ray_api` among them); module
-checksums are verified by the Go toolchain. Not a fork.
+per-user accounting needs. `scripts/build-singbox.sh` builds fixed upstream
+commits with the extra tags
+(`with_v2ray_api` among them) and reviewed security dependency pins. Upstream Go
+source is unchanged; only `go.mod` and `go.sum` differ, and module checksums are
+verified by the Go toolchain. Each package includes corresponding source and
+its original GPL license. No upstream implementation is vendored into bosun.
 
 Xray's official binaries are fine feature-wise but trail Go's security
 releases (26.3.27 is Go 1.26.1, which misses the crypto/tls and net/http fixes
@@ -826,12 +831,16 @@ that one toolchain line, and a weekly `govulncheck` run says when it is due.
 
 GitHub Actions (`.github/workflows/`) run tests on every push, and on a `v*`
 tag cross-build bosun for linux amd64/arm64 and attach the binaries plus
-`SHA256SUMS` to the GitHub Release, and push the container image. The
-`singbox` and `xray` workflows (run by hand with a version and a rebuild
-suffix) build those cores the same way and publish them as pre-releases:
+`SHA256SUMS` to the GitHub Release, and push the container image. The `singbox`
+workflow builds both reviewed packages in separate jobs, tests
+both real cores, and publishes immutable pre-releases only when explicitly
+requested or during a product tag release. CI and manual product rehearsals
+consume the compatible default artifact without publishing. The `xray` workflow
+accepts its reviewed version and rebuild suffix:
 
 ```
-releases/download/singbox-1.14.1-r2/sing-box-1.14.1-r2-linux-{amd64,arm64}  + SHA256SUMS
+releases/download/singbox-1.14.1-r3/sing-box-1.14.1-r3-linux-{amd64,arm64}  + SHA256SUMS
+releases/download/singbox-1.14.4-r1/sing-box-1.14.4-r1-linux-{amd64,arm64}  + SHA256SUMS
 releases/download/xray-26.3.27-r1/xray-26.3.27-r1-linux-{amd64,arm64}      + SHA256SUMS
 releases/download/<tag>/bosun-linux-{amd64,arm64}                     + SHA256SUMS
 ```
@@ -1718,20 +1727,29 @@ connection handoff.
 
 Managed proxy cores can report private, process-bound evidence of actually activated configuration files. Digests exclude later runtime updates and never upload native configuration or credentials. See [activated configuration evidence](docs/RENDERED_CONFIG.md).
 
-### sing-box 1.14.4 security build
+### sing-box security rebuilds and optional parser upgrade
 
-The reviewed `1.14.4-r1` package builds upstream commit
-`c005f35300ce76427dc285481ec5695f5b179cd2` with Go 1.26.10, the per-user
-statistics API and pinned security dependency updates. Each package includes
-corresponding source, resolved module manifests, license and build instructions.
+The default `1.14.1-r3` package keeps upstream commit
+`1ac1a339cb1223e9c70eae14c44411c75033c02d` and its configuration behavior while
+updating Go to 1.26.10 and pinning security fixes for its dependencies. The old
+`1.14.1-r2` source has reachable dependency and standard-library vulnerabilities;
+its assets remain immutable and its manifest status is now `broken`. An exact
+old version or custom binary remains an explicit selection, so operators using
+one must update it themselves.
+
+The optional `1.14.4-r1` package builds upstream commit
+`c005f35300ce76427dc285481ec5695f5b179cd2` with the same toolchain and dependency
+pins. Both packages retain the per-user statistics API and include corresponding
+source, resolved module manifests, license and build instructions.
 
 Routing saves and presets preserve the existing repeated-member contract for
 older cores and other adapters. sing-box 1.14.4 rejects duplicate urltest/selector
 members during its real configuration check, including native JSON overrides.
 Correct those members explicitly before activating this version; bosun does not
-silently deduplicate stored routes. Existing explicit core
-versions remain selectable, and downloading a package does not activate it.
-This package is marked `caution` and does not replace the default on an
+silently deduplicate stored routes. Existing explicit versions in `config.yaml`
+remain usable, but core management rejects packages marked `broken` for new
+downloads or activation. Downloading a supported package does not activate it.
+The `1.14.4-r1` package is marked `caution` and does not replace the default on an
 unpinned bosun restart. Download it, correct incompatible group members, then
 explicitly activate it through core management so the candidate configuration
 is checked before the running instance is stopped. This release does not enable

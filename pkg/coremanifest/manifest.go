@@ -134,11 +134,23 @@ var Manifest = []Release{
 			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.4"},
 	},
 	{
+		Core: "singbox", Version: "1.14.1-r3", Status: StatusTested,
+		Note: "compatible upstream v1.14.1 rebuilt with Go 1.26.10 and reviewed security dependency updates; preserves repeated outbound-group members",
+		Assets: map[string]Asset{
+			"linux/amd64": singboxCI("1.14.1-r3", "amd64"),
+			"linux/arm64": singboxCI("1.14.1-r3", "arm64"),
+		},
+		Build: &Build{Repository: "https://github.com/SagerNet/sing-box.git", Commit: "1ac1a339cb1223e9c70eae14c44411c75033c02d",
+			Modules: []string{"golang.org/x/crypto@v0.57.0", "golang.org/x/net@v0.60.0", "golang.org/x/text@v0.42.0", "golang.org/x/mod@v0.41.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0", "github.com/andybalholm/brotli@v1.2.7", "github.com/klauspost/compress@v1.20.2"},
+			Package: "./cmd/sing-box", Version: "v1.14.1", Tags: singboxTags,
+			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.1"},
+	},
+	{
 		// -r2: the same upstream v1.14.1 rebuilt with Go 1.26.8; -r1 was
 		// compiled with Go 1.26.0 and missed the crypto/tls and net/http
 		// fixes of 1.26.1-1.26.8.
-		Core: "singbox", Version: "1.14.1-r2", Status: StatusTested,
-		Note: "upstream v1.14.1 built by bosun CI (Go 1.26.8) with with_v2ray_api (per-user stats) and with_wireguard (WARP)",
+		Core: "singbox", Version: "1.14.1-r2", Status: StatusBroken,
+		Note: "legacy Go 1.26.8 and dependencies have reachable vulnerabilities; use 1.14.1-r3",
 		Assets: map[string]Asset{
 			"linux/amd64": singboxCI("1.14.1-r2", "amd64"),
 			"linux/arm64": singboxCI("1.14.1-r2", "arm64"),
@@ -150,8 +162,8 @@ var Manifest = []Release{
 		// 1.14.1: WireGuard endpoint no longer stalls after a network change
 		// or device sleep (WARP outbounds), selector interrupts routed
 		// connections, "check" no longer shares the running registry.
-		Core: "singbox", Version: "1.14.1-r1", Status: StatusTested,
-		Note: "upstream v1.14.1 built by bosun CI with with_v2ray_api (per-user stats) and with_wireguard (WARP)",
+		Core: "singbox", Version: "1.14.1-r1", Status: StatusBroken,
+		Note: "legacy Go 1.26.0 and dependencies have known vulnerabilities; use 1.14.1-r3",
 		Assets: map[string]Asset{
 			"linux/amd64": singboxCI("1.14.1-r1", "amd64"),
 			"linux/arm64": singboxCI("1.14.1-r1", "arm64"),

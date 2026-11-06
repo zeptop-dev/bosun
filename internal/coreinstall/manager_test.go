@@ -14,7 +14,7 @@ func TestManagedPackageValidationAndPins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := spec.CoreRequest{Action: "activate", Distribution: "singbox", Version: "1.14.1-r2", Revision: 1}
+	r := spec.CoreRequest{Action: "activate", Distribution: "singbox", Version: "1.14.1-r3", Revision: 1}
 	if _, err = m.Validate(r); err == nil {
 		t.Fatal("external binary pin bypassed")
 	}
@@ -27,7 +27,7 @@ func TestManagedPackageValidationAndPins(t *testing.T) {
 	if _, err = m.Validate(r); err == nil {
 		t.Fatal("path accepted as version")
 	}
-	path := i.Path("singbox", "1.14.1-r2")
+	path := i.Path("singbox", "1.14.1-r3")
 	if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -38,8 +38,24 @@ func TestManagedPackageValidationAndPins(t *testing.T) {
 	if err = os.Symlink(target, path); err != nil {
 		t.Fatal(err)
 	}
-	if i.Installed("singbox", "1.14.1-r2") {
+	if i.Installed("singbox", "1.14.1-r3") {
 		t.Fatal("symlink mistaken for a managed binary")
+	}
+}
+
+func TestManagedLegacySecurityBuildsAreRejected(t *testing.T) {
+	i := New(t.TempDir(), slog.Default())
+	m, err := NewManager(i, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Validate(spec.CoreRequest{Action: "download", Distribution: "singbox", Version: "1.14.1-r3"}); err != nil {
+		t.Fatalf("safe compatible download rejected: %v", err)
+	}
+	for _, version := range []string{"1.14.1-r1", "1.14.1-r2"} {
+		if _, err := m.Validate(spec.CoreRequest{Action: "download", Distribution: "singbox", Version: version}); err == nil || err.Error() != "this core version is marked broken" {
+			t.Fatalf("legacy vulnerable package %s was not rejected as broken: %v", version, err)
+		}
 	}
 }
 

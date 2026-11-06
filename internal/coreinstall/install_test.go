@@ -206,7 +206,7 @@ func TestResolvePrefersTestedRebuild(t *testing.T) {
 		{"xray", "26.3.27", "26.3.27-r1"},    // pinned upstream release -> its rebuild
 		{"xray", "26.3.27-r1", "26.3.27-r1"}, // suffix is literal
 		{"xray", "26.9.9", "26.9.9"},         // no rebuild: the named (broken) release
-		{"singbox", "1.14.1", "1.14.1-r2"},
+		{"singbox", "1.14.1", "1.14.1-r3"},
 		{"singbox", "1.14.0", "1.14.0-r2"}, // the tested rebuild, not the caution build
 		{"mita", "3.36.1", "3.36.1"},
 	}
@@ -223,8 +223,11 @@ func TestResolvePrefersTestedRebuild(t *testing.T) {
 
 func TestSingboxSecurityRevisionResolution(t *testing.T) {
 	current, ok := Resolve("singbox", "")
-	if !ok || current.Version != "1.14.1-r2" || current.Status != StatusTested {
+	if !ok || current.Version != "1.14.1-r3" || current.Status != StatusTested {
 		t.Fatalf("unpinned startup changed core semantics: %+v", current)
+	}
+	if current.Build == nil || current.Build.Commit != "1ac1a339cb1223e9c70eae14c44411c75033c02d" || len(current.Build.Modules) != 8 {
+		t.Fatal("compatible default lost fixed source/security pins")
 	}
 	r, ok := Resolve("singbox", "1.14.4-r1")
 	if !ok || r.Version != "1.14.4-r1" || r.Status != StatusCaution {
@@ -234,7 +237,7 @@ func TestSingboxSecurityRevisionResolution(t *testing.T) {
 		t.Fatal("source fallback lost security pins")
 	}
 	for _, v := range []string{"1.14.1-r2", "1.14.1-r1"} {
-		if old, ok := Resolve("singbox", v); !ok || old.Version != v {
+		if old, ok := Resolve("singbox", v); !ok || old.Version != v || old.Status != StatusBroken {
 			t.Fatal("explicit old selection lost")
 		}
 	}

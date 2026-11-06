@@ -6,12 +6,21 @@ VERSION=${1:?version}
 TARGET_OS=${2:?goos}
 TARGET_ARCH=${3:?goarch}
 CORE_OUTPUT=$(mkdir -p "${4:-dist}" && cd "${4:-dist}" && pwd)
-CORE_SUFFIX=${SUFFIX:--r1}
-if [[ "$VERSION" != 1.14.4 || "$CORE_SUFFIX" != -r1 ]]; then
-  echo 'Only the reviewed 1.14.4-r1 package can be built by this revision.' >&2
-  exit 1
-fi
-CORE_COMMIT=c005f35300ce76427dc285481ec5695f5b179cd2
+case "$VERSION" in
+  1.14.1)
+    CORE_SUFFIX=${SUFFIX:--r3}
+    CORE_COMMIT=1ac1a339cb1223e9c70eae14c44411c75033c02d
+    CORE_ACTIVATION='Compatible default; retains upstream 1.14.1 configuration semantics with security dependency and toolchain updates.'
+    test "$CORE_SUFFIX" = -r3 ;;
+  1.14.4)
+    CORE_SUFFIX=${SUFFIX:--r1}
+    CORE_COMMIT=c005f35300ce76427dc285481ec5695f5b179cd2
+    CORE_ACTIVATION='Caution package; correct duplicate outbound-group members and explicitly activate through core management. Download alone does not activate it.'
+    test "$CORE_SUFFIX" = -r1 ;;
+  *)
+    echo 'Only the reviewed 1.14.1-r3 and 1.14.4-r1 packages can be built by this revision.' >&2
+    exit 1 ;;
+esac
 CORE_TAGS=with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme,with_wireguard
 CORE_WORK=$(mktemp -d)
 trap 'rm -rf "$CORE_WORK"' EXIT
@@ -38,17 +47,17 @@ git ls-files -z | tar -czf "$CORE_OUTPUT/$PREFIX-source.tar.gz" --null -T -
 cp go.mod "$CORE_OUTPUT/$PREFIX-go.mod"
 cp go.sum "$CORE_OUTPUT/$PREFIX-go.sum"
 cp LICENSE "$CORE_OUTPUT/$PREFIX-LICENSE.txt"
-cat > "$CORE_OUTPUT/$PREFIX-BUILD.txt" <<'BUILD'
+cat > "$CORE_OUTPUT/$PREFIX-BUILD.txt" <<BUILD
 Distribution: SagerNet/sing-box
 Upstream: https://github.com/SagerNet/sing-box
-Tag: v1.14.4
-Commit: c005f35300ce76427dc285481ec5695f5b179cd2
-Package: 1.14.4-r1
+Tag: v$VERSION
+Commit: $CORE_COMMIT
+Package: $VERSION$CORE_SUFFIX
 Compiler: Go 1.26.10, CGO_ENABLED=0
 Build: go build -trimpath -buildvcs=false
 Tags: with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme,with_wireguard
-Linker: -s -w -X github.com/sagernet/sing-box/constant.Version=1.14.4
+Linker: -s -w -X github.com/sagernet/sing-box/constant.Version=$VERSION
 Dependencies: golang.org/x/crypto@v0.57.0 golang.org/x/net@v0.60.0 golang.org/x/text@v0.42.0 golang.org/x/mod@v0.41.0 google.golang.org/grpc@v1.83.2 github.com/go-chi/chi/v5@v5.3.0 github.com/andybalholm/brotli@v1.2.7 github.com/klauspost/compress@v1.20.2
 Source: upstream Go sources unchanged; go.mod/go.sum updated with the pins above. Corresponding source archive, resolved module manifests and GPL license included.
-Activation: caution package; unpinned installations retain the compatible default. Correct duplicate outbound-group members and explicitly activate through core management. Download alone does not activate it.
+Activation: $CORE_ACTIVATION
 BUILD

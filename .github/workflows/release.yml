@@ -34,12 +34,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with: { name: singbox, path: test-cores }
+        with: { name: singbox-1.14.1-r3, path: test-cores }
       - name: Use the validated core in dry runs too
         run: |
-          chmod +x test-cores/sing-box-1.14.4-r1-linux-amd64
-          echo "BOSUN_SINGBOX_TEST_BINARY=$PWD/test-cores/sing-box-1.14.4-r1-linux-amd64" >> "$GITHUB_ENV"
-          echo "BOSUN_COREONLY_TEST_BINARY=$PWD/test-cores/sing-box-1.14.4-r1-linux-amd64" >> "$GITHUB_ENV"
+          echo "BOSUN_SINGBOX_TEST_VERSION=1.14.1" >> "$GITHUB_ENV"
+          chmod +x test-cores/sing-box-1.14.1-r3-linux-amd64
+          echo "BOSUN_SINGBOX_TEST_BINARY=$PWD/test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
+          echo "BOSUN_COREONLY_TEST_BINARY=$PWD/test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
       # A tag must clear the same gates as master: a red commit may not ship.
       - run: git ls-files '*.go' | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
       - run: go vet ./...

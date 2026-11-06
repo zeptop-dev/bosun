@@ -80,6 +80,18 @@ func TestRealSingboxProtocols(t *testing.T) {
 }
 func TestRealSingboxAccountingAndReload(t *testing.T) {
 	binary := compatibilityBinary(t)
+	versionOutput, err := exec.Command(binary, "version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("core version: %v: %s", err, versionOutput)
+	}
+	version := strings.TrimPrefix(strings.SplitN(string(versionOutput), "\n", 2)[0], "sing-box version ")
+	if expected := os.Getenv("BOSUN_SINGBOX_TEST_VERSION"); expected != "" && version != expected {
+		t.Fatalf("core version %q differs from expected %q", version, expected)
+	}
+	if version != "1.14.1" && version != "1.14.4" {
+		t.Fatalf("duplicate-member fixture requires reviewed version 1.14.1 or 1.14.4, got %q", version)
+	}
+	rejectDuplicates := version == "1.14.4"
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	target, e := net.Listen("tcp", "127.0.0.1:0")
@@ -116,6 +128,12 @@ func TestRealSingboxAccountingAndReload(t *testing.T) {
 	}
 	defer c.Stop(context.Background())
 	node := &spec.Node{AllowPrivateDest: true, Inbounds: ins}
+	if !rejectDuplicates {
+		// The compatible default must actually start and route through the
+		// historical repeated group, not merely accept an unused config.
+		node.Outbounds = []spec.Outbound{{Tag: "duplicate", Balancer: &spec.Balancer{Members: []string{"direct", "direct"}}}}
+		node.DefaultOutbound = "duplicate"
+	}
 	b, e := c.Render(node, ins, users)
 	if e != nil {
 		t.Fatal(e)
@@ -190,8 +208,10 @@ func TestRealSingboxAccountingAndReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = candidate.Check(ctx, badBundle); err == nil {
-		t.Fatal("duplicate group passed candidate preflight")
+	if err = candidate.Check(ctx, badBundle); rejectDuplicates && err == nil {
+		t.Fatal("duplicate group passed incompatible candidate preflight")
+	} else if !rejectDuplicates && err != nil {
+		t.Fatalf("compatible candidate rejected historical repeated members: %v", err)
 	}
 	if !c.Running() || c.ListenerPIDs()["*"] != acceptedPID {
 		t.Fatal("candidate preflight stopped or replaced active core")
