@@ -28,18 +28,20 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with: { name: singbox-1.14.1-r3, path: test-cores }
+        with:
+          name: singbox-1.14.1-r3
+          path: ${{ runner.temp }}/bosun-test-cores
       - name: Use the candidate core before its package is published
         run: |
           echo "BOSUN_SINGBOX_TEST_VERSION=1.14.1" >> "$GITHUB_ENV"
-          chmod +x test-cores/sing-box-1.14.1-r3-linux-amd64
-          echo "BOSUN_SINGBOX_TEST_BINARY=$PWD/test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
-          echo "BOSUN_COREONLY_TEST_BINARY=$PWD/test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
+          chmod +x "$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64"
+          echo "BOSUN_SINGBOX_TEST_BINARY=$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
+          echo "BOSUN_COREONLY_TEST_BINARY=$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
       - run: git ls-files '*.go' | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-      - run: go test -race -timeout 20m -coverpkg=./... -coverprofile=coverage.out ./...
-      - run: go tool cover -func=coverage.out | tail -1
+      - run: go test -race -timeout 20m -coverpkg=./... -coverprofile="$RUNNER_TEMP/bosun-coverage.out" ./...
+      - run: go tool cover -func="$RUNNER_TEMP/bosun-coverage.out" | tail -1
       - name: WARP configuration against both real sing-box distributions
         run: BOSUN_TEST_DOWNLOAD_CORES=1 go test -race ./internal/core/singbox -run '^TestWARPRealConfigs$' -v -timeout 5m
       - name: Real Extended reload accounting and native aggregates

@@ -34,13 +34,15 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with: { name: singbox-1.14.1-r3, path: test-cores }
+        with:
+          name: singbox-1.14.1-r3
+          path: ${{ runner.temp }}/bosun-test-cores
       - name: Use the validated core in dry runs too
         run: |
           echo "BOSUN_SINGBOX_TEST_VERSION=1.14.1" >> "$GITHUB_ENV"
-          chmod +x test-cores/sing-box-1.14.1-r3-linux-amd64
-          echo "BOSUN_SINGBOX_TEST_BINARY=$PWD/test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
-          echo "BOSUN_COREONLY_TEST_BINARY=$PWD/test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
+          chmod +x "$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64"
+          echo "BOSUN_SINGBOX_TEST_BINARY=$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
+          echo "BOSUN_COREONLY_TEST_BINARY=$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
       # A tag must clear the same gates as master: a red commit may not ship.
       - run: git ls-files '*.go' | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
       - run: go vet ./...
@@ -69,7 +71,20 @@ jobs:
         run: |
           go test -c ./internal/reversewg -o /tmp/bosun-reversewg.test
           sudo env BOSUN_REVERSEWG_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 /tmp/bosun-reversewg.test -test.run '^TestLinuxTransport$' -test.v -test.timeout 5m
+      - name: Require clean source before release compilation
+        run: |
+          if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
+            echo 'Release compilation requires a clean tracked and untracked workspace.' >&2
+            git status --short --untracked-files=all
+            exit 1
+          fi
       - run: make linux VERSION="${GITHUB_REF_NAME}"
+      - name: Verify binaries retained clean source provenance
+        run: |
+          for binary in bin/bosun-linux-*; do
+            go version -m "$binary" | grep -F "vcs.revision=$GITHUB_SHA"
+            go version -m "$binary" | grep -F 'vcs.modified=false'
+          done
       - run: scripts/build-geocheck.sh bin
       - name: diagnostic tool schema check
         run: BOSUN_TEST_GEOCHECK="$PWD/bin/geocheck-linux-amd64" go test ./internal/netdiag -run TestInstalledGeoCheckSchema
