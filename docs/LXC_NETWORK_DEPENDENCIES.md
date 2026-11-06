@@ -1,6 +1,6 @@
 # Network dependencies and LXC
 
-The installer choices and runtime recovery described here ship in bosun v0.91.0.
+The installer choices and runtime recovery described here ship in bosun v0.91.1.
 Captain v1.57.0 exposes the separate OS-package choice; older Captain releases
 can continue managing upgraded agents through the existing protocol.
 

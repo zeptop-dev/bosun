@@ -21,15 +21,20 @@ v0.62.0 for HTTP/2 and HTML parser/renderer security fixes; see
 `scripts/build-geocheck.sh` and
 `licenses/geocheck-MIT.txt`. No AGPL panel/node implementation is linked or
 copied. The release includes amd64/arm64 checker binaries, its license and
-checksums. This dependency update affects newly built release attachments;
-it does not change the pinned download or replace an already installed tool.
+checksums. Product releases may attach rebuilt tools independently of the
+installed download pin; the diagnostic manifest selects the reviewed artifact.
 
 On the first Linux exit check, bosun downloads its fixed release artifact,
 verifies SHA-256 and installs it into
-`<data_dir>/tools/geocheck/0.3.0-r1/`. The pinned distribution is bosun
-`v0.57.0`, not the latest upstream download. Root-owned/private directory
+`<data_dir>/tools/geocheck/0.3.0-r2/`. The pinned distribution is the verified
+bosun `v0.90.0` release, built with Go 1.26.10 and x/net v0.62.0.
+The former r1 cache is retained but never executed or used as a fallback. Root-owned/private directory
 checks and no-symlink opens protect installation. A missing/unreachable
 artifact produces an explicit error; no arbitrary executable is run from PATH.
+With Captain delivery, the panel must also recognize the new r2 tool identity
+(Captain v1.57.0). During an agent-first upgrade, this optional diagnostic can
+remain unavailable until the panel is upgraded; normal agent reporting and
+proxy service do not depend on the checker.
 
 One diagnostic runs at a time. Installation is bounded to 20 seconds and
 the exit diagnostic to 90 seconds including preparation; output is bounded
