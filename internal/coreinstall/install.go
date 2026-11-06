@@ -342,8 +342,8 @@ func (i *Installer) build(ctx context.Context, b Build, dest string) error {
 	return os.WriteFile(dest, data, 0o755)
 }
 
-// Forks retain sing-box's original module path; go install fork@tag cannot
-// build them. Checkout an immutable revision and apply only vetted dependency pins.
+// Source rebuilds (including forks retaining the upstream module path) use an
+// immutable revision and vetted dependency pins.
 func (i *Installer) buildSource(ctx context.Context, b Build, goBin, work, dest string) error {
 	source := filepath.Join(work, "source")
 	clone := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", b.Version, "--", b.Repository, source)
@@ -369,7 +369,7 @@ func (i *Installer) buildSource(ctx context.Context, b Build, goBin, work, dest 
 	args := []string{"build", "-trimpath", "-buildvcs=false", "-tags", strings.Join(b.Tags, ","), "-ldflags", "-s -w " + b.LDFlags, "-o", dest, b.Package}
 	cmd := exec.CommandContext(ctx, goBin, args...)
 	cmd.Dir = source
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOFLAGS=-mod=readonly", "GOTOOLCHAIN=go1.26.10", "GOOS="+i.GOOS, "GOARCH="+i.GOARCH)
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOFLAGS=-mod=readonly", "GOTOOLCHAIN=go1.26.10", "GOOS="+i.GOOS, "GOARCH="+i.GOARCH, "GOWORK=off")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("core source build failed: %w: %.4096s", err, output)
 	}

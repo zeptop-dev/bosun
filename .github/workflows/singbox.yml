@@ -1,21 +1,18 @@
-# Builds upstream sing-box (bosun CI) with bosun's extra tags (with_v2ray_api ...) for
-# linux amd64/arm64 and publishes it as a pre-release tagged singbox-<version>.
-# Pre-release so it never becomes "latest" for the installer's version lookup.
 name: singbox
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: sing-box version (e.g. 1.14.0)
-        required: true
-      suffix:
-        description: rebuild suffix (e.g. -r2) when the same upstream version is rebuilt with more tags
-        required: false
-        default: ""
-
+      publish:
+        description: Publish the immutable reviewed core package after validation
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+        default: false
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,14 +20,42 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
-      - run: scripts/build-singbox.sh "${{ inputs.version }}" linux amd64 dist
-        env: { SUFFIX: "${{ inputs.suffix }}" }
-      - run: scripts/build-singbox.sh "${{ inputs.version }}" linux arm64 dist
-        env: { SUFFIX: "${{ inputs.suffix }}" }
-      - run: cd dist && sha256sum sing-box-* > SHA256SUMS && cat SHA256SUMS && ./sing-box-${{ inputs.version }}${{ inputs.suffix }}-linux-amd64 version
-      - env: { GH_TOKEN: "${{ github.token }}" }
+      - run: scripts/build-singbox.sh 1.14.4 linux amd64 dist
+      - run: scripts/build-singbox.sh 1.14.4 linux arm64 dist
+      - name: Verify configs, accounting, revocation and private routing
+        env:
+          BOSUN_SINGBOX_TEST_BINARY: ${{ github.workspace }}/dist/sing-box-1.14.4-r1-linux-amd64
+          BOSUN_COREONLY_TEST_BINARY: ${{ github.workspace }}/dist/sing-box-1.14.4-r1-linux-amd64
         run: |
-          gh release create "singbox-${{ inputs.version }}${{ inputs.suffix }}" --prerelease \
-            --title "sing-box ${{ inputs.version }}${{ inputs.suffix }} (bosun build)" \
-            --notes "Unmodified upstream sing-box v${{ inputs.version }} built with $(go env GOVERSION) and tags with_quic,with_utls,with_clash_api,with_v2ray_api,with_gvisor,with_acme,with_wireguard. Consumed by bosun's core installer." \
-            dist/sing-box-* dist/SHA256SUMS
+          "$BOSUN_SINGBOX_TEST_BINARY" version
+          go test -race ./internal/core/singbox -run '^Test(RealSingbox.*|WARPRealConfigs|CoreOnlyRealSingbox)$' -v -timeout 5m
+          for binary in dist/sing-box-1.14.4-r1-linux-*; do
+            file "$binary" | grep -q 'statically linked'
+            go version "$binary" | grep -q 'go1.26.10'
+          done
+      - name: Verify Linux UID isolation, private permissions and shaping
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nftables iproute2 util-linux python3 openssl
+          go test -c ./internal/core/singbox -o /tmp/bosun-singbox-compat.test
+          sudo env BOSUN_COREONLY_TEST_BINARY="$PWD/dist/sing-box-1.14.4-r1-linux-amd64" unshare --net sh -c 'ip link set lo up; ip addr add 10.10.0.2/32 dev lo; exec /tmp/bosun-singbox-compat.test -test.run "^TestCoreOnlyRealSingbox/singbox$" -test.v -test.timeout 2m'
+          go test -c ./internal/privateintegration -o /tmp/bosun-singbox-private.test
+          sudo env BOSUN_NFT_TEST=1 BOSUN_SINGBOX_TEST_BINARY="$PWD/dist/sing-box-1.14.4-r1-linux-amd64" /tmp/bosun-singbox-private.test -test.run '^TestPrivateAccessLinuxCores/singbox' -test.v -test.timeout 5m
+          cd dist
+          sha256sum sing-box-* > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: singbox
+          path: dist/*
+      - name: Publish a new immutable package
+        if: inputs.publish
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          tag=singbox-1.14.4-r1
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo 'Package already published; retaining the existing assets.'
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
+              --title 'sing-box 1.14.4-r1 (bosun security build)' \
+              --notes-file dist/sing-box-1.14.4-r1-BUILD.txt dist/*
+          fi

@@ -32,7 +32,7 @@ type Asset struct {
 // the fallback when no Asset exists for the platform, and the only option for
 // sing-box because upstream release binaries omit the stats API bosun needs.
 type Build struct {
-	Repository string   // optional pinned Git source when a fork retains the upstream module path
+	Repository string   // optional pinned Git source for reviewed dependency rebuilds
 	Commit     string   // exact commit required for Repository builds
 	Modules    []string // vetted dependency security updates for source builds
 	Package    string   // e.g. github.com/sagernet/sing-box/cmd/sing-box
@@ -120,6 +120,18 @@ var Manifest = []Release{
 		},
 		Build: &Build{Repository: "https://github.com/shtorm-7/sing-box-extended.git", Commit: "55faa763f986f4ca8a492d9b2719bc6330d2bef5",
 			Modules: []string{"golang.org/x/crypto@v0.56.0", "golang.org/x/text@v0.41.0", "golang.org/x/mod@v0.40.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0"}, Package: "./cmd/sing-box", Version: "v1.14.1-extended-2.7.2", Tags: singboxTags, LDFlags: "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=1.14.1-extended-2.7.2"},
+	},
+	{
+		Core: "singbox", Version: "1.14.4-r1", Status: StatusTested,
+		Note: "upstream v1.14.4, Go 1.26.10 with reviewed security dependency updates and per-user stats; duplicate outbound-group members must be corrected before activation",
+		Assets: map[string]Asset{
+			"linux/amd64": singboxCI("1.14.4-r1", "amd64"),
+			"linux/arm64": singboxCI("1.14.4-r1", "arm64"),
+		},
+		Build: &Build{Repository: "https://github.com/SagerNet/sing-box.git", Commit: "c005f35300ce76427dc285481ec5695f5b179cd2",
+			Modules: []string{"golang.org/x/crypto@v0.57.0", "golang.org/x/net@v0.60.0", "golang.org/x/text@v0.42.0", "golang.org/x/mod@v0.41.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0", "github.com/andybalholm/brotli@v1.2.7", "github.com/klauspost/compress@v1.20.2"},
+			Package: "./cmd/sing-box", Version: "v1.14.4", Tags: singboxTags,
+			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.4"},
 	},
 	{
 		// -r2: the same upstream v1.14.1 rebuilt with Go 1.26.8; -r1 was

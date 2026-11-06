@@ -12,12 +12,16 @@ permissions:
   packages: write
 
 jobs:
+  standard-core:
+    uses: ./.github/workflows/singbox.yml
+    with:
+      publish: ${{ github.event_name == 'push' }}
   extended-core:
     uses: ./.github/workflows/singbox-extended.yml
     with:
       publish: ${{ github.event_name == 'push' }}
   binaries:
-    needs: extended-core
+    needs: [standard-core, extended-core]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,6 +33,13 @@ jobs:
       - run: cd web/ui && pnpm install --frozen-lockfile && pnpm exec oxlint src && pnpm build
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with: { name: singbox, path: test-cores }
+      - name: Use the validated core in dry runs too
+        run: |
+          chmod +x test-cores/sing-box-1.14.4-r1-linux-amd64
+          echo "BOSUN_SINGBOX_TEST_BINARY=$PWD/test-cores/sing-box-1.14.4-r1-linux-amd64" >> "$GITHUB_ENV"
+          echo "BOSUN_COREONLY_TEST_BINARY=$PWD/test-cores/sing-box-1.14.4-r1-linux-amd64" >> "$GITHUB_ENV"
       # A tag must clear the same gates as master: a red commit may not ship.
       - run: git ls-files '*.go' | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
       - run: go vet ./...
@@ -43,7 +54,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y nftables iproute2 util-linux python3 openssl wireguard-tools
           go test -c ./internal/privateintegration -o /tmp/bosun-private.test
-          sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m
+          sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 BOSUN_SINGBOX_TEST_BINARY="$BOSUN_SINGBOX_TEST_BINARY" /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m
       - name: Isolated aggregate service control and real WireGuard
         run: |
           go test -c ./internal/servicecontrol -o /tmp/bosun-service-control.test

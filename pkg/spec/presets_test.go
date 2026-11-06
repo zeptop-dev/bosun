@@ -100,3 +100,18 @@ func TestPresetEveryCore(t *testing.T) {
 		})
 	}
 }
+
+func TestRoutingRejectsDuplicateBalancerMembers(t *testing.T) {
+	for _, members := range [][]string{{"direct", "direct"}, {"direct", "exit", "direct"}} {
+		outs := []Outbound{{Tag: "exit", Protocol: "direct"}, {Tag: "pool", Balancer: &Balancer{Members: members}}}
+		if err := ValidateRoutingReferences(outs, nil, "pool"); err == nil || !strings.Contains(err.Error(), "duplicate balancer member") {
+			t.Fatalf("duplicate accepted: %v", err)
+		}
+		if err := validatePresetOutbound(outs[1]); err == nil {
+			t.Fatal("preset accepted duplicate")
+		}
+	}
+	if err := ValidateRoutingReferences([]Outbound{{Tag: "pool", Balancer: &Balancer{Members: []string{"direct"}}}}, nil, "pool"); err != nil {
+		t.Fatal(err)
+	}
+}

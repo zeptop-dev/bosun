@@ -1717,3 +1717,19 @@ ownership is not an end-to-end subscriber-connectivity test or seamless
 connection handoff.
 
 Managed proxy cores can report private, process-bound evidence of actually activated configuration files. Digests exclude later runtime updates and never upload native configuration or credentials. See [activated configuration evidence](docs/RENDERED_CONFIG.md).
+
+### sing-box 1.14.4 security build
+
+The reviewed `1.14.4-r1` package builds upstream commit
+`c005f35300ce76427dc285481ec5695f5b179cd2` with Go 1.26.10, the per-user
+statistics API and pinned security dependency updates. Each package includes
+corresponding source, resolved module manifests, license and build instructions.
+
+New routing saves reject repeated balancer members. Existing configurations,
+including native JSON overrides, must pass the candidate core's configuration
+check before activation. Correct duplicate urltest/selector members explicitly;
+this upgrade does not silently deduplicate stored routes. Existing explicit core
+versions remain selectable, and downloading a package does not activate it.
+Unpinned installations resolve to the new default on startup: check their saved
+configuration before upgrading bosun. This release does not enable MASQUE or
+Sudoku.
