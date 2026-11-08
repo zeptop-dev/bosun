@@ -9,6 +9,13 @@ not require upgrading managed agents or changing their listeners.
 DNS 记录、不修改服务端监听，也不改变客户端 `dns.ipv6`。Snell 未填写监听地址
 时仍使用原 IPv4 默认值；要使用双栈需显式配置并验证实际服务端和网络支持。
 
+For the separate typed per-node policy added to the shared library in bosun
+v0.93.0, see [Subscription node connection IP version](SUBSCRIPTION_IP_VERSION.md).
+It can restrict an individual hostname to one family without enabling the
+client-wide concurrent dialer. Empty typed policies preserve existing raw client
+overrides. A typed dual policy permits both families; it does not itself turn on
+`tcp-concurrent`.
+
 The subscription designer's optional `enhancements.node_dual_stack` setting
 generates these top-level Mihomo settings:
 
@@ -61,7 +68,7 @@ behave the same because they share the `server` field.
 | Hysteria2, TUIC | In this audited version, `common.DialQuic` wraps QUIC connection establishment in the same concurrent dialer. It can select between IPv4/IPv6 QUIC candidates; this is **QUIC**, not TCP racing. TUIC's `reduce-rtt` and VLESS XHTTP H3 use early QUIC dialing, whose completion is not the same as fully validated service reachability. Older client versions may differ. |
 | Mieru | Its Mihomo resolver selects a single address before handing it to the Mieru client, even for TCP transport. Either family may be used, but this enhancement does not establish a dual-stack race. |
 | WireGuard | Resolves and configures one endpoint per peer. Accepting A/AAAA is not parallel peer-handshake racing. No duplicate peers or credentials are generated. |
-| SSH, Naive | Captain/bosun's current Mihomo renderer does not export these protocols. This enhancement does not add an adapter or silently reinterpret them as another protocol. |
+| SSH, Naive | These were outside the original dialer audit. Since bosun v0.89.0, the Mihomo renderer exports pinned, TCP-only SSH; that does not extend this audit into a claim about SSH connection racing. Naive remains unsupported by the Mihomo renderer. |
 | ShadowsocksR, Hysteria v1 | Not Captain/bosun inbound protocol types. They are outside the generated-node support claim, even if a separately authored Mihomo configuration can use them. |
 
 Protocol-wide support does not override transport-specific restrictions or
@@ -91,7 +98,7 @@ as a substitute for testing the IPv6 listener.
 
 Automated tests cover saved-design JSON round trips, opt-in/opt-out behavior,
 format gating, DNS-policy independence, and final subscription delivery for
-all 12 currently exported protocols, including preservation of explicit
+the 12 protocols covered by the original suite, including preservation of explicit
 single-family overrides. Snell render tests cover the existing omitted IPv4
 default and explicit IPv4, IPv6 and `::` wildcard addresses.
 

@@ -30,6 +30,7 @@ Verified end to end against the manifest's tested releases (sing-box
 - Complete-path handshake health (bosun v0.85 / Captain v1.50): observe supported TLS/HTTP/SOCKS5 handshakes through real TCP relay candidates. Optional failover uses fresh confirmed healthy candidates and refuses new connections when none remain. No proxy credentials, extra health listeners or user billing are introduced. [Supported handshakes and limits](docs/PATH_HEALTH.md).
 - Carrier monitoring (bosun v0.82 / Captain v1.43): select TCP/ICMP and IPv4/IPv6/dual independently, preserve four target lists, and keep per-family measurements and Prometheus series separate. Permission and routing failures stay explicit without a protocol/family fallback. [Configuration and compatibility](#carrier-monitoring-compatibility).
 - Managed server controls (bosun v0.83 / Captain v1.48): pause managed services or apply a shared upload-plus-download limit without blocking management access. Persist and verify owned enforcement; existing user quotas and speed limits stay separate. [Prerequisites and recovery](docs/SERVICE_CONTROL.md).
+- Per-node connection IP family policies in the shared subscription library (v0.93): IPv4-only, IPv6-only, dual stack or unchanged legacy behavior. Captain can select a policy for each published node; supported clients receive native fields, while formats that cannot preserve a strict hostname policy omit it. This does not add a standalone node-policy editor or change server listeners. [Client support and limits](docs/SUBSCRIPTION_IP_VERSION.md).
 - Optional Mihomo dual-stack connection selection (v0.83): generate client IPv6 and concurrent dialing settings while preserving DNS AAAA policy and explicit per-node overrides. Existing templates change only when reapplied; native Snell retains its existing IPv4 listener default. [Protocol and listener boundaries](docs/DESIGNER_DUAL_STACK.md).
 - Automatic private-access enforcement (v0.74): independent adapter/runtime capability reports, prerequisite checks, and acknowledged core-only authorization for sing-box/Extended exits. Existing dual-layer policies remain compatible. [Details](#automatic-private-access-enforcement).
 - Default-off per-inbound private destination access for supported sing-box/Xray configurations, with CIDR/protocol/port scopes, UID/socket-mark nft enforcement and independent managed Reverse exit permissions. Existing user tc classes are retained; unsupported proxy chains and overrides are rejected. [Usage and support boundaries](#per-inbound-private-access-bosun-063--captain-114).
@@ -681,6 +682,16 @@ an editor does not make a protected operation locally editable.
 `<data_dir>/local.json`, edited through the web panel. Every save applies at once:
 cores are reconfigured or restarted as needed. Users get per-user quota and expiry,
 traffic counters, share links and a `/sub/<token>` subscription whose format follows the client (Clash/mihomo YAML, sing-box JSON, Surge, Loon, Quantumult X, Stash, Surfboard, else a base64 URI list; `?client=` forces one). The renderers live in `pkg/subscription`, which Captain imports too.
+
+The shared renderer also accepts a typed per-line `IPVersion` policy, used by
+Captain v1.59.0 for published nodes. The standalone panel retains its existing
+subscription controls; updating a managed bosun process alone does not change
+published node policies. See [connection IP version](docs/SUBSCRIPTION_IP_VERSION.md).
+
+**中文说明：** bosun v0.93.0 的共享订阅库支持逐节点选择 IPv4、IPv6、双栈或
+保留原客户端行为，由 Captain v1.59.0 的节点设置调用。严格的单地址族策略只在
+能准确表达的客户端格式中输出；双栈不保证并发竞争。此功能不修改服务端监听、
+DNS 记录或出站，也没有给 bosun 独立面板新增逐节点选择器。
 
 SSH proxy entries are available in Mihomo and sing-box subscriptions with a
 pinned host public key and TCP-only transport. NekoBox Android's explicit
