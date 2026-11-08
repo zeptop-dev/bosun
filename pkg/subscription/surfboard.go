@@ -20,7 +20,7 @@ func (s Surfboard) Render(lines []Line, acct Account) ([]byte, error) {
 }
 
 func (Surfboard) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
-	body, names := iniLines(lines, surfboardLine)
+	body, names := iniLines(filterIPVersions("surfboard", lines), surfboardLine)
 	return applyINI(tpl, "surfboard", body, names), nil
 }
 

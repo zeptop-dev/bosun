@@ -25,7 +25,12 @@ func (s Surge) Render(lines []Line, acct Account) ([]byte, error) {
 }
 
 func (Surge) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
-	body, names := iniLines(lines, surgeLine)
+	body, names := iniLines(filterIPVersions("surge", lines), surgeLine)
+	var err error
+	tpl, err = surgeIPVersionTemplate(tpl, emittedIPVersionLines(lines, names))
+	if err != nil {
+		return nil, err
+	}
 	out := applyINI(tpl, "surge", body, names)
 	if strings.Contains(tpl, "# captain-dns-protection: surge-ip-only") && !surgeDNSHasLiteralProxyEndpoints(string(out)) {
 		return nil, ErrSurgeDNSHostname
@@ -118,6 +123,10 @@ func surgeLine(l Line) string {
 	// {{USED_PERCENT}}) must not be read as a verb.
 	line := func(kind string) string { return fmt.Sprintf("%s = %s, %s, %d", iniName(l.Name), kind, l.Host, l.Port) }
 	var parts []string
+	if l.IPVersion != "" {
+		mode := map[string]string{"ipv4": "v4-only", "ipv6": "v6-only", "dual": "dual"}[l.IPVersion]
+		parts = append(parts, "ip-version="+mode)
+	}
 	switch ib.Protocol {
 	case spec.Shadowsocks:
 		if ss2022KeyLen(ib.Cipher) > 0 {

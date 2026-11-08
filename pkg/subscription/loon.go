@@ -22,7 +22,7 @@ func (l Loon) Render(lines []Line, acct Account) ([]byte, error) {
 }
 
 func (Loon) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
-	body, names := iniLines(lines, loonLine)
+	body, names := iniLines(filterIPVersions("loon", lines), loonLine)
 	return applyINI(tpl, "loon", body, names), nil
 }
 

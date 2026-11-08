@@ -19,7 +19,7 @@ func (r SingBox) RenderWith(lines []Line, acct Account, _ string) ([]byte, error
 func (SingBox) Render(lines []Line, _ Account) ([]byte, error) {
 	var outbounds []any
 	var names []string
-	for _, l := range lines {
+	for _, l := range filterIPVersions("singbox", lines) {
 		o := singboxOutbound(l)
 		if o == nil {
 			continue
@@ -41,11 +41,14 @@ func (SingBox) Render(lines []Line, _ Account) ([]byte, error) {
 				"password":    spec.ShadowTLSUserKey(l.UUID),
 				"tls":         m{"enabled": true, "server_name": host, "utls": m{"enabled": true, "fingerprint": "chrome"}},
 			}
+			singboxIPVersion(carrier, l)
 			delete(o, "server")
 			delete(o, "server_port")
 			o["detour"] = carrier["tag"]
 			o["udp_over_tcp"] = m{"enabled": true, "version": 2}
 			outbounds = append(outbounds, carrier)
+		} else {
+			singboxIPVersion(o, l)
 		}
 		outbounds = append(outbounds, o)
 		names = append(names, l.Name)

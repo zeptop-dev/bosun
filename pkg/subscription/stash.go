@@ -29,7 +29,7 @@ func (Stash) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 			supported = append(supported, l)
 		}
 	}
-	proxies, names := clashProxies(supported)
+	proxies, names := clashProxiesFor("stash", supported)
 	for i, p := range proxies {
 		proxies[i] = stashProxy(p.(m))
 	}

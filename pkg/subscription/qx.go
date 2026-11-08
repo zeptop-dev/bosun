@@ -21,13 +21,17 @@ func (q QuantumultX) Render(lines []Line, acct Account) ([]byte, error) {
 }
 
 func (QuantumultX) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
-	body, names := iniLines(lines, qxLine)
+	body, names := iniLines(filterIPVersions("qx", lines), qxLine)
 	return []byte(b64(string(applyINI(tpl, "qx", body, names)))), nil
 }
 
 func qxLine(l Line) string {
 	ib := l.Inbound
-	addr := fmt.Sprintf("%s:%d", l.Host, l.Port)
+	host := l.Host
+	if l.IPVersion != "" && strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	addr := fmt.Sprintf("%s:%d", host, l.Port)
 	var parts []string
 	switch ib.Protocol {
 	case spec.Shadowsocks:

@@ -18,6 +18,8 @@ type Line struct {
 	UUID     string // user identity
 	UserID   int64  // numeric id (WireGuard tunnel address)
 	Password string
+	// IPVersion selects the client connection family; empty preserves legacy behavior.
+	IPVersion string
 	// WireGuardPeer selects a registered device only for WG. Other protocols
 	// continue to use the account's UUID, password and numeric identity.
 	WireGuardPeer *spec.WireGuardPeer

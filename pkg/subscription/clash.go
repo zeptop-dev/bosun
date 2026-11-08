@@ -21,19 +21,31 @@ func (c Clash) Render(lines []Line, acct Account) ([]byte, error) {
 
 func (Clash) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 	proxies, names := clashProxies(lines)
+	var err error
+	tpl, err = yamlIPVersionTemplate(tpl, "clash", emittedIPVersionLines(lines, names))
+	if err != nil {
+		return nil, err
+	}
 	return applyYAML(tpl, "clash", proxies, names)
 }
 
 func clashProxies(lines []Line) ([]any, []Named) {
+	return clashProxiesFor("clash", lines)
+}
+
+func clashProxiesFor(format string, lines []Line) ([]any, []Named) {
 	proxies := []any{}
 	names := []Named{}
-	for _, l := range lines {
+	for _, l := range filterIPVersions(format, lines) {
 		p := clashProxy(l)
 		if p == nil {
 			continue
 		}
 		for k, v := range l.Extra {
 			p[k] = v
+		}
+		if l.IPVersion != "" && format == "clash" && l.Inbound.Protocol != spec.WireGuard {
+			p["ip-version"] = l.IPVersion
 		}
 		proxies = append(proxies, p)
 		names = append(names, namedLine(l))

@@ -34,8 +34,18 @@ func (URIList) Render(lines []Line, _ Account) ([]byte, error) {
 func ShareURI(l Line) string { return shareURI(l) }
 
 func shareURI(l Line) string {
+	if IPVersionSupport("uri", l) != "" {
+		return ""
+	}
 	ib := l.Inbound
-	hostPort := l.Host + ":" + strconv.Itoa(l.Port)
+	host := l.Host
+	if l.IPVersion != "" {
+		host = normalizeIPVersionHost(host)
+	}
+	if l.IPVersion != "" && strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
+		host = "[" + host + "]"
+	}
+	hostPort := host + ":" + strconv.Itoa(l.Port)
 	frag := "#" + url.PathEscape(l.Name)
 	switch ib.Protocol {
 	case spec.VLESS:

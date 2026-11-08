@@ -68,11 +68,17 @@ func WGClient(l Line) (WGPeer, bool) {
 
 // WGConf is the client .conf text for a WireGuard line ("" otherwise).
 func WGConf(l Line) string {
+	if IPVersionSupport("wireguard", l) != "" {
+		return ""
+	}
 	p, ok := WGClient(l)
 	if !ok {
 		return ""
 	}
 	host := l.Host
+	if l.IPVersion != "" {
+		host = normalizeIPVersionHost(host)
+	}
 	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
 		host = "[" + host + "]"
 	}

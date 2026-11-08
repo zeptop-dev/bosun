@@ -25,7 +25,7 @@ func (e Egern) Render(lines []Line, acct Account) ([]byte, error) {
 func (Egern) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
 	proxies := []any{}
 	names := []Named{}
-	for _, l := range lines {
+	for _, l := range filterIPVersions("egern", lines) {
 		if p := egernProxy(l); p != nil {
 			proxies = append(proxies, p)
 			names = append(names, namedLine(l))
