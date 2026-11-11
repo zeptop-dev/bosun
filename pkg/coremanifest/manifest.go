@@ -86,8 +86,17 @@ func xrayCI(version, arch string) Asset {
 // Manifest lists every release bosun knows about. Newest first per core.
 var Manifest = []Release{
 	{
-		Core: "singbox-extended", Version: "1.14.1-extended-2.7.2-r4", Status: StatusCaution,
-		Note: "shtorm-7 extended 2.7.2, Go 1.26.10 with Brotli and Zstandard security updates, with_v2ray_api; Mieru requires explicit selection and subscription refresh; wildcard listen only",
+		Core: "singbox-extended", Version: "1.14.1-extended-2.7.2-r5", Status: StatusCaution,
+		Note: "shtorm-7 extended 2.7.2, Go 1.26.11 with Brotli and Zstandard security updates, with_v2ray_api; Mieru requires explicit selection and subscription refresh; wildcard listen only",
+		Assets: map[string]Asset{
+			"linux/amd64": extendedCI("1.14.1-extended-2.7.2-r5", "amd64"), "linux/arm64": extendedCI("1.14.1-extended-2.7.2-r5", "arm64"),
+		},
+		Build: &Build{Repository: "https://github.com/shtorm-7/sing-box-extended.git", Commit: "55faa763f986f4ca8a492d9b2719bc6330d2bef5",
+			Modules: []string{"golang.org/x/crypto@v0.57.0", "golang.org/x/net@v0.60.0", "golang.org/x/text@v0.42.0", "golang.org/x/mod@v0.41.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0", "github.com/andybalholm/brotli@v1.2.7", "github.com/klauspost/compress@v1.20.2"}, Package: "./cmd/sing-box", Version: "v1.14.1-extended-2.7.2", Tags: singboxTags, LDFlags: "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=1.14.1-extended-2.7.2"},
+	},
+	{
+		Core: "singbox-extended", Version: "1.14.1-extended-2.7.2-r4", Status: StatusBroken,
+		Note: "Go 1.26.10 has GO-2026-6859; use 1.14.1-extended-2.7.2-r5",
 		Assets: map[string]Asset{
 			"linux/amd64": extendedCI("1.14.1-extended-2.7.2-r4", "amd64"), "linux/arm64": extendedCI("1.14.1-extended-2.7.2-r4", "arm64"),
 		},
@@ -122,8 +131,20 @@ var Manifest = []Release{
 			Modules: []string{"golang.org/x/crypto@v0.56.0", "golang.org/x/text@v0.41.0", "golang.org/x/mod@v0.40.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0"}, Package: "./cmd/sing-box", Version: "v1.14.1-extended-2.7.2", Tags: singboxTags, LDFlags: "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=1.14.1-extended-2.7.2"},
 	},
 	{
-		Core: "singbox", Version: "1.14.4-r1", Status: StatusCaution,
-		Note: "upstream v1.14.4, Go 1.26.10 with reviewed security dependency updates and per-user stats; explicit activation required because duplicate outbound-group members must be corrected first",
+		Core: "singbox", Version: "1.14.4-r2", Status: StatusCaution,
+		Note: "upstream v1.14.4, Go 1.26.11 with reviewed security dependency updates and per-user stats; explicit activation required because duplicate outbound-group members must be corrected first",
+		Assets: map[string]Asset{
+			"linux/amd64": singboxCI("1.14.4-r2", "amd64"),
+			"linux/arm64": singboxCI("1.14.4-r2", "arm64"),
+		},
+		Build: &Build{Repository: "https://github.com/SagerNet/sing-box.git", Commit: "c005f35300ce76427dc285481ec5695f5b179cd2",
+			Modules: []string{"golang.org/x/crypto@v0.57.0", "golang.org/x/net@v0.60.0", "golang.org/x/text@v0.42.0", "golang.org/x/mod@v0.41.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0", "github.com/andybalholm/brotli@v1.2.7", "github.com/klauspost/compress@v1.20.2"},
+			Package: "./cmd/sing-box", Version: "v1.14.4", Tags: singboxTags,
+			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.4"},
+	},
+	{
+		Core: "singbox", Version: "1.14.4-r1", Status: StatusBroken,
+		Note: "Go 1.26.10 has GO-2026-6859; use 1.14.4-r2",
 		Assets: map[string]Asset{
 			"linux/amd64": singboxCI("1.14.4-r1", "amd64"),
 			"linux/arm64": singboxCI("1.14.4-r1", "arm64"),
@@ -134,8 +155,20 @@ var Manifest = []Release{
 			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.4"},
 	},
 	{
-		Core: "singbox", Version: "1.14.1-r3", Status: StatusTested,
-		Note: "compatible upstream v1.14.1 rebuilt with Go 1.26.10 and reviewed security dependency updates; preserves repeated outbound-group members",
+		Core: "singbox", Version: "1.14.1-r4", Status: StatusTested,
+		Note: "compatible upstream v1.14.1 rebuilt with Go 1.26.11 and reviewed security dependency updates; preserves repeated outbound-group members",
+		Assets: map[string]Asset{
+			"linux/amd64": singboxCI("1.14.1-r4", "amd64"),
+			"linux/arm64": singboxCI("1.14.1-r4", "arm64"),
+		},
+		Build: &Build{Repository: "https://github.com/SagerNet/sing-box.git", Commit: "1ac1a339cb1223e9c70eae14c44411c75033c02d",
+			Modules: []string{"golang.org/x/crypto@v0.57.0", "golang.org/x/net@v0.60.0", "golang.org/x/text@v0.42.0", "golang.org/x/mod@v0.41.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0", "github.com/andybalholm/brotli@v1.2.7", "github.com/klauspost/compress@v1.20.2"},
+			Package: "./cmd/sing-box", Version: "v1.14.1", Tags: singboxTags,
+			LDFlags: "-X github.com/sagernet/sing-box/constant.Version=1.14.1"},
+	},
+	{
+		Core: "singbox", Version: "1.14.1-r3", Status: StatusBroken,
+		Note: "Go 1.26.10 has GO-2026-6859; use 1.14.1-r4",
 		Assets: map[string]Asset{
 			"linux/amd64": singboxCI("1.14.1-r3", "amd64"),
 			"linux/arm64": singboxCI("1.14.1-r3", "arm64"),

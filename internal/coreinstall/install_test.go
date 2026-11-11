@@ -50,7 +50,7 @@ func TestManifestSanity(t *testing.T) {
 // legacy installations disappear from the catalog.
 func TestExtendedSecurityRevisionResolution(t *testing.T) {
 	r, ok := Resolve("singbox-extended", "")
-	if !ok || r.Version != "1.14.1-extended-2.7.2-r4" || r.Status != StatusCaution {
+	if !ok || r.Version != "1.14.1-extended-2.7.2-r5" || r.Status != StatusCaution {
 		t.Fatalf("implicit Extended selection: %+v, found=%v", r, ok)
 	}
 	if _, ok := Tested("singbox-extended"); ok {
@@ -206,7 +206,7 @@ func TestResolvePrefersTestedRebuild(t *testing.T) {
 		{"xray", "26.3.27", "26.3.27-r1"},    // pinned upstream release -> its rebuild
 		{"xray", "26.3.27-r1", "26.3.27-r1"}, // suffix is literal
 		{"xray", "26.9.9", "26.9.9"},         // no rebuild: the named (broken) release
-		{"singbox", "1.14.1", "1.14.1-r3"},
+		{"singbox", "1.14.1", "1.14.1-r4"},
 		{"singbox", "1.14.0", "1.14.0-r2"}, // the tested rebuild, not the caution build
 		{"mita", "3.36.1", "3.36.1"},
 	}
@@ -223,14 +223,14 @@ func TestResolvePrefersTestedRebuild(t *testing.T) {
 
 func TestSingboxSecurityRevisionResolution(t *testing.T) {
 	current, ok := Resolve("singbox", "")
-	if !ok || current.Version != "1.14.1-r3" || current.Status != StatusTested {
+	if !ok || current.Version != "1.14.1-r4" || current.Status != StatusTested {
 		t.Fatalf("unpinned startup changed core semantics: %+v", current)
 	}
 	if current.Build == nil || current.Build.Commit != "1ac1a339cb1223e9c70eae14c44411c75033c02d" || len(current.Build.Modules) != 8 {
 		t.Fatal("compatible default lost fixed source/security pins")
 	}
-	r, ok := Resolve("singbox", "1.14.4-r1")
-	if !ok || r.Version != "1.14.4-r1" || r.Status != StatusCaution {
+	r, ok := Resolve("singbox", "1.14.4-r2")
+	if !ok || r.Version != "1.14.4-r2" || r.Status != StatusCaution {
 		t.Fatalf("explicit sing-box upgrade: %+v", r)
 	}
 	if r.Build == nil || r.Build.Commit != "c005f35300ce76427dc285481ec5695f5b179cd2" || len(r.Build.Modules) == 0 {

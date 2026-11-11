@@ -33,7 +33,7 @@ func coreChangeRig(t *testing.T) (*Agent, *managedFake, *managedFake, spec.CoreR
 	t.Helper()
 	cfg := &config.Config{DataDir: t.TempDir()}
 	inst := coreinstall.New(cfg.CoresDir(), slog.Default())
-	req := spec.CoreRequest{Action: "activate", Distribution: "singbox", Version: "1.14.1-r3", Revision: 1}
+	req := spec.CoreRequest{Action: "activate", Distribution: "singbox", Version: "1.14.1-r4", Revision: 1}
 	path := inst.Path(req.Distribution, req.Version)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatal(err)

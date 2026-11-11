@@ -361,7 +361,7 @@ func (i *Installer) buildSource(ctx context.Context, b Build, goBin, work, dest 
 	if len(b.Modules) > 0 {
 		update := exec.CommandContext(ctx, goBin, append([]string{"get"}, b.Modules...)...)
 		update.Dir = source
-		update.Env = append(os.Environ(), "GOTOOLCHAIN=go1.26.10", "GOFLAGS=-mod=mod", "GOWORK=off")
+		update.Env = append(os.Environ(), "GOTOOLCHAIN=go1.26.11", "GOFLAGS=-mod=mod", "GOWORK=off")
 		if output, err := update.CombinedOutput(); err != nil {
 			return fmt.Errorf("core dependency update failed: %w: %.4096s", err, output)
 		}
@@ -369,7 +369,7 @@ func (i *Installer) buildSource(ctx context.Context, b Build, goBin, work, dest 
 	args := []string{"build", "-trimpath", "-buildvcs=false", "-tags", strings.Join(b.Tags, ","), "-ldflags", "-s -w " + b.LDFlags, "-o", dest, b.Package}
 	cmd := exec.CommandContext(ctx, goBin, args...)
 	cmd.Dir = source
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOFLAGS=-mod=readonly", "GOTOOLCHAIN=go1.26.10", "GOOS="+i.GOOS, "GOARCH="+i.GOARCH, "GOWORK=off")
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOFLAGS=-mod=readonly", "GOTOOLCHAIN=go1.26.11", "GOOS="+i.GOOS, "GOARCH="+i.GOARCH, "GOWORK=off")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("core source build failed: %w: %.4096s", err, output)
 	}

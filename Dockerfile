@@ -11,7 +11,7 @@ RUN pnpm install --frozen-lockfile
 COPY web/ui/ ./
 RUN pnpm build
 
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine AS build
 ARG TARGETOS TARGETARCH VERSION=docker
 WORKDIR /src
 COPY go.mod go.sum ./

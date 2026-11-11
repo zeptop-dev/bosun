@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with: { version: 9 }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 24, cache: pnpm, cache-dependency-path: web/ui/pnpm-lock.yaml }
@@ -33,17 +33,25 @@ jobs:
       - run: cd web/ui && pnpm install --frozen-lockfile && pnpm exec oxlint src && pnpm build
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: singbox-1.14.1-r3
+          name: singbox-1.14.1-r4
           path: ${{ runner.temp }}/bosun-test-cores
       - name: Use the validated core in dry runs too
         run: |
           echo "BOSUN_SINGBOX_TEST_VERSION=1.14.1" >> "$GITHUB_ENV"
-          chmod +x "$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64"
-          echo "BOSUN_SINGBOX_TEST_BINARY=$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
-          echo "BOSUN_COREONLY_TEST_BINARY=$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r3-linux-amd64" >> "$GITHUB_ENV"
+          chmod +x "$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r4-linux-amd64"
+          echo "BOSUN_SINGBOX_TEST_BINARY=$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r4-linux-amd64" >> "$GITHUB_ENV"
+          echo "BOSUN_COREONLY_TEST_BINARY=$RUNNER_TEMP/bosun-test-cores/sing-box-1.14.1-r4-linux-amd64" >> "$GITHUB_ENV"
       # A tag must clear the same gates as master: a red commit may not ship.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: singbox-extended
+          path: ${{ runner.temp }}/bosun-extended-core
+      - name: Use the validated Extended candidate
+        run: |
+          chmod +x "$RUNNER_TEMP/bosun-extended-core/sing-box-extended-linux-amd64"
+          echo "BOSUN_EXTENDED_TEST_BINARY=$RUNNER_TEMP/bosun-extended-core/sing-box-extended-linux-amd64" >> "$GITHUB_ENV"
       - run: git ls-files '*.go' | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
@@ -57,7 +65,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y nftables iproute2 util-linux python3 openssl wireguard-tools
           go test -c ./internal/privateintegration -o /tmp/bosun-private.test
-          sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 BOSUN_SINGBOX_TEST_BINARY="$BOSUN_SINGBOX_TEST_BINARY" /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m
+          sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 BOSUN_SINGBOX_TEST_BINARY="$BOSUN_SINGBOX_TEST_BINARY" BOSUN_EXTENDED_TEST_BINARY="$BOSUN_EXTENDED_TEST_BINARY" /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m
       - name: Isolated aggregate service control and real WireGuard
         run: |
           go test -c ./internal/servicecontrol -o /tmp/bosun-service-control.test
