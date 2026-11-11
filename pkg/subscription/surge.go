@@ -9,9 +9,9 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
-// Surge renders a Surge 5 proxy list. Surge speaks ss, vmess, trojan,
-// hysteria2 and tuic; other protocols are skipped.
-type Surge struct{}
+// Surge preserves legacy output unless VLESS is explicitly enabled.
+// VLESS requires Surge iOS 6.0.0+ or Mac 6.12.0+.
+type Surge struct{ VLESS bool }
 
 // ErrSurgeDNSHostname prevents Surge's documented DIRECT fallback when an
 // encrypted DNS connection uses a proxy whose hostname itself needs DNS.
@@ -24,8 +24,13 @@ func (s Surge) Render(lines []Line, acct Account) ([]byte, error) {
 	return s.RenderWith(lines, acct, "")
 }
 
-func (Surge) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
-	body, names := iniLines(filterIPVersions("surge", lines), surgeLine)
+func (s Surge) RenderWith(lines []Line, _ Account, tpl string) ([]byte, error) {
+	body, names := iniLines(filterIPVersions("surge", lines), func(l Line) string {
+		if s.VLESS && l.Inbound.Protocol == spec.VLESS {
+			return surgeVLESSLine(l)
+		}
+		return surgeLine(l)
+	})
 	var err error
 	tpl, err = surgeIPVersionTemplate(tpl, emittedIPVersionLines(lines, names))
 	if err != nil {
@@ -89,7 +94,7 @@ func surgeDNSHasLiteralProxyEndpoints(profile string) bool {
 			return false
 		}
 		switch strings.ToLower(strings.TrimSpace(parts[0])) {
-		case "ss", "vmess", "trojan", "hysteria2", "tuic", "snell":
+		case "ss", "vmess", "trojan", "hysteria2", "tuic", "snell", "vless":
 		default:
 			return false
 		}

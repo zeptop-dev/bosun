@@ -1774,3 +1774,24 @@ unpinned bosun restart. Download it, correct incompatible group members, then
 explicitly activate it through core management so the candidate configuration
 is checked before the running instance is stopped. This release does not enable
 MASQUE or Sudoku.
+
+### Surge VLESS subscriptions
+
+Surge iOS 6.0.0+ / Mac 6.12.0+ can use `?client=surge-vless`.
+This keeps the ordinary Surge template and enables supported VLESS entries:
+TCP with none/TLS/REALITY, WebSocket with none/TLS, and gRPC with TLS/REALITY.
+Vision is emitted only on TCP with TLS or REALITY. XHTTP, HTTPUpgrade, mKCP,
+VLESS Encryption and unsupported combinations are not emitted.
+
+Ordinary `?client=surge` and automatic detection preserve legacy behavior unless
+the User-Agent identifies a supported app version. Build-number-only or
+ambiguous versions do not imply support. `?client=surge-legacy` always omits
+VLESS. The portal's version-labelled VLESS choice opts in explicitly, including
+when the first download comes from a browser. Surfboard behavior is unchanged.
+
+REALITY uses the public key and first configured short ID; the private key is
+never emitted. No fingerprint emulation is claimed. UDP uses Surge's native
+XUDP behavior. Existing DNS protection and per-node IP-family guards still
+apply. This is subscription generation, not a proxy-core upgrade.
+
+Reference: https://manual.nssurge.com/policies/vless.html
