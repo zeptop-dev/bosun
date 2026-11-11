@@ -144,7 +144,7 @@ jobs:
           provenance: false
           build-args: VERSION=${{ github.ref_name }}
           tags: |
-            ghcr.io/zeptop-dev/bosun:${{ github.ref_name }}
+            ghcr.io/zeptop-dev/bosun:${{ github.event_name == 'push' && github.ref_name || format('dry-run-{0}', github.sha) }}
             ghcr.io/zeptop-dev/bosun:latest
-            zeptop/bosun:${{ github.ref_name }}
+            zeptop/bosun:${{ github.event_name == 'push' && github.ref_name || format('dry-run-{0}', github.sha) }}
             zeptop/bosun:latest
