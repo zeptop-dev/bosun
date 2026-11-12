@@ -44,7 +44,9 @@ const (
 
 // Client checks and applies updates for one binary.
 type Client struct {
-	Downloads *agentdownload.Client // optional Captain delivery, including release metadata and assets
+	// BeforeInstall validates the checksum-verified candidate before touching the running executable.
+	BeforeInstall func(context.Context, string, string) error
+	Downloads     *agentdownload.Client // optional Captain delivery, including release metadata and assets
 	// Repo is "owner/name" on GitHub.
 	Repo string
 	// Binary is the asset prefix, e.g. "bosun" -> bosun-linux-amd64.
@@ -378,6 +380,11 @@ func (c *Client) Apply(ctx context.Context, version string) (applied string, err
 		return "", err
 	}
 
+	if c.BeforeInstall != nil {
+		if err := c.BeforeInstall(ctx, newBin, rel.TagName); err != nil {
+			return "", fmt.Errorf("upgrade preflight: %w", err)
+		}
+	}
 	backup := exe + ".backup"
 	_ = os.Remove(backup)
 	if err := os.Rename(exe, backup); err != nil {

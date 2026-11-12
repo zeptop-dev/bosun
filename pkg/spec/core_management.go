@@ -19,9 +19,10 @@ type CorePackage struct {
 }
 
 type CoreInstance struct {
-	Distribution string `json:"distribution"`
-	Version      string `json:"version"`
-	External     bool   `json:"external,omitempty"` // config.yaml pins an administrator-provided binary
+	PreparationError string `json:"preparation_error,omitempty"`
+	Distribution     string `json:"distribution"`
+	Version          string `json:"version"`
+	External         bool   `json:"external,omitempty"` // config.yaml pins an administrator-provided binary
 }
 
 type CoreInventory struct {

@@ -25,14 +25,15 @@ import (
 
 // Installer places core binaries under Root/<core>/<version>/<binary>.
 type Installer struct {
-	Downloads *agentdownload.Client // nil uses upstream; non-nil forbids upstream/source-build fallback
-	mu        sync.Mutex
-	Root      string
-	Log       *slog.Logger
-	HTTP      *http.Client
-	GOOS      string            // defaults to runtime.GOOS
-	GOARCH    string            // defaults to runtime.GOARCH
-	Headers   map[string]string // extra request headers, e.g. a GitLab Deploy-Token
+	Downloads    *agentdownload.Client // nil uses upstream; non-nil forbids upstream/source-build fallback
+	mu           sync.Mutex
+	packageLocks map[string]chan struct{}
+	Root         string
+	Log          *slog.Logger
+	HTTP         *http.Client
+	GOOS         string            // defaults to runtime.GOOS
+	GOARCH       string            // defaults to runtime.GOARCH
+	Headers      map[string]string // extra request headers, e.g. a GitLab Deploy-Token
 	// Musl prefers the "<GOOS>/<GOARCH>-musl" asset when one exists (Alpine);
 	// detected from /etc/alpine-release by New.
 	Musl bool
@@ -94,8 +95,28 @@ func (i *Installer) Ensure(ctx context.Context, core, version string) (string, e
 // Install fetches and verifies a release, preferring a prebuilt asset for
 // this platform and falling back to a Go build.
 func (i *Installer) Install(ctx context.Context, rel Release) (string, error) {
+	// Serialize only the same immutable package. A stalled Captain response
+	// for one distribution must not block every other core's preparation.
+	key := rel.Core + "/" + rel.Version
 	i.mu.Lock()
-	defer i.mu.Unlock()
+	if i.packageLocks == nil {
+		i.packageLocks = map[string]chan struct{}{}
+	}
+	lock := i.packageLocks[key]
+	if lock == nil {
+		lock = make(chan struct{}, 1)
+		i.packageLocks[key] = lock
+	}
+	i.mu.Unlock()
+	select {
+	case lock <- struct{}{}:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+	defer func() { <-lock }()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	dest := i.Path(rel.Core, rel.Version)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
@@ -395,4 +416,33 @@ func (i *Installer) captainAsset(ctx context.Context, rel Release, platform stri
 	}
 	asset.URL, asset.SHA256, asset.SumsURL = m.URL, strings.ToLower(m.SHA256), ""
 	return asset, nil
+}
+
+// CheckDelivery checks the target executable's exact catalog against its
+// configured Captain source without replacing any local package or selection.
+func (i *Installer) CheckDelivery(ctx context.Context, name, version string) error {
+	rel, ok := Resolve(name, version)
+	if version == "" {
+		rel, ok = Default(name)
+	}
+	if !ok {
+		return fmt.Errorf("unknown core %s %s", name, version)
+	}
+	if i.Installed(name, rel.Version) || i.Downloads == nil {
+		return nil
+	}
+	platform := i.platform()
+	asset, ok := rel.Assets[platform]
+	if i.Musl {
+		if musl, exists := rel.Assets[platform+"-musl"]; exists {
+			asset = musl
+			platform += "-musl"
+			ok = true
+		}
+	}
+	if !ok {
+		return fmt.Errorf("Captain delivery has no prebuilt %s %s for %s", name, rel.Version, platform)
+	}
+	_, err := i.captainAsset(ctx, rel, platform, asset)
+	return err
 }

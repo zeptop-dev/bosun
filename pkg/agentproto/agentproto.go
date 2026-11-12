@@ -242,6 +242,7 @@ type ForwardTargetStatus struct {
 
 // CoreStatus is one core's state.
 type CoreStatus struct {
+	PreparationError string `json:"preparation_error,omitempty"` // unavailable binary; agent remains manageable
 	// Reverse reports applied link IDs. A receiver has a live connection
 	// observation; a client is null (configured, connectivity observed at A).
 	Reverse map[string]*bool `json:"reverse,omitempty"`

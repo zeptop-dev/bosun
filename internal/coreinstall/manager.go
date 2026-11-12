@@ -21,6 +21,7 @@ import (
 type Manager struct {
 	Install *Installer
 	Factory func(distribution, binary, workDir string) (core.Core, error)
+	AutoPin map[string]bool // configured without an explicit version or binary; set before use
 	op      sync.Mutex
 	mu      sync.Mutex
 	path    string
@@ -29,6 +30,7 @@ type Manager struct {
 }
 
 type selections struct {
+	Defaults map[string]string `json:"defaults,omitempty"`
 	Order    []string          `json:"order,omitempty"`
 	Last     *spec.CoreRequest `json:"last,omitempty"`
 	Revision uint64            `json:"revision"`
@@ -54,6 +56,11 @@ func NewManager(i *Installer, initial map[string]spec.CoreInstance) (*Manager, e
 	if m.state.Revision == 0 || m.state.Versions == nil {
 		return nil, errors.New("invalid core selection state")
 	}
+	for name, version := range m.state.Defaults {
+		if (spec.CoreRequest{Action: "activate", Distribution: name, Version: version}).Validate() != nil {
+			return nil, errors.New("invalid persisted default core selection")
+		}
+	}
 	for name, version := range m.state.Versions {
 		if (spec.CoreRequest{Action: "activate", Distribution: name, Version: version}).Validate() != nil {
 			return nil, errors.New("invalid persisted core selection")
@@ -78,9 +85,17 @@ func (m *Manager) Unlock()       { m.op.Unlock() }
 func (m *Manager) Selected() map[string]string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.selectedLocked()
+}
+func (m *Manager) selectedLocked() map[string]string {
 	out := map[string]string{}
-	for k, v := range m.state.Versions {
-		out[k] = v
+	for name, version := range m.state.Defaults {
+		if rel, ok := Resolve(name, version); m.AutoPin[name] && ok && rel.Status != StatusBroken {
+			out[name] = version
+		}
+	}
+	for name, version := range m.state.Versions {
+		out[name] = version
 	}
 	return out
 }
@@ -102,7 +117,7 @@ func (m *Manager) Inventory() *spec.CoreInventory {
 	for k, v := range m.initial {
 		instances[k] = v
 	}
-	for k, v := range m.state.Versions {
+	for k, v := range m.selectedLocked() {
 		instances[k] = spec.CoreInstance{Distribution: k, Version: v}
 	}
 	for _, v := range instances {
@@ -156,7 +171,7 @@ func (m *Manager) Commit(r spec.CoreRequest, order []string) error {
 	if r.Revision != m.state.Revision {
 		return errors.New("core selection changed")
 	}
-	next := selections{Revision: m.state.Revision + 1, Versions: map[string]string{}, Order: append([]string(nil), order...), Last: &r}
+	next := selections{Defaults: m.state.Defaults, Revision: m.state.Revision + 1, Versions: map[string]string{}, Order: append([]string(nil), order...), Last: &r}
 	found := false
 	for _, name := range next.Order {
 		if name == r.Distribution {
@@ -170,6 +185,11 @@ func (m *Manager) Commit(r spec.CoreRequest, order []string) error {
 		next.Versions[k] = v
 	}
 	next.Versions[r.Distribution] = r.Version
+	return m.save(next)
+}
+
+// save requires m.mu; disk publication precedes the in-memory selection.
+func (m *Manager) save(next selections) error {
 	raw, err := json.Marshal(next)
 	if err != nil {
 		return err
@@ -223,4 +243,33 @@ func (m *Manager) Order(defaults []string) []string {
 		}
 	}
 	return out
+}
+
+// RememberInitial pins a successfully started configured version. A later agent
+// upgrade must not silently select a different catalog default. Manual selections
+// and explicit external binaries remain authoritative.
+func (m *Manager) RememberInitial(name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.AutoPin[name] || m.state.Versions[name] != "" || m.selectedLocked()[name] != "" || m.initial[name].External {
+		return nil
+	}
+	version := m.initial[name].Version
+	if version == "" {
+		return nil
+	}
+	next := selections{Revision: m.state.Revision + 1, Order: append([]string(nil), m.state.Order...), Last: m.state.Last, Versions: m.state.Versions, Defaults: map[string]string{}}
+	for k, v := range m.state.Defaults {
+		next.Defaults[k] = v
+	}
+	next.Defaults[name] = version
+	return m.save(next)
+}
+
+// ExplicitSelection distinguishes administrator activation from remembered
+// defaults, so remembering a version does not relocate its existing runtime data.
+func (m *Manager) ExplicitSelection(name string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.state.Versions[name] != ""
 }

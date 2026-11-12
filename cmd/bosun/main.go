@@ -113,6 +113,14 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "preflight-upgrade":
+		if len(os.Args) != 3 {
+			err = fmt.Errorf("config path required")
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel()
+			err = preflightUpgrade(ctx, os.Args[2])
+		}
 	case "internal-host-recover":
 		if len(os.Args) != 3 {
 			err = fmt.Errorf("data directory required")
@@ -249,7 +257,9 @@ type env struct {
 	audits  *audit.Collector
 }
 
-func setup(args []string) (*env, error) {
+func setup(args []string) (*env, error) { return setupMode(args, false) }
+
+func setupMode(args []string, deferred bool) (*env, error) {
 	fs := flag.NewFlagSet("bosun", flag.ContinueOnError)
 	cfgPath := fs.String("c", "/etc/bosun/config.yaml", "config file")
 	if err := fs.Parse(args); err != nil {
@@ -322,22 +332,23 @@ func setup(args []string) (*env, error) {
 			return nil, err
 		}
 		manager.Factory = managedFactory(cfg, log, sink)
+		manager.AutoPin = automaticCores(cfg)
 	}
 	// binaryFor returns an explicit path as-is, otherwise the bosun-managed
 	// release, installing it on first use.
-	binaryFor := func(name, explicit, version string) (string, error) {
+	binaryFor := func(ctx context.Context, name, explicit, version string) (string, error) {
 		if explicit != "" {
 			return explicit, nil
 		}
-		return inst.Ensure(context.Background(), name, version)
+		return inst.Ensure(ctx, name, version)
 	}
-	build := map[string]func() (core.Core, error){
-		"singbox": func() (core.Core, error) {
+	build := map[string]func(context.Context) (core.Core, error){
+		"singbox": func(ctx context.Context) (core.Core, error) {
 			sb := cfg.Cores.Singbox
 			if sb == nil {
 				return nil, nil
 			}
-			bin, err := binaryFor("singbox", sb.Binary, sb.Version)
+			bin, err := binaryFor(ctx, "singbox", sb.Binary, sb.Version)
 			if err != nil {
 				return nil, err
 			}
@@ -349,12 +360,12 @@ func setup(args []string) (*env, error) {
 				ConnSink:    sink,
 			}, log)
 		},
-		"xray": func() (core.Core, error) {
+		"xray": func(ctx context.Context) (core.Core, error) {
 			xr := cfg.Cores.Xray
 			if xr == nil {
 				return nil, nil
 			}
-			bin, err := binaryFor("xray", xr.Binary, xr.Version)
+			bin, err := binaryFor(ctx, "xray", xr.Binary, xr.Version)
 			if err != nil {
 				return nil, err
 			}
@@ -366,12 +377,12 @@ func setup(args []string) (*env, error) {
 				ConnSink:  sink,
 			}, log)
 		},
-		"hysteria": func() (core.Core, error) {
+		"hysteria": func(ctx context.Context) (core.Core, error) {
 			hy := cfg.Cores.Hysteria
 			if hy == nil {
 				return nil, nil
 			}
-			bin, err := binaryFor("hysteria", hy.Binary, hy.Version)
+			bin, err := binaryFor(ctx, "hysteria", hy.Binary, hy.Version)
 			if err != nil {
 				return nil, err
 			}
@@ -384,12 +395,12 @@ func setup(args []string) (*env, error) {
 				ConnSink:    sink,
 			}, log)
 		},
-		"mita": func() (core.Core, error) {
+		"mita": func(ctx context.Context) (core.Core, error) {
 			mt := cfg.Cores.Mita
 			if mt == nil {
 				return nil, nil
 			}
-			bin, err := binaryFor("mita", mt.Binary, mt.Version)
+			bin, err := binaryFor(ctx, "mita", mt.Binary, mt.Version)
 			if err != nil {
 				return nil, err
 			}
@@ -399,24 +410,24 @@ func setup(args []string) (*env, error) {
 				LogLevel: mt.LogLevel,
 			}, log)
 		},
-		"snell": func() (core.Core, error) {
+		"snell": func(ctx context.Context) (core.Core, error) {
 			sn := cfg.Cores.Snell
 			if sn == nil {
 				return nil, nil
 			}
-			bin, err := binaryFor("snell", sn.Binary, sn.Version)
+			bin, err := binaryFor(ctx, "snell", sn.Binary, sn.Version)
 			if err != nil {
 				return nil, err
 			}
 			return snell.New(snell.Options{Binary: bin, WorkDir: filepath.Join(cfg.DataDir, "snell")}, log)
 		},
 	}
-	build["singbox-extended"] = func() (core.Core, error) {
+	build["singbox-extended"] = func(ctx context.Context) (core.Core, error) {
 		sb := cfg.Cores.SingboxExtended
 		if sb == nil {
 			return nil, nil
 		}
-		bin, err := binaryFor("singbox-extended", sb.Binary, sb.Version)
+		bin, err := binaryFor(ctx, "singbox-extended", sb.Binary, sb.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -425,35 +436,45 @@ func setup(args []string) (*env, error) {
 	if cfg.NodeMode != spec.NodeMonitor {
 		selected := manager.Selected()
 		for _, name := range manager.Order(cfg.CoreOrder()) {
+			load := build[name]
 			if selected[name] != "" {
 				if configuredCores(cfg)[name].External {
 					return nil, fmt.Errorf("%s has both a managed selection and an explicit binary; remove one pin", name)
 				}
-				binary, err := inst.Ensure(context.Background(), name, selected[name])
+				load = func(ctx context.Context) (core.Core, error) {
+					binary, err := inst.Ensure(ctx, name, selected[name])
+					if err != nil {
+						return nil, err
+					}
+					dir := filepath.Join(cfg.DataDir, name)
+					if manager.ExplicitSelection(name) {
+						dir = filepath.Join(cfg.DataDir, "core-runtime", name, selected[name])
+					}
+					return manager.Factory(name, binary, dir)
+				}
+			}
+			if load == nil {
+				return nil, fmt.Errorf("unconfigured core %s", name)
+			}
+			if deferred {
+				reg.Register(core.NewPending(name, load))
+			} else {
+				c, err := load(context.Background())
 				if err != nil {
 					return nil, err
 				}
-				c, err := manager.Factory(name, binary, filepath.Join(cfg.DataDir, "core-runtime", name, selected[name]))
-				if err != nil {
-					return nil, err
+				if c != nil {
+					reg.Register(c)
 				}
-				reg.Register(c)
-				continue
-			}
-			c, err := build[name]()
-			if err != nil {
-				return nil, err
-			}
-			if c != nil {
-				reg.Register(c)
 			}
 		}
 	}
+
 	return &env{manager: manager, cfgPath: *cfgPath, cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns, audits: audits}, nil
 }
 
 func cmdRun(args []string) error {
-	e, err := setup(args)
+	e, err := setupMode(args, true)
 	if err != nil {
 		return err
 	}
@@ -480,6 +501,9 @@ func cmdRun(args []string) error {
 	upd.Downloads, err = cfg.Downloads()
 	if err != nil {
 		return err
+	}
+	if upd.Downloads != nil && cfg.NodeMode != spec.NodeMonitor {
+		upd.BeforeInstall = candidatePreflight(e.cfgPath)
 	}
 	go watchUpdates(ctx, log, upd)
 

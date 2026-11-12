@@ -21,7 +21,14 @@ func (a *Agent) CoreInventory() *spec.CoreInventory {
 	if a.CoreManager == nil {
 		return nil
 	}
-	return a.CoreManager.Inventory()
+	out := a.CoreManager.Inventory()
+	for i := range out.Instances {
+		c, _ := a.reg.Get(out.Instances[i].Distribution)
+		if p, ok := c.(*core.Pending); ok {
+			out.Instances[i].PreparationError = p.Error()
+		}
+	}
+	return out
 }
 
 // ManageCore downloads in a worker but serializes activation with apply and

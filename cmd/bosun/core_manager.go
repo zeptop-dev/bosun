@@ -130,3 +130,26 @@ func prepareManagedWorkDir(dataDir, dir string) error {
 	}
 	return nil
 }
+
+func automaticCores(cfg *config.Config) map[string]bool {
+	out := map[string]bool{}
+	if c := cfg.Cores.Singbox; c != nil {
+		out["singbox"] = c.Binary == "" && c.Version == ""
+	}
+	if c := cfg.Cores.SingboxExtended; c != nil {
+		out["singbox-extended"] = c.Binary == "" && c.Version == ""
+	}
+	if c := cfg.Cores.Xray; c != nil {
+		out["xray"] = c.Binary == "" && c.Version == ""
+	}
+	if c := cfg.Cores.Mita; c != nil {
+		out["mita"] = c.Binary == "" && c.Version == ""
+	}
+	if c := cfg.Cores.Hysteria; c != nil {
+		out["hysteria"] = c.Binary == "" && c.Version == ""
+	}
+	if c := cfg.Cores.Snell; c != nil {
+		out["snell"] = c.Binary == "" && c.Version == ""
+	}
+	return out
+}

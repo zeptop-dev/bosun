@@ -1092,7 +1092,8 @@
     "inbounds": "現在のインバウンド",
     "sshHint": "SSH プロキシは、購読ユーザーのパスワードと生成されたホスト公開鍵の固定値で TCP 転送を提供します。SSH 対応コアで Mihomo（Clash Meta）または sing-box 購読を使用してください。古いコアは対応していない場合があります。shell、SFTP、UDP は提供しません。",
     "timeout": "待機がタイムアウトしました。ノードの状態を更新してから再試行してください。",
-    "listenAddress": "この Mieru ビルドは特定の IP にバインドできません。mita を使用してください。"
+    "listenAddress": "この Mieru ビルドは特定の IP にバインドできません。mita を使用してください。",
+    "preparing": "コアの準備が未完了です。再試行します"
   },
   "delivery": {
     "title": "トラフィック報告",

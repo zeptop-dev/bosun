@@ -435,6 +435,11 @@ func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inb
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
+	if a.CoreManager != nil && c.Running() {
+		if err := a.CoreManager.RememberInitial(name); err != nil {
+			return fmt.Errorf("persist %s selection: %w", name, err)
+		}
+	}
 	a.rememberCoreUsers(name, inbounds)
 	a.log.Info("core applied", "core", name, "inbounds", len(inbounds), "users", len(a.users))
 	return nil

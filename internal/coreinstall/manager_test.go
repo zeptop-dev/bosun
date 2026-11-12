@@ -68,3 +68,39 @@ func TestInvalidPersistedCoreOrderFailsClosed(t *testing.T) {
 		t.Fatal("unknown adapter would panic on restart")
 	}
 }
+
+func TestRememberInitialPreservesExplicitConfigAndRejectsBrokenFallback(t *testing.T) {
+	i := New(t.TempDir(), slog.Default())
+	m, err := NewManager(i, map[string]spec.CoreInstance{"singbox": {Distribution: "singbox", Version: "1.14.1-r4"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.AutoPin = map[string]bool{"singbox": true}
+	if err = m.RememberInitial("singbox"); err != nil {
+		t.Fatal(err)
+	}
+	if m.ExplicitSelection("singbox") {
+		t.Fatal("remembered default became an administrator selection")
+	}
+	revision := m.Inventory().Revision
+	if err = m.RememberInitial("singbox"); err != nil || m.Inventory().Revision != revision {
+		t.Fatal("idempotent pin changed revision")
+	}
+	next, err := NewManager(i, map[string]spec.CoreInstance{"singbox": {Distribution: "singbox", Version: "1.14.4-r2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next.AutoPin = map[string]bool{"singbox": true}
+	if next.Selected()["singbox"] != "1.14.1-r4" {
+		t.Fatal("new default replaced successful version")
+	}
+	next.AutoPin = map[string]bool{"singbox": false}
+	if next.Selected()["singbox"] != "" {
+		t.Fatal("auto pin overrode explicit config")
+	}
+	next.AutoPin["singbox"] = true
+	next.state.Defaults["singbox"] = "1.14.1-r3"
+	if next.Selected()["singbox"] != "" {
+		t.Fatal("automatic fallback selected broken package")
+	}
+}

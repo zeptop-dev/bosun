@@ -291,6 +291,8 @@ func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metr
 
 // Run blocks until ctx is cancelled, then stops every core.
 func (a *Agent) Run(ctx context.Context) error {
+	ctx, cancelPreparation := context.WithCancel(ctx)
+	defer cancelPreparation()
 	defer a.stopAll()
 	if err := a.clearWireGuard(ctx); err != nil {
 		var hostOnly *wireGuardForwardingCleanupError
@@ -306,6 +308,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	if err := a.bootstrap(ctx); err != nil {
 		return err
 	}
+	a.prepareCores(ctx)
 	if err := a.apply(ctx); err != nil {
 		// A bad inbound must not take the whole node down in local mode:
 		// keep running so the UI can fix it.
@@ -461,6 +464,11 @@ func (a *Agent) Run(ctx context.Context) error {
 			reconfigureBeat()
 		case <-leaseTick.C:
 			_ = a.expireOfflineLease(ctx)
+			if a.prepareCores(ctx) {
+				if _, err := a.pull(ctx); err == nil {
+					a.reconcileAfterPull(ctx, true, time.Now())
+				}
+			}
 		case <-wgTick.C:
 			if a.node != nil && !a.modeChanging.Load() && (a.node.ServiceControl != nil && a.node.ServiceControl.Offline != nil || a.offlineRecoveryGuard) {
 				if err := a.refreshOfflineServiceControl(ctx); err != nil {

@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -37,10 +39,34 @@ func (a *Agent) CoreStatus() map[string]agentproto.CoreStatus {
 	for priority, c := range a.CoreCandidates() {
 		adapter, _ := a.reg.Get(c.Name)
 		st := agentproto.CoreStatus{Version: versions[c.Name], Running: adapter.Running(), Capabilities: &c.Capabilities, Priority: priority}
+		if pending, ok := adapter.(*core.Pending); ok {
+			st.PreparationError = pending.Error()
+		}
 		if st.Running {
 			st.Inbounds = append([]string(nil), a.appliedCores[c.Name]...)
 		}
 		out[c.Name] = st
 	}
 	return out
+}
+
+// Only the serialized agent loop publishes prepared adapters. The worker never
+// sees desired state, users or activation authority.
+func (a *Agent) prepareCores(ctx context.Context) bool {
+	if a.MonitorOnly() || a.modeChanging.Load() {
+		return false
+	}
+	changed := false
+	for _, name := range a.reg.Names() {
+		c, _ := a.reg.Get(name)
+		if p, ok := c.(*core.Pending); ok {
+			if ready := p.Take(); ready != nil {
+				a.reg.Replace(name, ready)
+				changed = true
+			} else {
+				p.Prepare(ctx)
+			}
+		}
+	}
+	return changed
 }

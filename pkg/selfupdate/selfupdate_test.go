@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -74,6 +75,23 @@ func TestCheckApplyRollback(t *testing.T) {
 		t.Fatal("dev build apply should fail")
 	}
 
+	c.BeforeInstall = func(_ context.Context, path, tag string) error {
+		b, err := os.ReadFile(path)
+		if err != nil || string(b) != string(newBin) || tag != "v0.6.0" {
+			t.Fatal("preflight did not see verified candidate")
+		}
+		return errors.New("Captain does not know candidate core")
+	}
+	if _, err := c.Apply(context.Background(), ""); err == nil {
+		t.Fatal("failed preflight installed update")
+	}
+	if b, _ := os.ReadFile(exe); string(b) != "old" {
+		t.Fatal("old executable lost")
+	}
+	if _, err := os.Stat(exe + ".backup"); !os.IsNotExist(err) {
+		t.Fatal("preflight failure altered backup")
+	}
+	c.BeforeInstall = nil
 	got, err := c.Apply(context.Background(), "")
 	if err != nil || got != "v0.6.0" {
 		t.Fatalf("apply: %v %s", err, got)

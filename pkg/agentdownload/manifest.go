@@ -33,7 +33,14 @@ func (c *Client) CoreManifest(ctx context.Context, core, version, platform strin
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return m, fmt.Errorf("Captain artifact manifest: HTTP %d", resp.StatusCode)
+		switch resp.StatusCode {
+		case 404:
+			return m, fmt.Errorf("Captain does not support core %s %s (%s); update Captain first (HTTP 404)", core, version, platform)
+		case 401, 403:
+			return m, fmt.Errorf("Captain core download authentication rejected (HTTP %d)", resp.StatusCode)
+		default:
+			return m, fmt.Errorf("Captain artifact manifest: HTTP %d", resp.StatusCode)
+		}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, (16<<10)+1))
 	if err != nil {
