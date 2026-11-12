@@ -140,3 +140,27 @@ func TestRealCaptainDriverReportsWhileManifestFails(t *testing.T) {
 		})
 	}
 }
+
+func TestDeferredSetupDoesNotResurrectRemovedCoreFromOrder(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "cores"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cores", "active.json"), []byte(`{"revision":2,"versions":{},"order":["singbox","xray"]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("data_dir: "+dir+"\ncores:\n  user: ''\n  xray: {}\npanel: {driver: local}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	e, err := setupMode([]string{"-c", path}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.reg.Get("singbox"); ok {
+		t.Fatal("removed core restored by old priority metadata")
+	}
+	if _, ok := e.reg.Get("xray"); !ok {
+		t.Fatal("configured core lost")
+	}
+}

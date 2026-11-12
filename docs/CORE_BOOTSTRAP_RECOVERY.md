@@ -11,12 +11,15 @@ apply path, including service pause, offline lease, user authorization, private
 access and accounting gates. A replaced adapter cannot be overwritten by a late
 preparation result. Cancellation rejects late successes.
 
-There is one attempt per pending configured distribution, at most six concurrently,
+There is one attempt per pending configured proxy distribution, at most six concurrently,
 with a ten-minute attempt deadline. Failed attempts retry after 30, 60, 120, 240,
 and then 480 seconds, continuing at that capped interval. The installer serializes
 only an identical core/version; a slow unrelated package cannot block all others.
 Download errors never silently change the configured source or core distribution.
 Existing digest/TLS and same-origin credential checks remain in force.
+The on-demand realm forwarding backend uses a separate agent-lifetime worker
+and the same timeout/backoff policy; completion is consumed by the existing
+current-state forwarding retry loop, never by a stale forwarding snapshot.
 
 Reports add optional `preparation_error` fields to core status/inventory. The
 management cards display preparation errors without labelling the core active.
@@ -39,7 +42,8 @@ bosun preflight-upgrade /etc/bosun/config.yaml
 ```
 
 The target executable reads configuration and selection metadata, then checks its
-own exact catalog against Captain for required uncached packages. The check does
+own exact catalog against Captain for configured uncached proxy-core packages.
+Runtime-only forwarding backend choices are not part of this configuration preflight. The check does
 not write local selections or install local cores. Captain may populate its normal
 artifact cache while serving manifests. Missing catalog entries, authentication
 errors, invalid manifests or timeout fail the upgrade; the old executable remains.

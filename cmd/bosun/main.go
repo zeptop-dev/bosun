@@ -435,7 +435,11 @@ func setupMode(args []string, deferred bool) (*env, error) {
 	}
 	if cfg.NodeMode != spec.NodeMonitor {
 		selected := manager.Selected()
+		configured := configuredCores(cfg)
 		for _, name := range manager.Order(cfg.CoreOrder()) {
+			if _, enabled := configured[name]; !enabled && selected[name] == "" {
+				continue
+			}
 			load := build[name]
 			if selected[name] != "" {
 				if configuredCores(cfg)[name].External {
@@ -556,7 +560,7 @@ func cmdRun(args []string) error {
 		ag.Certs = cm
 		ag.Decoy = dc
 		ag.Shaper = shp
-		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return e.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(cfg.DataDir, "realm"), Log: log}
+		ag.Realm = &forward.Realm{Binary: e.inst.LazyBinary(ctx, "realm", ""), Dir: filepath.Join(cfg.DataDir, "realm"), Log: log}
 		ag.Guard = guard
 		ag.Conn = e.conns
 		ag.Audit = e.audits
@@ -744,7 +748,8 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Certs = s.certs
 		ag.Decoy = s.decoy
 		ag.Shaper = s.shaper
-		ag.Realm = &forward.Realm{Binary: func(ctx context.Context) (string, error) { return s.inst.Ensure(ctx, "realm", "") }, Dir: filepath.Join(s.cfg.DataDir, "realm"), Log: s.log}
+		actx, cancel := context.WithCancel(ctx)
+		ag.Realm = &forward.Realm{Binary: s.inst.LazyBinary(actx, "realm", ""), Dir: filepath.Join(s.cfg.DataDir, "realm"), Log: s.log}
 		ag.Guard = s.guard
 		ag.Conn = s.conns
 		ag.Audit = s.audits
@@ -768,7 +773,6 @@ func (s *supervisor) run(ctx context.Context) error {
 			s.onAgent(ag)
 		}
 		s.ui.SetAgent(ag)
-		actx, cancel := context.WithCancel(ctx)
 		done := make(chan error, 1)
 		go func() { done <- ag.Run(actx) }()
 		s.log.Info("agent started", "panel", d.Name())
