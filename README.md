@@ -14,6 +14,8 @@ API). Changes per release: [CHANGELOG.md](CHANGELOG.md).
 
 ## Status
 
+Bosun v0.95.0 keeps reporting and management available while proxy cores prepare or retry. Preparation errors are separate from active/applied status; native Captain-source updates check the verified target before replacing the running binary. Upgrade Captain to v1.63.0 first when adopting the new shared catalog. [Recovery and preflight boundaries](docs/CORE_BOOTSTRAP_RECOVERY.md).
+
 Verified end to end against the manifest's tested releases (sing-box
 1.14.1, Xray 26.3.27, mita 3.37.0, Hysteria 2.12.3; see the table under
 "Run"):

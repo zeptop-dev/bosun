@@ -1,5 +1,7 @@
 # Core preparation and agent startup
 
+Available in bosun v0.95.0. Captain v1.63.0 pins the matching shared module and displays the optional preparation diagnostics. Older agents remain compatible but do not gain the recovery/preflight behavior.
+
 `bosun run` registers configured core identities before attempting executable
 preparation. Agent state/reporting and the local UI can start even if a package
 is unavailable. `bosun render` retains synchronous preparation and explicit errors.

@@ -1,6 +1,6 @@
 # Changelog
 
-- **Unreleased** — Keep agent startup and reporting independent of proxy binary downloads. Prepare configured cores asynchronously with bounded retries, retain unavailable identities and diagnostics, and activate only through the current-state apply loop. Remember successful automatic core versions separately from explicit selections; never automatically reuse a broken package. Native Captain-source updates run the verified target binary preflight before replacing the running executable.
+- **v0.95.0** (2026-11-11) — Keep agent startup and reporting independent of proxy binary downloads. Prepare configured cores asynchronously with bounded retries, retain unavailable identities and diagnostics, and activate only through the current-state apply loop. Remember successful automatic core versions separately from explicit selections; never automatically reuse a broken package. Native Captain-source updates run the verified target binary preflight before replacing the running executable.
 
 - **v0.94.0** (2026-11-11) — Rebuild with Go 1.26.11 for GO-2026-6859, including Docker and source fallback builds. Prepare immutable sing-box 1.14.1-r4, 1.14.4-r2 and Extended 2.7.2-r5 packages; retain old assets and identify affected previous builds. CI and release dry runs validate the actual candidate artifacts before publication. Apply the reviewed frontend and Actions updates from Dependabot using maintainer-authored commits.
 
