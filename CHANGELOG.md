@@ -1,6 +1,6 @@
 # Changelog
 
-- **Unreleased** — Add IPIP and 3322 HTTPS IPv4 observations alongside the existing two sources. Require at least two matching successful sources, allowing failed responders but vetoing any conflicting valid response. Keep the IPv6 pair, source isolation, strict TLS, confirmation windows and failed-observation retention unchanged. Parse only IPIP's explicit address field; bound responses and limit the 3322 startup request cadence without reusing cached votes.
+- **v0.96.0** (2026-11-12) — Add IPIP and 3322 HTTPS IPv4 observations alongside the existing two sources. Require at least two matching successful sources, allowing failed responders but vetoing any conflicting valid response. Keep the IPv6 pair, source isolation, strict TLS, confirmation windows and failed-observation retention unchanged. Parse only IPIP's explicit address field; bound responses and limit the 3322 startup request cadence without reusing cached votes.
 
 - **v0.95.0** (2026-11-11) — Keep agent startup and reporting independent of proxy binary downloads. Prepare configured cores asynchronously with bounded retries, retain unavailable identities and diagnostics, and activate only through the current-state apply loop. Remember successful automatic core versions separately from explicit selections; never automatically reuse a broken package. Native Captain-source updates run the verified target binary preflight before replacing the running executable.
 
