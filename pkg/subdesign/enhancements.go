@@ -124,8 +124,15 @@ func (d *Design) Effective() (Design, error) {
 			return Design{}, err
 		}
 	}
+	if out.Enhancements.DNSProtection && out.Enhancements.DNSMode == "follow" {
+		p, err := d.MainDNSPolicy()
+		if err != nil {
+			return Design{}, err
+		}
+		out.Enhancements.DNSPolicy = p
+	}
 	if out.Enhancements.DNSProtection && out.Enhancements.DNSPolicy == "" {
-		if out.Enhancements.Claude {
+		if out.Enhancements.Claude && out.Enhancements.DNSMode != "dedicated" {
 			out.Enhancements.DNSPolicy = claudePolicy
 		} else {
 			p, err := addGroup(dnsGroup)

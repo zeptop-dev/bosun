@@ -30,6 +30,7 @@ type Enhancements struct {
 	WebRTC        bool                `json:"webrtc,omitempty"`
 	QUIC          bool                `json:"quic,omitempty"`
 	ClaudePolicy  string              `json:"claude_policy,omitempty"`
+	DNSMode       string              `json:"dns_mode,omitempty"`
 	DNSPolicy     string              `json:"dns_policy,omitempty"`
 	ClaudeRules   *ClaudeRuleSnapshot `json:"claude_rules,omitempty"`
 }
@@ -295,6 +296,22 @@ func (d *Design) Validate() error {
 		return fmt.Errorf("DNS policy %q is not a base proxy group", p)
 	}
 
+	switch d.Enhancements.DNSMode {
+	case "", "follow", "dedicated", "custom":
+	default:
+		return fmt.Errorf("invalid DNS mode")
+	}
+	if d.Enhancements.DNSProtection && d.Enhancements.DNSMode == "follow" {
+		if err := d.validateFollowDNS(); err != nil {
+			return err
+		}
+	}
+	if !d.effective && d.Enhancements.DNSMode == "dedicated" && d.Enhancements.DNSPolicy != "" {
+		return fmt.Errorf("dedicated DNS mode cannot specify a policy")
+	}
+	if d.Enhancements.DNSProtection && d.Enhancements.DNSMode == "custom" && d.Enhancements.DNSPolicy == "" {
+		return fmt.Errorf("choose a DNS proxy policy")
+	}
 	// A protection policy may traverse nested selection/automatic groups. Even
 	// an indirect DIRECT member permits bypass when the client selects it.
 	hasDirect := func(root string) bool {
@@ -321,7 +338,7 @@ func (d *Design) Validate() error {
 		policy, label string
 	}{
 		{d.Enhancements.Claude, d.Enhancements.ClaudePolicy, "Claude"},
-		{d.Enhancements.DNSProtection, d.Enhancements.DNSPolicy, "DNS"},
+		{d.Enhancements.DNSProtection && d.Enhancements.DNSMode != "follow", d.Enhancements.DNSPolicy, "DNS"},
 	} {
 		if p.enabled && p.policy != "" && hasDirect(p.policy) {
 			return fmt.Errorf("%s policy %q can select DIRECT; use a proxy-only group", p.label, p.policy)
