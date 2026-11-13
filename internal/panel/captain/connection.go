@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -41,6 +42,7 @@ func (c *Client) migrationResult(ctx context.Context, origin, id, status string,
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(agentproto.ConnectionURLHeader, origin)
+	req.Header.Set(agentproto.ConnectionVersionHeader, agentproto.ConnectionVersion)
 	transport := c.http.Transport
 	if len(pinned) > 0 {
 		transport = pinned[0]
@@ -56,16 +58,19 @@ func (c *Client) migrationResult(ctx context.Context, origin, id, status string,
 		c.revokeLease()
 	}
 	if resp.StatusCode != 200 {
-		return errors.New("migration confirmation rejected")
+		return &connectionResultError{Status: resp.StatusCode}
 	}
 	return nil
 }
 func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
-	if !c.migrationMu.TryLock() {
-		return
-	}
-	defer c.migrationMu.Unlock()
 	c.connectionCursor.Store(m.ID)
+	c.migrationMu.Lock()
+	defer c.migrationMu.Unlock()
+	select {
+	case <-c.stop:
+		return
+	default:
+	}
 	c.mu.Lock()
 	if c.connectionAttempts == nil {
 		c.connectionAttempts = map[string]int64{}
@@ -109,8 +114,23 @@ func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
 		return
 	}
 	fail := func() { _ = c.migrationResult(ctx, source, m.ID, "failed") }
-	if source == m.TargetURL {
-		_ = c.migrationResult(ctx, source, m.ID, "completed")
+	normalizedTarget, targetOK := agentproto.ConnectionOrigin(m.TargetURL)
+	if source == m.TargetURL || (sourceOK && targetOK && normalizedSource == normalizedTarget) {
+		selected, e := config.ReadConnection(c.cfg.DataDir, c.cfg.OriginalURL, token)
+		if e != nil {
+			fail()
+			return
+		}
+		if e = config.SaveConnection(c.cfg.DataDir, c.cfg.OriginalURL, selected.URL, m.TargetURL, m.ID, token); e != nil {
+			fail()
+			return
+		}
+		if source != m.TargetURL {
+			c.connectionURL.Store(m.TargetURL)
+			c.connectionGeneration.Add(1)
+		}
+		c.connectionPending.Store(m.ID)
+		c.finishConnectionReceiptLocked()
 		return
 	}
 	challengeBytes := make([]byte, 32)
@@ -158,11 +178,7 @@ func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
 	if err = config.SaveConnection(c.cfg.DataDir, c.cfg.OriginalURL, source, m.TargetURL, m.ID, token); err != nil {
 		selected, readErr := config.ReadConnection(c.cfg.DataDir, c.cfg.OriginalURL, token)
 		if readErr == nil && selected.URL == m.TargetURL {
-			if rollbackErr := config.SaveConnection(c.cfg.DataDir, c.cfg.OriginalURL, m.TargetURL, source, m.ID, token); rollbackErr != nil {
-				c.connectionURL.Store(m.TargetURL)
-				c.connectionGeneration.Add(1)
-				return
-			}
+			_ = config.SaveConnection(c.cfg.DataDir, c.cfg.OriginalURL, m.TargetURL, source, m.ID, token)
 		}
 		fail()
 		return
@@ -179,21 +195,16 @@ func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
 	c.addresses = nil
 	c.addressesURL = ""
 	c.mu.Unlock()
-	if err = c.migrationResult(ctx, m.TargetURL, m.ID, "completed", pinned); err != nil {
-		// Restore durable selection before rolling back the running connection.
-		if e := config.SaveConnection(c.cfg.DataDir, c.cfg.OriginalURL, m.TargetURL, source, m.ID, token); e == nil {
-			c.connectionURL.Store(source)
-			c.connectionGeneration.Add(1)
-			fail()
-		}
-		return
-	}
+	// This is the durable commit point. A lost final acknowledgement must
+	// never silently move the node back to an origin the panel may now retire.
+	c.connectionPending.Store(m.ID)
 	c.saveSnapshot()
-	c.log.Info("Captain connection migrated", "migration", m.ID)
+	c.finishConnectionReceiptLocked(pinned)
 	select {
 	case c.changed <- struct{}{}:
 	default:
 	}
+
 }
 
 func pinConnectionTransport(base http.RoundTripper, proof *tls.ConnectionState) (*http.Transport, error) {
@@ -227,4 +238,68 @@ func pinConnectionTransport(base http.RoundTripper, proof *tls.ConnectionState) 
 		return nil
 	}
 	return out, nil
+}
+
+// The status is bounded and carries no raw response body or credentials.
+type connectionResultError struct{ Status int }
+
+func (e *connectionResultError) Error() string {
+	return fmt.Sprintf("migration confirmation HTTP %d", e.Status)
+}
+
+func (c *Client) finishConnectionReceipt() {
+	if !c.connectionReceiptBusy.CompareAndSwap(false, true) {
+		return
+	}
+	defer c.connectionReceiptBusy.Store(false)
+	c.migrationMu.Lock()
+	defer c.migrationMu.Unlock()
+	c.finishConnectionReceiptLocked()
+}
+func (c *Client) finishConnectionReceiptLocked(pinned ...http.RoundTripper) {
+	id, _ := c.connectionPending.Load().(string)
+	if id == "" || c.cfg.DataDir == "" {
+		return
+	}
+	select {
+	case <-c.stop:
+		return
+	default:
+	}
+	c.mu.Lock()
+	token := c.token
+	revoked := c.revoked
+	c.mu.Unlock()
+	if token == "" || revoked {
+		return
+	}
+	origin := c.endpoint()
+	selected, err := config.ReadConnection(c.cfg.DataDir, c.cfg.OriginalURL, token)
+	if err != nil || selected.URL != origin || selected.MigrationID != id {
+		return
+	}
+	// Also checkpoint a restored selection before re-confirming after restart.
+	if err = config.SaveConnection(c.cfg.DataDir, c.cfg.OriginalURL, origin, origin, id, token); err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	go func() {
+		select {
+		case <-c.stop:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	err = c.migrationResult(ctx, origin, id, "completed", pinned...)
+	if err == nil {
+		c.connectionPending.CompareAndSwap(id, "")
+		c.log.Info("Captain connection migration confirmed", "migration", id)
+		return
+	}
+	var resultErr *connectionResultError
+	if errors.As(err, &resultErr) && (resultErr.Status == 404 || resultErr.Status == 409 || resultErr.Status == 401 || resultErr.Status == 403) {
+		c.connectionPending.CompareAndSwap(id, "")
+	}
+	c.log.Warn("Captain connection selection retained; confirmation pending or requires retry", "migration", id)
 }

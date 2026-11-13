@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const ConnectionVersion = "1"
+const ConnectionVersion = "2"
 const ConnectionVersionHeader = "X-Bosun-Connection-Version"
 const ConnectionURLHeader = "X-Bosun-Connection-URL"
 const ConnectionCursorHeader = "X-Bosun-Connection-Cursor"

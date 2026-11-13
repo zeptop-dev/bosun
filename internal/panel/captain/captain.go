@@ -44,14 +44,16 @@ type Config struct {
 
 // Client is a Captain driver.
 type Client struct {
-	connectionGeneration atomic.Uint64
-	connectionAttempts   map[string]int64
-	connectionURL        atomic.Value
-	connectionCursor     atomic.Value
-	migrationMu          sync.Mutex
-	cfg                  Config
-	http                 *http.Client
-	log                  *slog.Logger
+	connectionPending     atomic.Value
+	connectionReceiptBusy atomic.Bool
+	connectionGeneration  atomic.Uint64
+	connectionAttempts    map[string]int64
+	connectionURL         atomic.Value
+	connectionCursor      atomic.Value
+	migrationMu           sync.Mutex
+	cfg                   Config
+	http                  *http.Client
+	log                   *slog.Logger
 
 	snapshotMu     sync.Mutex
 	verifiedAt     time.Time
@@ -176,6 +178,9 @@ func New(cfg Config, log *slog.Logger) (*Client, error) {
 		}
 		if selected.URL != cfg.URL {
 			c.connectionURL.Store(selected.URL)
+		}
+		if selected.MigrationID != "" {
+			c.connectionPending.Store(selected.MigrationID)
 		}
 	}
 	return c, nil
@@ -348,6 +353,9 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 	}
 	if origin != c.endpoint() || connectionGeneration != c.connectionGeneration.Load() {
 		return false, false, nil
+	}
+	if (code == http.StatusOK || code == http.StatusNotModified) && h.Get(agentproto.ConnectionVersionHeader) == agentproto.ConnectionVersion {
+		go c.finishConnectionReceipt()
 	}
 	switch code {
 	case http.StatusNotModified:

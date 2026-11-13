@@ -327,8 +327,8 @@ func Load(path string) (*Config, error) {
 				return nil, e
 			}
 			cp.URL = selected.URL
-			if selected.MigrationID != "" && (c.MinVersion == "" || selfupdate.Newer("v0.98.0", c.MinVersion)) {
-				c.MinVersion = "v0.98.0"
+			if selected.MigrationID != "" && (c.MinVersion == "" || selfupdate.Newer("v0.98.1", c.MinVersion)) {
+				c.MinVersion = "v0.98.1"
 			}
 		}
 	}

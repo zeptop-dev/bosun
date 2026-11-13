@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"github.com/zeptop-dev/bosun/internal/config"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"io"
 	"log/slog"
@@ -173,5 +174,92 @@ func TestConnectionMigrationRejectsRelayedSamePanelProof(t *testing.T) {
 	c.migrateConnection(agentproto.ConnectionMigration{ID: id, SourceURL: legitimate.URL, TargetURL: attacker.URL, ProofKey: key, ExpiresAt: time.Now().Add(time.Minute).Unix()})
 	if leaked.Load() || c.ActiveURL() != legitimate.URL {
 		t.Fatal("relayed proof transferred node authority")
+	}
+}
+
+func TestLostFinalReceiptNeverRollsBackDurableSelection(t *testing.T) {
+	id := "012345678901234567890123456789"
+	key := "012345678901234567890123456789012345"
+	var completed, oldFailures atomic.Int32
+	old := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { oldFailures.Add(1); w.WriteHeader(200) }))
+	defer old.Close()
+	var target *httptest.Server
+	target = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/agent/connection-proof" {
+			challenge := r.URL.Query().Get("challenge")
+			binding, e := agentproto.ConnectionBinding(r.TLS, challenge)
+			if e != nil {
+				t.Error(e)
+			}
+			json.NewEncoder(w).Encode(agentproto.ConnectionProof{ID: id, Challenge: challenge, Signature: agentproto.ConnectionSignature(key, id, target.URL, challenge, binding)})
+			return
+		}
+		var result agentproto.ConnectionResult
+		json.NewDecoder(r.Body).Decode(&result)
+		if result.Status == "completed" && completed.Add(1) == 1 {
+			// The controller committed completion, but its response never reached the node.
+			conn, _, e := w.(http.Hijacker).Hijack()
+			if e != nil {
+				t.Error(e)
+				return
+			}
+			conn.Close()
+			return
+		}
+		w.WriteHeader(200)
+	}))
+	defer target.Close()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "token")
+	os.WriteFile(file, []byte("token"), 0600)
+	c, e := New(Config{URL: old.URL, DataDir: dir, TokenFile: file}, slog.Default())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer c.Close()
+	roots := x509.NewCertPool()
+	roots.AddCert(old.Certificate())
+	roots.AddCert(target.Certificate())
+	c.http = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots}}}
+	c.migrateConnection(agentproto.ConnectionMigration{ID: id, SourceURL: old.URL, TargetURL: target.URL, ProofKey: key, ExpiresAt: time.Now().Add(time.Minute).Unix()})
+	selected, e := config.ReadConnection(dir, old.URL, "token")
+	if e != nil || selected.URL != target.URL || c.ActiveURL() != target.URL || oldFailures.Load() != 0 {
+		t.Fatal("lost receipt rolled back a committed selection", selected, e, c.ActiveURL())
+	}
+	pending, _ := c.connectionPending.Load().(string)
+	if pending != id {
+		t.Fatal("missing receipt retry")
+	}
+	c.finishConnectionReceipt()
+	pending, _ = c.connectionPending.Load().(string)
+	if pending != "" || completed.Load() != 2 || c.ActiveURL() != target.URL {
+		t.Fatal("confirmation retry failed", pending, completed.Load())
+	}
+}
+func TestSameOriginMigrationCheckpointsSelectionBeforeConfirmation(t *testing.T) {
+	var completed atomic.Int32
+	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var result agentproto.ConnectionResult
+		json.NewDecoder(r.Body).Decode(&result)
+		if result.Status == "completed" {
+			completed.Add(1)
+		}
+		w.WriteHeader(200)
+	}))
+	defer target.Close()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "token")
+	os.WriteFile(file, []byte("token"), 0600)
+	c, e := New(Config{URL: target.URL, DataDir: dir, TokenFile: file}, slog.Default())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer c.Close()
+	c.http = target.Client()
+	id := "012345678901234567890123456789"
+	c.migrateConnection(agentproto.ConnectionMigration{ID: id, SourceURL: target.URL, TargetURL: target.URL, ProofKey: "012345678901234567890123456789012345", ExpiresAt: time.Now().Add(time.Minute).Unix()})
+	selected, e := config.ReadConnection(dir, target.URL, "token")
+	if e != nil || selected.MigrationID != id || selected.URL != target.URL || completed.Load() != 1 {
+		t.Fatal("same-origin confirmation lacked durable checkpoint", selected, e, completed.Load())
 	}
 }

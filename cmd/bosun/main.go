@@ -65,8 +65,8 @@ import (
 func newUpdater(minVersion string) *selfupdate.Client {
 	// Older binaries ignore complete-path health policies and can select an
 	// unconfirmed candidate. Preserve these and offline/control enforcement.
-	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.98.0", minVersion) {
-		minVersion = "v0.98.0"
+	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.98.1", minVersion) {
+		minVersion = "v0.98.1"
 	}
 	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version, MinVersion: minVersion}
 }
