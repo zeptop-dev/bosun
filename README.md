@@ -1826,3 +1826,20 @@ boundaries](docs/PUBLIC_ADDRESS_SOURCES.md).
 公网 IPv4 新增 IPIP、3322 两个 HTTPS 观测源。至少两个有效结果一致才确认，
 任何有效冲突都否决自动更新；失败不算票，IPv6 保持原样。3322 启动限频期间
 不复用旧结果；只剩两个新源可达时可能延后首次确认。
+
+
+### Explicit subscription DNS routing (v0.97.0)
+
+The shared subscription designer accepts `dns_mode: follow`, `dedicated` or
+`custom`. Following uses the selected main group itself, including an intentional
+manual DIRECT selection, while rejecting automatic groups that can reach DIRECT.
+Existing drafts without the field retain their behavior. Claude, domestic/direct
+and proxy-hostname bootstrap DNS keep their separate policies. Selection changes
+do not flush client caches or force persistent DNS connections to reconnect; a
+load-balancing group can use different nodes for different queries/connections.
+See [DNS adapter boundaries](docs/DESIGNER_DNS_ADAPTERS.md).
+
+共享订阅库支持 DNS 跟随主策略、独立手动 DNS 组或自定义策略；旧草稿保持原行为。
+明确手动选择的 DIRECT 可以跟随，含 DIRECT 的自动组会拒绝。Claude、国内直连
+和节点域名引导解析仍分开处理；不承诺清空缓存、强制重连或负载均衡下始终同一出口。
+这是订阅生成能力，不改变节点协议、监听或已选代理内核。
