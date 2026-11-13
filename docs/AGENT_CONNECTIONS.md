@@ -1,0 +1,15 @@
+# Captain connection migration
+
+Requires Captain v1.67.0 and bosun v0.98.0. Older agents continue to work but do not execute migration commands; the panel shows them as unconfirmed/upgrade required. The update/rollback floor is v0.98.0.
+
+The administrator first enables both old and new origins, then explicitly migrates selected nodes. A target is not an installed-agent observation. The node makes an anonymous HTTPS challenge request before sending any existing token. Its HMAC proof is bound to that TLS session, so a different server cannot relay a challenge to Captain and then collect the token. Confirmation pins the public key seen during the proof. Redirects and incorrect/expired attempts are rejected.
+
+**Automatic migration targets must terminate TLS in Captain itself.** A CDN or TLS-terminating reverse proxy in front of the target does not share the same TLS exporter and cannot pass this proof. The current/source connection may still pass through a CDN. Custom HTTPS installation addresses remain supported; a custom migration target must satisfy the same direct-TLS check. Do not turn off certificate verification to migrate.
+
+A successful migration persists `captain-connection.json` in `data_dir` (0600), bound by HMAC to the existing node token and the installation's original URL. It does not rewrite config.yaml, replace a read-only Docker bind mount, change the download source or re-pair the node. Config loading and installer-download-config expose the effective address; Captain downloads use the verified running address. The traffic journal, offline snapshot and mode identity retain the original approved authority so pending deltas keep their existing epoch/sequence and cannot be double charged by a URL change. A manual different installation URL or replacement token does not inherit the old override.
+
+Only the control channel changes: proxy cores are not restarted. Failed verification/persistence keeps the source; an unsuccessful final confirmation attempts to restore the durable source before falling back. Ambiguous filesystem errors are not reported as success. Old in-flight state responses are fenced by connection generation, including A→B→A changes. A failed attempt requires an explicit retry with a new identity; it is not reused after cancellation or re-pairing.
+
+The five-at-a-time queue leaves offline/older agents waiting. Restarting the node after successful persistence keeps the selected origin without an installer run. A normal service restart still has the usual proxy interruption; it is not required for hot migration.
+
+For recovery, retain the source entry until every node has confirmed. Do not delete the token or run a new pairing just to change an address. A root administrator can back up and remove the private connection-selection file to return to the installation URL, then restart the same service; preserve the data directory and journals. This is a recovery operation, not a routine migration method. Observe the new connection and accounting delivery before retiring an entry.

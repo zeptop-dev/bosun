@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,12 +22,13 @@ const Prefix = "/api/agent/downloads/"
 // Client is an authenticated, same-origin download channel. TokenFile is read
 // per request so successful pairing immediately replaces the bootstrap code.
 type Client struct {
-	BaseURL   string
-	TokenFile string
-	PairCode  string
-	HTTP      *http.Client
-	root      *url.URL
-	prefix    string
+	ResolveBaseURL func() string
+	BaseURL        string
+	TokenFile      string
+	PairCode       string
+	HTTP           *http.Client
+	root           *url.URL
+	prefix         string
 }
 
 func New(base, tokenFile, pairCode string, allowHTTP bool) (*Client, error) {
@@ -45,7 +47,16 @@ func New(base, tokenFile, pairCode string, allowHTTP bool) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) APIBase() string { return c.BaseURL + strings.TrimSuffix(Prefix, "/") }
+func (c *Client) currentRoot() *url.URL {
+	if c.ResolveBaseURL != nil {
+		if base, ok := agentproto.ConnectionOrigin(c.ResolveBaseURL()); ok {
+			u, _ := url.Parse(base)
+			return u
+		}
+	}
+	return c.root
+}
+func (c *Client) APIBase() string { return c.currentRoot().String() + strings.TrimSuffix(Prefix, "/") }
 
 // URL resolves a relative manifest URL and rejects another origin, sibling
 // endpoint, query credentials, encoded path separator or traversal.
@@ -54,10 +65,17 @@ func (c *Client) URL(raw string) (string, error) {
 	if err != nil {
 		return "", errors.New("invalid Captain artifact URL")
 	}
+	root := c.currentRoot()
 	if !u.IsAbs() {
-		u = c.root.ResolveReference(u)
+		u = root.ResolveReference(u)
 	}
-	if u.Scheme != c.root.Scheme || u.Host != c.root.Host || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || u.RawPath != "" || !strings.HasPrefix(u.Path, c.prefix) || path.Clean(u.Path) != u.Path {
+	// A manifest fetched before an authenticated migration may refer to its
+	// former origin. Rewrite only that known origin, never an arbitrary host.
+	if u.Scheme == c.root.Scheme && u.Host == c.root.Host {
+		u.Scheme = root.Scheme
+		u.Host = root.Host
+	}
+	if u.Scheme != root.Scheme || u.Host != root.Host || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || u.RawPath != "" || !strings.HasPrefix(u.Path, c.prefix) || path.Clean(u.Path) != u.Path {
 		return "", errors.New("artifact URL is outside the Captain download endpoint")
 	}
 	return u.String(), nil
@@ -69,13 +87,15 @@ type transport struct {
 }
 
 func (t transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if _, err := t.owner.URL(req.URL.String()); err != nil {
+	target, err := t.owner.URL(req.URL.String())
+	if err != nil {
 		return nil, err
 	}
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		return nil, errors.New("Captain downloads require GET or HEAD")
 	}
 	r := req.Clone(req.Context())
+	r.URL, _ = url.Parse(target)
 	r.Header = req.Header.Clone()
 	r.Header.Del("Authorization")
 	r.Header.Del("X-Bosun-Pair-Code")

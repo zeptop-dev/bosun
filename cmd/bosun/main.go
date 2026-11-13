@@ -65,8 +65,8 @@ import (
 func newUpdater(minVersion string) *selfupdate.Client {
 	// Older binaries ignore complete-path health policies and can select an
 	// unconfirmed candidate. Preserve these and offline/control enforcement.
-	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.85.0", minVersion) {
-		minVersion = "v0.85.0"
+	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.98.0", minVersion) {
+		minVersion = "v0.98.0"
 	}
 	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version, MinVersion: minVersion}
 }
@@ -287,7 +287,7 @@ func setupMode(args []string, deferred bool) (*env, error) {
 	case "local":
 	case "captain":
 		cp := cfg.Panel.Captain
-		driver, err = captain.New(captain.Config{URL: cp.URL, PairCode: cp.PairCode, TokenFile: cp.TokenFile, Version: version, Timeout: cp.Timeout, OfflineMaxAge: cp.OfflineMaxAge}, log)
+		driver, err = captain.New(captain.Config{DataDir: cfg.DataDir, OriginalURL: cp.OriginalURL, URL: cp.URL, PairCode: cp.PairCode, TokenFile: cp.TokenFile, Version: version, Timeout: cp.Timeout, OfflineMaxAge: cp.OfflineMaxAge}, log)
 	case "xboard":
 		x := cfg.Panel.Xboard
 		driver, err = xboard.New(xboard.Config{URL: x.URL, Token: x.Token, NodeID: x.NodeID, NodeType: x.NodeType, Timeout: x.Timeout}, log)
@@ -321,6 +321,9 @@ func setupMode(args []string, deferred bool) (*env, error) {
 	inst.Downloads, err = cfg.Downloads()
 	if err != nil {
 		return nil, err
+	}
+	if client, ok := driver.(*captain.Client); ok && inst.Downloads != nil {
+		inst.Downloads.ResolveBaseURL = client.ActiveURL
 	}
 	if cfg.Cores.RegistryToken != "" {
 		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
@@ -505,6 +508,9 @@ func cmdRun(args []string) error {
 	upd.Downloads, err = cfg.Downloads()
 	if err != nil {
 		return err
+	}
+	if client, ok := e.driver.(*captain.Client); ok && upd.Downloads != nil {
+		upd.Downloads.ResolveBaseURL = client.ActiveURL
 	}
 	if upd.Downloads != nil && cfg.NodeMode != spec.NodeMonitor {
 		upd.BeforeInstall = candidatePreflight(e.cfgPath)
@@ -707,7 +713,7 @@ func (s *supervisor) driver() (panel.Driver, error) {
 		if s.cfg.Panel.Captain != nil {
 			offlineMaxAge = s.cfg.Panel.Captain.OfflineMaxAge
 		}
-		c, err := captain.New(captain.Config{URL: managed.URL, TokenFile: s.tokenFile(), Version: version, OfflineMaxAge: offlineMaxAge}, s.log)
+		c, err := captain.New(captain.Config{DataDir: s.cfg.DataDir, URL: managed.URL, TokenFile: s.tokenFile(), Version: version, OfflineMaxAge: offlineMaxAge}, s.log)
 		if err != nil {
 			// Token gone: nothing to be managed by. Fall back to local mode
 			// so the node stays operable.

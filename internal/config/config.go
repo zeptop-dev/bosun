@@ -174,6 +174,7 @@ type SnellCore struct {
 
 // CaptainPanel configures the Captain driver.
 type CaptainPanel struct {
+	OriginalURL    string        `yaml:"-"`
 	DownloadSource string        `yaml:"download_source"` // github (default) or captain, including managed cores and updates
 	URL            string        `yaml:"url"`
 	PairCode       string        `yaml:"pair_code"`  // one-time; ignored once a token is stored
@@ -316,6 +317,19 @@ func Load(path string) (*Config, error) {
 		}
 		if c.Panel.Captain.TokenFile == "" {
 			c.Panel.Captain.TokenFile = filepath.Join(c.DataDir, "captain.token")
+		}
+	}
+	if cp := c.Panel.Captain; c.Panel.Driver == "captain" && cp != nil {
+		cp.OriginalURL = strings.TrimRight(cp.URL, "/")
+		if token, e := os.ReadFile(cp.TokenFile); e == nil {
+			selected, e := ReadConnection(c.DataDir, cp.OriginalURL, strings.TrimSpace(string(token)))
+			if e != nil {
+				return nil, e
+			}
+			cp.URL = selected.URL
+			if selected.MigrationID != "" && (c.MinVersion == "" || selfupdate.Newer("v0.98.0", c.MinVersion)) {
+				c.MinVersion = "v0.98.0"
+			}
 		}
 	}
 	for _, name := range c.Cores.Order {

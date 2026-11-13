@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zeptop-dev/bosun/internal/config"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/dns"
@@ -30,6 +32,8 @@ import (
 
 // Config is the connection setup.
 type Config struct {
+	DataDir       string
+	OriginalURL   string
 	URL           string        // panel base URL
 	PairCode      string        // one-time pairing code; used only when no token is stored
 	TokenFile     string        // where the node token is persisted
@@ -40,9 +44,14 @@ type Config struct {
 
 // Client is a Captain driver.
 type Client struct {
-	cfg  Config
-	http *http.Client
-	log  *slog.Logger
+	connectionGeneration atomic.Uint64
+	connectionAttempts   map[string]int64
+	connectionURL        atomic.Value
+	connectionCursor     atomic.Value
+	migrationMu          sync.Mutex
+	cfg                  Config
+	http                 *http.Client
+	log                  *slog.Logger
 
 	snapshotMu     sync.Mutex
 	verifiedAt     time.Time
@@ -145,7 +154,8 @@ func New(cfg Config, log *slog.Logger) (*Client, error) {
 		cfg.Timeout = 30 * time.Second
 	}
 	cfg.URL = strings.TrimRight(cfg.URL, "/")
-	c := &Client{cfg: cfg, http: &http.Client{Timeout: cfg.Timeout}, log: log.With("panel", "captain"), changed: make(chan struct{}, 1), stop: make(chan struct{})}
+	cfg.OriginalURL = strings.TrimRight(cfg.OriginalURL, "/")
+	c := &Client{cfg: cfg, http: &http.Client{Timeout: cfg.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("Captain redirects are not allowed") }}, log: log.With("panel", "captain"), changed: make(chan struct{}, 1), stop: make(chan struct{})}
 	var session [16]byte
 	if _, err := rand.Read(session[:]); err != nil {
 		return nil, fmt.Errorf("captain: configuration session: %w", err)
@@ -155,6 +165,18 @@ func New(cfg Config, log *slog.Logger) (*Client, error) {
 		c.token = strings.TrimSpace(string(b))
 	} else if cfg.PairCode == "" {
 		return nil, fmt.Errorf("captain: no token at %s and no pair_code configured", cfg.TokenFile)
+	}
+	if cfg.OriginalURL == "" {
+		c.cfg.OriginalURL = cfg.URL
+	}
+	if cfg.DataDir != "" && c.token != "" {
+		selected, err := config.ReadConnection(cfg.DataDir, c.cfg.OriginalURL, c.token)
+		if err != nil {
+			return nil, err
+		}
+		if selected.URL != cfg.URL {
+			c.connectionURL.Store(selected.URL)
+		}
 	}
 	return c, nil
 }
@@ -198,7 +220,8 @@ func (c *Client) doClient(ctx context.Context, hc *http.Client, method, path str
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.cfg.URL+path, rd)
+	origin := c.endpoint()
+	req, err := http.NewRequestWithContext(ctx, method, origin+path, rd)
 	if err != nil {
 		return 0, nil, nil, err
 	}
@@ -213,6 +236,13 @@ func (c *Client) doClient(ctx context.Context, hc *http.Client, method, path str
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
+	}
+	if c.cfg.DataDir != "" {
+		req.Header.Set(agentproto.ConnectionVersionHeader, agentproto.ConnectionVersion)
+		req.Header.Set(agentproto.ConnectionURLHeader, origin)
+		if cursor, ok := c.connectionCursor.Load().(string); ok {
+			req.Header.Set(agentproto.ConnectionCursorHeader, cursor)
+		}
 	}
 	resp, err := hc.Do(req)
 	if err != nil {
@@ -287,6 +317,8 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 		}
 	}
 	c.mu.Lock()
+	origin := c.endpoint()
+	connectionGeneration := c.connectionGeneration.Load()
 	etag, generation := c.etag, c.authGeneration
 	configSession := c.configSession
 	lastDelivery := ""
@@ -314,6 +346,9 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 		c.diagnosticsFailed(diagnosticRequest)
 		return false, false, err
 	}
+	if origin != c.endpoint() || connectionGeneration != c.connectionGeneration.Load() {
+		return false, false, nil
+	}
 	switch code {
 	case http.StatusNotModified:
 		if etag == "" {
@@ -339,7 +374,7 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 		return false, false, fmt.Errorf("captain: decode state: %w", err)
 	}
 	c.mu.Lock()
-	if c.authGeneration != generation {
+	if c.authGeneration != generation || c.endpoint() != origin || connectionGeneration != c.connectionGeneration.Load() {
 		c.mu.Unlock()
 		return false, false, errors.New("captain: state response predates authorization rejection")
 	}
@@ -353,6 +388,8 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 	}
 	retry := c.acceptDiagnosticsLocked(diagnosticRequest, st.Diagnostics, c.diagnosticsNowLocked())
 	st.Diagnostics = nil
+	migration := st.ConnectionMigration
+	st.ConnectionMigration = nil
 	// A recovery snapshot deliberately drops jobs and delivery evidence. Its
 	// first authenticated response must restore the full live state even when
 	// the server's desired revision itself has not changed.
@@ -366,6 +403,9 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 	c.mu.Unlock()
 	if moved {
 		c.saveSnapshot()
+	}
+	if migration != nil && c.cfg.DataDir != "" {
+		go c.migrateConnection(*migration)
 	}
 	return moved, retry, nil
 }
@@ -470,7 +510,7 @@ func (c *Client) ConsumedRevisions() (nodeUsers, forwards string) {
 func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error) {
 	c.mu.Lock()
 	rep.PublicAddresses = nil
-	if c.addressesURL == c.cfg.URL {
+	if c.addressesURL == c.endpoint() {
 		rep.PublicAddresses = c.addresses
 	}
 	if c.state != nil {
@@ -558,7 +598,7 @@ var _ = errors.New
 func (c *Client) RemovalConnection() (string, string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.cfg.URL, c.token
+	return c.endpoint(), c.token
 }
 
 // TrafficIdentity binds the local journal to the authenticated panel/node.
@@ -570,20 +610,19 @@ func (c *Client) TrafficIdentity() string {
 	if c.token == "" {
 		return ""
 	}
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.URL+"\x00"+c.token)))
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.OriginalURL+"\x00"+c.token)))
 }
 
 // One serial sampler per driver, including monitor-only nodes. Network I/O is
 // independent of reports and config pulls, and is cancelled on driver shutdown.
 func (c *Client) watchAddresses() {
-	origin := c.cfg.URL // immutable for this driver; reconnects create a new Client
+
 	c.watchAddressSamples(func(ctx context.Context) agentproto.PublicAddresses {
-		return dns.ObservePublicAddressesWithFallback(ctx, origin)
+		return dns.ObservePublicAddressesWithFallback(ctx, c.endpoint())
 	})
 }
 
 func (c *Client) watchAddressSamples(observe func(context.Context) agentproto.PublicAddresses) {
-	origin := c.cfg.URL
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -601,6 +640,7 @@ func (c *Client) watchAddressSamples(observe func(context.Context) agentproto.Pu
 		if ctx.Err() != nil {
 			return
 		}
+		origin := c.endpoint()
 		sampleCtx, done := context.WithTimeout(ctx, 12*time.Second)
 		sample := observe(sampleCtx)
 		complete := sampleCtx.Err() == nil
@@ -610,7 +650,7 @@ func (c *Client) watchAddressSamples(observe func(context.Context) agentproto.Pu
 		}
 		fallbackRuns.annotate(&sample, complete, time.Now())
 		c.mu.Lock()
-		if c.cfg.URL == origin {
+		if c.endpoint() == origin {
 			c.addresses = &sample
 			c.addressesURL = origin
 		}

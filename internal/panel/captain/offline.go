@@ -157,7 +157,7 @@ func (c *Client) saveSnapshot() {
 	state.ConfigDelivery = nil // an offline snapshot cannot deliver a new process's configuration
 	state.Diagnostics = nil    // transient observation commands never survive a restart
 	token := c.token
-	identity := fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.URL+"\x00"+token)))
+	identity := fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.OriginalURL+"\x00"+token)))
 	body, err := json.Marshal(offlineSnapshot{Version: 1, Identity: identity, ValidatedAt: c.verifiedAt, State: state})
 	c.mu.Unlock()
 	if err == nil {
@@ -273,7 +273,7 @@ func (c *Client) recoverSnapshot(cause error) error {
 		return errors.New("captain: corrupt or foreign recovery snapshot")
 	}
 	var saved offlineSnapshot
-	identity := fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.URL+"\x00"+c.token)))
+	identity := fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.OriginalURL+"\x00"+c.token)))
 	if json.Unmarshal(signed.Payload, &saved) != nil || saved.Version != 1 || saved.Identity != identity || saved.State.Revision == "" || saved.State.Node.ID == "" {
 		return errors.New("captain: invalid recovery identity or state")
 	}
