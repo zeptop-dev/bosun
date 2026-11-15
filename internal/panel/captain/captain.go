@@ -245,6 +245,7 @@ func (c *Client) doClient(ctx context.Context, hc *http.Client, method, path str
 	}
 	if c.cfg.DataDir != "" {
 		req.Header.Set(agentproto.ConnectionVersionHeader, agentproto.ConnectionVersion)
+		req.Header.Set(agentproto.ConnectionProxyVersionHeader, agentproto.ConnectionProxyVersion)
 		req.Header.Set(agentproto.ConnectionURLHeader, origin)
 		if cursor, ok := c.connectionCursor.Load().(string); ok {
 			req.Header.Set(agentproto.ConnectionCursorHeader, cursor)

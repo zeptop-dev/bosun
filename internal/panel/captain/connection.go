@@ -27,7 +27,13 @@ func (c *Client) endpoint() string {
 }
 func (c *Client) ActiveURL() string { return c.endpoint() }
 func (c *Client) migrationResult(ctx context.Context, origin, id, status string, pinned ...http.RoundTripper) error {
-	b, _ := json.Marshal(agentproto.ConnectionResult{ID: id, Status: status})
+	return c.sendMigrationResult(ctx, origin, agentproto.ConnectionResult{ID: id, Status: status}, pinned...)
+}
+func (c *Client) migrationFailure(ctx context.Context, origin, id, stage string) error {
+	return c.sendMigrationResult(ctx, origin, agentproto.ConnectionResult{ID: id, Status: "failed", Error: stage})
+}
+func (c *Client) sendMigrationResult(ctx context.Context, origin string, result agentproto.ConnectionResult, pinned ...http.RoundTripper) error {
+	b, _ := json.Marshal(result)
 	req, err := http.NewRequestWithContext(ctx, "POST", origin+"/api/agent/connection-result", strings.NewReader(string(b)))
 	if err != nil {
 		return err
@@ -54,7 +60,7 @@ func (c *Client) migrationResult(ctx context.Context, origin, id, status string,
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+	if (resp.StatusCode == 401 || resp.StatusCode == 403) && origin == c.endpoint() {
 		c.revokeLease()
 	}
 	if resp.StatusCode != 200 {
@@ -113,7 +119,17 @@ func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
 	if token == "" || revoked {
 		return
 	}
-	fail := func() { _ = c.migrationResult(ctx, source, m.ID, "failed") }
+	stage := "invalid_target"
+	fail := func() {
+		c.log.Warn("Captain connection migration failed", "stage", stage)
+		_ = c.migrationFailure(ctx, source, m.ID, stage)
+	}
+	if !agentproto.ValidConnectionVerification(m.VerificationMode) {
+		fail()
+		return
+	}
+	proxyMode := m.VerificationMode == agentproto.ConnectionVerificationProxy
+
 	normalizedTarget, targetOK := agentproto.ConnectionOrigin(m.TargetURL)
 	if source == m.TargetURL || (sourceOK && targetOK && normalizedSource == normalizedTarget) {
 		selected, e := config.ReadConnection(c.cfg.DataDir, c.cfg.OriginalURL, token)
@@ -133,6 +149,7 @@ func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
 		c.finishConnectionReceiptLocked()
 		return
 	}
+	stage = "proof_request"
 	challengeBytes := make([]byte, 32)
 	if _, err := rand.Read(challengeBytes); err != nil {
 		fail()
@@ -153,6 +170,11 @@ func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
 	}
 	var proof agentproto.ConnectionProof
 	binding, bindingErr := agentproto.ConnectionBinding(resp.TLS, challenge)
+	if proxyMode {
+		binding = agentproto.ProxyConnectionBinding(m.ExpiresAt)
+		bindingErr = nil
+	}
+	stage = "proof_verification"
 	err = json.NewDecoder(io.LimitReader(resp.Body, 8192)).Decode(&proof)
 	resp.Body.Close()
 	if bindingErr != nil || err != nil || resp.StatusCode != 200 || proof.ID != m.ID || proof.Challenge != challenge || !agentproto.VerifyConnectionProof(m.ProofKey, m.ID, m.TargetURL, challenge, proof.Signature, binding) {
@@ -160,6 +182,10 @@ func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
 		return
 	}
 	pinned, err := pinConnectionTransport(c.http.Transport, resp.TLS)
+	if proxyMode {
+		pinned, err = verifiedProxyTransport(c.http.Transport)
+	}
+	stage = "target_verification"
 	if err != nil {
 		fail()
 		return
@@ -175,6 +201,7 @@ func (c *Client) migrateConnection(m agentproto.ConnectionMigration) {
 	if !valid {
 		return
 	}
+	stage = "persistence"
 	if err = config.SaveConnection(c.cfg.DataDir, c.cfg.OriginalURL, source, m.TargetURL, m.ID, token); err != nil {
 		selected, readErr := config.ReadConnection(c.cfg.DataDir, c.cfg.OriginalURL, token)
 		if readErr == nil && selected.URL == m.TargetURL {
@@ -302,4 +329,17 @@ func (c *Client) finishConnectionReceiptLocked(pinned ...http.RoundTripper) {
 		c.connectionPending.CompareAndSwap(id, "")
 	}
 	c.log.Warn("Captain connection selection retained; confirmation pending or requires retry", "migration", id)
+}
+
+// Proxy trust is explicit. Preserve standard HTTPS verification, but allow
+// legitimate CDN certificate rotation rather than pinning an edge's SPKI.
+func verifiedProxyTransport(base http.RoundTripper) (*http.Transport, error) {
+	t, ok := base.(*http.Transport)
+	if !ok {
+		return nil, errors.New("unsupported TLS transport")
+	}
+	if t.TLSClientConfig != nil && t.TLSClientConfig.InsecureSkipVerify {
+		return nil, errors.New("proxy migration requires certificate verification")
+	}
+	return t.Clone(), nil
 }

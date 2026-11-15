@@ -6,11 +6,22 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 )
 
 const ConnectionVersion = "2"
+const ConnectionProxyVersionHeader = "X-Bosun-Proxy-Migration"
+const ConnectionProxyVersion = "1"
+const ConnectionVerificationProxy = "trusted-proxy"
+const ConnectionVerificationDirect = "direct"
+
+func ProxyConnectionBinding(expires int64) string { return fmt.Sprintf("trusted-proxy-v1:%d", expires) }
+func ValidConnectionVerification(mode string) bool {
+	return mode == "" || mode == ConnectionVerificationDirect || mode == ConnectionVerificationProxy
+}
+
 const ConnectionVersionHeader = "X-Bosun-Connection-Version"
 const ConnectionURLHeader = "X-Bosun-Connection-URL"
 const ConnectionCursorHeader = "X-Bosun-Connection-Cursor"
@@ -18,11 +29,12 @@ const ConnectionCursorHeader = "X-Bosun-Connection-Cursor"
 // ConnectionMigration is temporary control metadata, not proxy configuration.
 // ProofKey is an attempt-specific key, never the node token.
 type ConnectionMigration struct {
-	ID        string `json:"id"`
-	SourceURL string `json:"source_url"`
-	TargetURL string `json:"target_url"`
-	ProofKey  string `json:"proof_key"`
-	ExpiresAt int64  `json:"expires_at"`
+	ID               string `json:"id"`
+	SourceURL        string `json:"source_url"`
+	TargetURL        string `json:"target_url"`
+	ProofKey         string `json:"proof_key"`
+	ExpiresAt        int64  `json:"expires_at"`
+	VerificationMode string `json:"verification_mode,omitempty"`
 }
 type ConnectionProof struct {
 	ID        string `json:"id"`
@@ -32,6 +44,7 @@ type ConnectionProof struct {
 type ConnectionResult struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
 }
 
 func ConnectionSignature(key, id, target, challenge string, binding ...string) string {

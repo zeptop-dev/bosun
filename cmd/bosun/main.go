@@ -63,8 +63,8 @@ import (
 // newUpdater returns the self-update client for this binary. minVersion
 // (config min_version) is the floor no update or rollback may go below.
 func newUpdater(minVersion string) *selfupdate.Client {
-	// Older binaries ignore independent credentials and may expose a listener
-	// without its intended authentication. Preserve independent mode on rollback.
+	// Older binaries ignore independent authentication and proxy trust choices.
+	// Preserve those, durable connection selection and earlier control safeguards.
 	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.99.0", minVersion) {
 		minVersion = "v0.99.0"
 	}
