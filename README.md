@@ -1845,3 +1845,10 @@ See [DNS adapter boundaries](docs/DESIGNER_DNS_ADAPTERS.md).
 明确手动选择的 DIRECT 可以跟随，含 DIRECT 的自动组会拒绝。Claude、国内直连
 和节点域名引导解析仍分开处理；不承诺清空缓存、强制重连或负载均衡下始终同一出口。
 这是订阅生成能力，不改变节点协议、监听或已选代理内核。
+
+### Independent listeners
+
+Captain can provision independent SOCKS5 accounts and single-key Shadowsocks 2022
+listeners outside subscriber plans. These listeners do not deduct subscriber quotas;
+server traffic and service controls remain effective. See
+[credential isolation and compatibility](docs/STANDALONE_INBOUNDS.md).

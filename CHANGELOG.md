@@ -1,6 +1,7 @@
 # Changelog
 
-- **Unreleased** — Add independent SOCKS5 and single-key Shadowsocks 2022 listeners, excluded from customer plan grants and subscriptions; require current adapter/request capabilities and preserve existing subscriber listeners.
+- **v0.99.0** (2026-11-15) — Add independent SOCKS5 credentials and single-key Shadowsocks 2022 listeners without customer subscriptions or quotas. Advertise adapter/request support, isolate subscriber counters and online-device attribution, and preserve ordinary listener behavior. Independent credentials require compatible Captain support; raise the rollback floor to v0.99.0.
+  - Support explicitly trusted CDN/reverse-proxy connection migration without weakening the default direct TLS-session-bound proof. Advertise separate capability, retain strict HTTPS/no redirects and durable receipt retries, and keep the healthy old connection when an uncommitted target rejects authorization. Trusted intermediaries can see normal Agent credentials; no application-wide end-to-end encryption is implied.
 
 - **v0.98.1** (2026-11-13) — Retain the durable selected endpoint when a final migration acknowledgement is lost, retry confirmation on authenticated state fetches, and checkpoint same-origin reconciliation before confirming it. Never silently roll back behind a controller that may have accepted completion. Capability version 2 lets Captain require these guarantees; v0.98.0 remains usable for normal communication but is superseded for automatic migration. Raise the built-in rollback floor to v0.98.1.
 
