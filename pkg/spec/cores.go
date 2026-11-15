@@ -10,6 +10,7 @@ import (
 // CoreCapabilities describes the features implemented by a bosun adapter,
 // rather than everything the upstream binary may support.
 type CoreCapabilities struct {
+	StandaloneAuth         bool                             `json:"standalone_auth,omitempty"`
 	PrivateAccessPolicy    *PrivateAccessPolicyCapabilities `json:"private_access_policy,omitempty"`
 	CoreOnlyPrivateAccess  bool                             `json:"core_only_private_access,omitempty"`
 	PrivateAccessReadiness *PrivateAccessReadiness          `json:"private_access_readiness,omitempty"`
@@ -61,6 +62,8 @@ func (c CoreCapabilities) UnsupportedReason(ib Inbound) string {
 	}
 
 	switch {
+	case ib.Standalone != nil && !c.StandaloneAuth:
+		return "standaloneAuth"
 	case ib.WireGuardSlot != 0 && !c.WireGuardReverse:
 		return "wireguardReverse"
 	case ib.Protocol == Mieru && c.MieruWildcardOnly && ib.Listen != "" && ib.Listen != "::" && ib.Listen != "0.0.0.0":
@@ -101,12 +104,12 @@ type CoreCandidate struct {
 // values so a registry/test cannot mutate the shared catalog.
 func CoreCatalog() []CoreCandidate {
 	return []CoreCandidate{
-		{"singbox", CoreCapabilities{CoreOnlyPrivateAccess: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
-		{"xray", CoreCapabilities{WireGuardReverse: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true, VLESSReverse: true}},
+		{"singbox", CoreCapabilities{StandaloneAuth: true, CoreOnlyPrivateAccess: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
+		{"xray", CoreCapabilities{StandaloneAuth: true, WireGuardReverse: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true, VLESSReverse: true}},
 		{"mita", CoreCapabilities{Protocols: []Protocol{Mieru}, HotUserReload: true}},
 		{"hysteria", CoreCapabilities{Protocols: []Protocol{Hysteria2}, HotUserReload: true}},
 		{"snell", CoreCapabilities{Protocols: []Protocol{Snell}, SnellObfsTLS: true}},
-		{"singbox-extended", CoreCapabilities{CoreOnlyPrivateAccess: true, MieruWildcardOnly: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell, Mieru, SSH}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
+		{"singbox-extended", CoreCapabilities{StandaloneAuth: true, CoreOnlyPrivateAccess: true, MieruWildcardOnly: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell, Mieru, SSH}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
 	}
 }
 
@@ -206,6 +209,9 @@ func PreviewCores(ib Inbound, inventory []CoreCandidate) CoreOptions {
 // must never be placed in URLs, browser query caches or HTTP access logs.
 func CoreProbe(q url.Values) Inbound {
 	ib := Inbound{Protocol: Protocol(q.Get("protocol")), Cipher: q.Get("cipher"), Transport: &Transport{Type: q.Get("transport")}, AcceptProxyProtocol: q.Get("proxy_protocol") == "true", SnellMultiUser: q.Get("snell_multi_user") == "true", SnellObfs: q.Get("snell_obfs")}
+	if q.Get("standalone") == "true" {
+		ib.Standalone = &StandaloneAuth{}
+	}
 	if q.Get("reality") == "true" {
 		ib.TLS = &TLS{Mode: TLSReality}
 	}

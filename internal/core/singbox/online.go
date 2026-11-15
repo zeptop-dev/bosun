@@ -35,11 +35,18 @@ type onlineTracker struct {
 	sink func(user, clientIP, host string, port int, network string)
 	// users are the names this node serves ("name|tag" and the bare
 	// name); nil accepts every name (tests).
-	users map[string]bool
+	users           map[string]bool
+	ignoredInbounds map[string]bool
 }
 
 // setUsers records who this node serves, so a forged log line naming
 // somebody else is ignored.
+func (t *onlineTracker) setIgnoredInbounds(tags map[string]bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.ignoredInbounds = tags
+}
+
 func (t *onlineTracker) setUsers(names map[string]bool) {
 	t.mu.Lock()
 	t.users = names
@@ -57,9 +64,10 @@ const (
 )
 
 var (
-	lineRe = regexp.MustCompile(`\[(\d+) [^\]]*\] (?:inbound/[^:]*): (.*)$`)
-	fromRe = regexp.MustCompile(`^(?:\[([^\]]+)\] )?inbound (?:packet )?connection from (\S+)$`)
-	userRe = regexp.MustCompile(`^\[([^\]]+)\] inbound (packet )?connection to (\S+)$`)
+	inboundTagRe = regexp.MustCompile(`inbound/[^\[]+\[([^\]]+)\]:`)
+	lineRe       = regexp.MustCompile(`\[(\d+) [^\]]*\] (?:inbound/[^:]*): (.*)$`)
+	fromRe       = regexp.MustCompile(`^(?:\[([^\]]+)\] )?inbound (?:packet )?connection from (\S+)$`)
+	userRe       = regexp.MustCompile(`^\[([^\]]+)\] inbound (packet )?connection to (\S+)$`)
 )
 
 func newOnlineTracker(sink func(user, clientIP, host string, port int, network string)) *onlineTracker {
@@ -76,6 +84,10 @@ func (t *onlineTracker) feed(line string) {
 	now := t.now()
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if tag := inboundTagRe.FindStringSubmatch(line); tag != nil && t.ignoredInbounds[tag[1]] {
+		delete(t.src, id)
+		return
+	}
 	if f := fromRe.FindStringSubmatch(msg); f != nil {
 		ip := hostOnly(f[2])
 		if ip == "" {

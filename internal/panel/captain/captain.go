@@ -230,6 +230,7 @@ func (c *Client) doClient(ctx context.Context, hc *http.Client, method, path str
 	if err != nil {
 		return 0, nil, nil, err
 	}
+	req.Header.Set(agentproto.StandaloneAuthHeader, agentproto.StandaloneAuthVersion)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

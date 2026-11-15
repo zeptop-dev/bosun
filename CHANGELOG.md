@@ -1,5 +1,7 @@
 # Changelog
 
+- **Unreleased** — Add independent SOCKS5 and single-key Shadowsocks 2022 listeners, excluded from customer plan grants and subscriptions; require current adapter/request capabilities and preserve existing subscriber listeners.
+
 - **v0.98.1** (2026-11-13) — Retain the durable selected endpoint when a final migration acknowledgement is lost, retry confirmation on authenticated state fetches, and checkpoint same-origin reconciliation before confirming it. Never silently roll back behind a controller that may have accepted completion. Capability version 2 lets Captain require these guarantees; v0.98.0 remains usable for normal communication but is superseded for automatic migration. Raise the built-in rollback floor to v0.98.1.
 
 - **v0.98.0** (2026-11-13) — Add authenticated hot migration between Captain control endpoints without re-pairing or restarting proxy cores. Verify an anonymous, TLS-session-bound same-panel challenge before sending the existing token; pin the proof certificate for confirmation, reject redirects, and preserve the former connection on failure. Persist a token-bound connection selection outside read-only configuration mounts and retain the original accounting/offline/mode identity across migration and restart. Follow the verified endpoint for Captain artifact downloads while retaining the chosen download source. Automatic targets require direct Captain TLS; an old source can remain behind a CDN. Raise the built-in rollback floor to v0.98.0 because older binaries ignore the persisted selection.

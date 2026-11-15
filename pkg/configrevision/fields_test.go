@@ -20,7 +20,8 @@ type classification struct{ path, structural, excluded, opaque string }
 // their leaf inventories additionally verify today's material classifications.
 var classifications = []classification{
 	{"Node", "Mode WireGuardLinks EgressUpstreams ReverseClients Inbounds Outbounds Routes DefaultOutbound ConnLog AllowPrivateDest PrivateDestAllow EgressByIngress AuditRules DNS Decoy", "ID ModeRevision ServiceControl Forwards ACME Certificates UserSpeedLimitMbps", "Overrides"},
-	{"Node.Inbounds[]", "WireGuardSlot PrivateAccess Reverse Tag Protocol Listen Port Core TLS Transport Multiplex Flow Cipher Obfs UpMbps DownMbps CongestionControl PaddingScheme MieruTransport TrafficPattern MieruMTU MieruMultiplexing MieruHandshake WGAddress WGMTU SnellVersion SnellObfs SnellObfsHost ShadowTLS SnellMultiUser NoSniff AcceptProxyProtocol Fallbacks", "SSH ServerKey ObfsPassword WGPrivateKey WGPublicKey SnellPSK ScopedUsers Users", ""},
+	{"Node.Inbounds[]", "Standalone WireGuardSlot PrivateAccess Reverse Tag Protocol Listen Port Core TLS Transport Multiplex Flow Cipher Obfs UpMbps DownMbps CongestionControl PaddingScheme MieruTransport TrafficPattern MieruMTU MieruMultiplexing MieruHandshake WGAddress WGMTU SnellVersion SnellObfs SnellObfsHost ShadowTLS SnellMultiUser NoSniff AcceptProxyProtocol Fallbacks", "SSH ServerKey ObfsPassword WGPrivateKey WGPublicKey SnellPSK ScopedUsers Users", ""},
+	{"Node.Inbounds[].Standalone", "", "Username Password", ""},
 	{"Node.Inbounds[].TLS", "Mode ServerName ALPN Reality AutoCert ACME", "CertPath KeyPath", ""},
 	{"Node.Inbounds[].TLS.Reality", "HandshakeServer HandshakePort FallbackLimit", "PrivateKey PublicKey ShortIDs", ""},
 	{"Node.Inbounds[].TLS.Reality.FallbackLimit", "Off AfterBytes BytesPerSec BurstBytesPerSec", "", ""},

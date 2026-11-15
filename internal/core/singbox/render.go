@@ -265,6 +265,10 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 	case spec.Shadowsocks:
 		in["type"] = "shadowsocks"
 		in["method"] = ib.Cipher
+		if ib.Standalone != nil {
+			in["password"] = ib.ServerKey
+			break
+		}
 		keyLen := ss2022KeyLen(ib.Cipher)
 		if keyLen > 0 {
 			if ib.ServerKey == "" {
@@ -307,6 +311,10 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": spec.InboundUser(u.Name, ib.Tag), "password": u.Password} })
 	case spec.SOCKS:
 		in["type"] = "socks"
+		if ib.Standalone != nil {
+			in["users"] = []any{m{"username": ib.Standalone.Username, "password": ib.Standalone.Password}}
+			break
+		}
 		in["users"] = mapUsers(users, func(u spec.User) m { return m{"username": u.Name, "password": u.Password} })
 	case spec.HTTP:
 		in["type"] = "http"

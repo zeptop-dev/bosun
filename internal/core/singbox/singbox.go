@@ -58,9 +58,10 @@ type Core struct {
 }
 
 type accountingState struct {
-	names          map[string]bool
-	aliases        map[string]string
-	inboundAliases map[string]string
+	ignoredInbounds map[string]bool
+	names           map[string]bool
+	aliases         map[string]string
+	inboundAliases  map[string]string
 }
 
 func (c *Core) commitAccounting(b *core.Bundle) {
@@ -69,6 +70,7 @@ func (c *Core) commitAccounting(b *core.Bundle) {
 		c.aliases, c.inboundAliases = st.aliases, st.inboundAliases
 		c.mu.Unlock()
 		c.online.setUsers(st.names)
+		c.online.setIgnoredInbounds(st.ignoredInbounds)
 	}
 }
 
@@ -134,7 +136,11 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 	names := map[string]bool{}
 	aliases := map[string]string{}
 	inboundAliases := map[string]string{}
+	ignoredInbounds := map[string]bool{}
 	for _, ib := range inbounds {
+		if ib.Standalone != nil {
+			ignoredInbounds[ib.Tag] = true
+		}
 		if !c.Capabilities().Supports(ib) {
 			return nil, fmt.Errorf("%s: incompatible inbound %q", c.Name(), ib.Tag)
 		}
@@ -160,7 +166,7 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 	if err != nil {
 		return nil, err
 	}
-	return &core.Bundle{Files: map[string][]byte{"config.json": cfg}, Main: "config.json", Payload: &accountingState{names, aliases, inboundAliases}}, nil
+	return &core.Bundle{Files: map[string][]byte{"config.json": cfg}, Main: "config.json", Payload: &accountingState{names: names, aliases: aliases, inboundAliases: inboundAliases, ignoredInbounds: ignoredInbounds}}, nil
 }
 
 func (c *Core) configPath(b *core.Bundle) string { return filepath.Join(c.opt.WorkDir, b.Main) }

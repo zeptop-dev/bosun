@@ -65,6 +65,7 @@ type projection struct {
 	Decoy                                      *decoy
 }
 type inbound struct {
+	Standalone                                   bool `json:",omitempty"`
 	WireGuardSlot                                int
 	PrivateAccess                                *privateAccess
 	Reverse                                      *reverseInbound
@@ -339,7 +340,7 @@ func checkEndpointURL(raw string, dns bool) error {
 }
 
 func projectInbound(v spec.Inbound) inbound {
-	i := inbound{WireGuardSlot: v.WireGuardSlot, PrivateAccess: projectPrivate(v.PrivateAccess), Tag: v.Tag, Protocol: string(v.Protocol), Listen: v.Listen, Core: v.Core, Port: v.Port, TLS: projectTLS(v.TLS), Flow: v.Flow, Cipher: v.Cipher, Obfs: v.Obfs, UpMbps: v.UpMbps, DownMbps: v.DownMbps, CongestionControl: v.CongestionControl, PaddingScheme: stringsCopy(v.PaddingScheme), MieruTransport: v.MieruTransport, TrafficPattern: v.TrafficPattern, MieruMTU: v.MieruMTU, MieruMultiplexing: v.MieruMultiplexing, MieruHandshake: v.MieruHandshake, WGAddress: v.WGAddress, WGMTU: v.WGMTU, SnellVersion: v.SnellVersion, SnellObfs: v.SnellObfs, SnellObfsHost: v.SnellObfsHost, SnellMultiUser: v.SnellMultiUser, NoSniff: v.NoSniff, AcceptProxyProtocol: v.AcceptProxyProtocol}
+	i := inbound{Standalone: v.Standalone != nil, WireGuardSlot: v.WireGuardSlot, PrivateAccess: projectPrivate(v.PrivateAccess), Tag: v.Tag, Protocol: string(v.Protocol), Listen: v.Listen, Core: v.Core, Port: v.Port, TLS: projectTLS(v.TLS), Flow: v.Flow, Cipher: v.Cipher, Obfs: v.Obfs, UpMbps: v.UpMbps, DownMbps: v.DownMbps, CongestionControl: v.CongestionControl, PaddingScheme: stringsCopy(v.PaddingScheme), MieruTransport: v.MieruTransport, TrafficPattern: v.TrafficPattern, MieruMTU: v.MieruMTU, MieruMultiplexing: v.MieruMultiplexing, MieruHandshake: v.MieruHandshake, WGAddress: v.WGAddress, WGMTU: v.WGMTU, SnellVersion: v.SnellVersion, SnellObfs: v.SnellObfs, SnellObfsHost: v.SnellObfsHost, SnellMultiUser: v.SnellMultiUser, NoSniff: v.NoSniff, AcceptProxyProtocol: v.AcceptProxyProtocol}
 	i.Transport.Type = v.TransportType()
 	if t := v.Transport; t != nil {
 		i.Transport = transport{v.TransportType(), t.Path, t.Host, t.ServiceName, t.Mode}

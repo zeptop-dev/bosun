@@ -359,6 +359,10 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		}
 	case spec.SOCKS:
 		in["protocol"] = "socks"
+		if ib.Standalone != nil {
+			in["settings"] = m{"auth": "password", "udp": true, "accounts": []any{m{"user": ib.Standalone.Username, "pass": ib.Standalone.Password}}}
+			break
+		}
 		in["settings"] = m{"auth": "password", "udp": true, "accounts": mapUsers(users, func(u spec.User) m {
 			return m{"user": u.Name, "pass": u.Password}
 		})}

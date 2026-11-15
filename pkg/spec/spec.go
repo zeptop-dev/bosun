@@ -165,6 +165,9 @@ type Brutal struct {
 
 // Inbound is one listener. A node may run many, possibly on different cores.
 type Inbound struct {
+	// Standalone bypasses subscriber credentials and uses only this listener's credentials.
+	Standalone *StandaloneAuth `json:"standalone,omitempty"`
+
 	WireGuardSlot int             `json:"wireguard_slot,omitempty"`
 	SSH           *SSHServer      `json:"ssh,omitempty"`
 	PrivateAccess *PrivateAccess  `json:"private_access,omitempty"`
@@ -249,7 +252,7 @@ type Fallback struct {
 // EffectiveUsers returns the users to provision on this inbound given the
 // node-level list.
 func (i Inbound) EffectiveUsers(nodeUsers []User) []User {
-	if i.Reverse != nil && i.Reverse.Receiver {
+	if i.Standalone != nil || i.Reverse != nil && i.Reverse.Receiver {
 		return nil
 	}
 	if i.ScopedUsers {

@@ -16,6 +16,9 @@ import (
 // the panel can show it on the form and the agent in the doctor. Fields a
 // core fills later (certificate paths for auto_cert) are not required.
 func (i Inbound) Validate() error {
+	if err := i.validateStandalone(); err != nil {
+		return err
+	}
 	if i.WireGuardSlot != 0 {
 		if i.WireGuardSlot < 1 || i.WireGuardSlot > 16383 || i.Core != "xray" || i.Reverse != nil || i.Protocol == WireGuard || i.Protocol == SOCKS || i.Protocol == HTTP {
 			return fmt.Errorf("WireGuard transit requires a managed slot and a per-user Xray inbound")

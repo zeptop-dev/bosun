@@ -63,10 +63,10 @@ import (
 // newUpdater returns the self-update client for this binary. minVersion
 // (config min_version) is the floor no update or rollback may go below.
 func newUpdater(minVersion string) *selfupdate.Client {
-	// Older binaries ignore complete-path health policies and can select an
-	// unconfirmed candidate. Preserve these and offline/control enforcement.
-	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.98.1", minVersion) {
-		minVersion = "v0.98.1"
+	// Older binaries ignore independent credentials and may expose a listener
+	// without its intended authentication. Preserve independent mode on rollback.
+	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.99.0", minVersion) {
+		minVersion = "v0.99.0"
 	}
 	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version, MinVersion: minVersion}
 }
