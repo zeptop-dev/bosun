@@ -33,6 +33,7 @@ type PairResponse struct {
 // State is the complete desired state for one node. Revision changes
 // whenever any part changes; it doubles as the ETag.
 type State struct {
+	ConnectionProbe     *ConnectionProbe     `json:"connection_probe,omitempty"`
 	ConnectionMigration *ConnectionMigration `json:"connection_migration,omitempty"`
 	Diagnostics         *DiagnosticsControl  `json:"diagnostics,omitempty"`
 	ConfigRevision      string               `json:"config_revision,omitempty"`

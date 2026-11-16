@@ -12,7 +12,7 @@ API). Changes per release: [CHANGELOG.md](CHANGELOG.md).
   Mode changes persist across restart/read-only Docker config mounts; existing
   installations remain full nodes. Requires Captain v1.18.0 or newer.
 
-- **Captain connection migration (bosun v0.98.1 / Captain v1.67):** verify and persist a new control endpoint while keeping pairing, running proxy cores and accounting journal identity. Supports read-only Docker configuration; direct Captain TLS is the default; explicit trusted CDN/proxy migration is prepared for the next release (see the guide). [Migration and recovery](docs/AGENT_CONNECTIONS.md).
+- **Captain connection migration (bosun v0.98.1 / Captain v1.67):** verify and persist a new control endpoint while keeping pairing, running proxy cores and accounting journal identity. Supports read-only Docker configuration; automatic node-side detection is available with Captain1.69/bosun0.100, with explicit final confirmation for trusted CDN/proxy paths and advanced manual overrides. [Migration and recovery](docs/AGENT_CONNECTIONS.md).
 
 ## Status
 

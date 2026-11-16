@@ -44,16 +44,23 @@ type Config struct {
 
 // Client is a Captain driver.
 type Client struct {
-	connectionPending     atomic.Value
-	connectionReceiptBusy atomic.Bool
-	connectionGeneration  atomic.Uint64
-	connectionAttempts    map[string]int64
-	connectionURL         atomic.Value
-	connectionCursor      atomic.Value
-	migrationMu           sync.Mutex
-	cfg                   Config
-	http                  *http.Client
-	log                   *slog.Logger
+	connectionPending         atomic.Value
+	connectionReceiptBusy     atomic.Bool
+	connectionGeneration      atomic.Uint64
+	connectionAttempts        map[string]int64
+	connectionURL             atomic.Value
+	connectionProbeCursor     atomic.Value
+	connectionProbeMu         sync.Mutex
+	connectionProbeNext       atomic.Pointer[agentproto.ConnectionProbe]
+	connectionProbeHandled    string
+	connectionProbePending    *agentproto.ConnectionProbeResult
+	connectionProbeOrigin     string
+	connectionProbeGeneration uint64
+	connectionCursor          atomic.Value
+	migrationMu               sync.Mutex
+	cfg                       Config
+	http                      *http.Client
+	log                       *slog.Logger
 
 	snapshotMu     sync.Mutex
 	verifiedAt     time.Time
@@ -246,6 +253,10 @@ func (c *Client) doClient(ctx context.Context, hc *http.Client, method, path str
 	if c.cfg.DataDir != "" {
 		req.Header.Set(agentproto.ConnectionVersionHeader, agentproto.ConnectionVersion)
 		req.Header.Set(agentproto.ConnectionProxyVersionHeader, agentproto.ConnectionProxyVersion)
+		req.Header.Set(agentproto.ConnectionProbeVersionHeader, agentproto.ConnectionProbeVersion)
+		if cursor, ok := c.connectionProbeCursor.Load().(string); ok {
+			req.Header.Set(agentproto.ConnectionProbeCursorHeader, cursor)
+		}
 		req.Header.Set(agentproto.ConnectionURLHeader, origin)
 		if cursor, ok := c.connectionCursor.Load().(string); ok {
 			req.Header.Set(agentproto.ConnectionCursorHeader, cursor)
@@ -358,6 +369,7 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 	}
 	if (code == http.StatusOK || code == http.StatusNotModified) && h.Get(agentproto.ConnectionVersionHeader) == agentproto.ConnectionVersion {
 		go c.finishConnectionReceipt()
+		go c.finishProbeReceipt()
 	}
 	switch code {
 	case http.StatusNotModified:
@@ -398,6 +410,8 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 	}
 	retry := c.acceptDiagnosticsLocked(diagnosticRequest, st.Diagnostics, c.diagnosticsNowLocked())
 	st.Diagnostics = nil
+	probe := st.ConnectionProbe
+	st.ConnectionProbe = nil
 	migration := st.ConnectionMigration
 	st.ConnectionMigration = nil
 	// A recovery snapshot deliberately drops jobs and delivery evidence. Its
@@ -413,6 +427,11 @@ func (c *Client) fetchStateResponse(ctx context.Context, wait string) (bool, boo
 	c.mu.Unlock()
 	if moved {
 		c.saveSnapshot()
+	}
+	if probe != nil {
+		c.connectionProbeCursor.Store(probe.ID)
+		c.connectionProbeNext.Store(probe)
+		go c.processProbe()
 	}
 	if migration != nil && c.cfg.DataDir != "" {
 		go c.migrateConnection(*migration)

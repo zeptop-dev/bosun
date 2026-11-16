@@ -37,9 +37,10 @@ type ConnectionMigration struct {
 	VerificationMode string `json:"verification_mode,omitempty"`
 }
 type ConnectionProof struct {
-	ID        string `json:"id"`
-	Challenge string `json:"challenge"`
-	Signature string `json:"signature"`
+	ProxySignature string `json:"proxy_signature,omitempty"`
+	ID             string `json:"id"`
+	Challenge      string `json:"challenge"`
+	Signature      string `json:"signature"`
 }
 type ConnectionResult struct {
 	ID     string `json:"id"`

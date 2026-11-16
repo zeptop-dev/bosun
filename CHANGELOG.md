@@ -1,5 +1,7 @@
 # Changelog
 
+- **v0.100.0** (2026-11-15) — Inspect a proposed Captain connection from the actual node before migration. Perform anonymous, certificate-verified challenge requests, classify direct TLS or a same-panel proxy path, and report only to the authenticated source without sending target credentials or changing runtime state. Advertise a separate probe capability/cursor, retry lost diagnostic receipts, and preserve default direct/trusted-proxy migration and identity handling.
+
 - **v0.99.1** (2026-11-15) — Accept Go’s implicit default HTTP transport during explicitly trusted CDN/reverse-proxy Agent migration. Match the production client’s normal nil-transport behavior without disabling TLS verification or changing direct-mode proofs, pairing, accounting, persistence or proxy cores. Add a real TLS-terminating proxy regression for the default transport path.
 
 - **v0.99.0** (2026-11-15) — Add independent SOCKS5 credentials and single-key Shadowsocks 2022 listeners without customer subscriptions or quotas. Advertise adapter/request support, isolate subscriber counters and online-device attribution, and preserve ordinary listener behavior. Independent credentials require compatible Captain support; raise the rollback floor to v0.99.0.

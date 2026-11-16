@@ -47,3 +47,23 @@ reject its nil transport before sending confirmation. This patch keeps strict
 certificate validation, direct-mode proofs and persistent identity unchanged.
 After upgrading bosun, retry the failed trusted-proxy migration; Captain1.68.0
 already supports it and does not require a panel upgrade.
+
+
+## Detect before migration (Captain1.69 / bosun0.100)
+
+The normal console flow is select target, detect from nodes, then confirm. A
+separate capability/cursor delivers temporary anonymous probes; old agents never
+receive these commands. No target credentials, URL selection, config revision or
+traffic/offline identity change during detection. The node first checks a real
+TLS-bound proof; only a valid separate same-panel application proof can recommend
+trusted-proxy mode. Certificate/redirect/network/signature failures are failures,
+not automatic permission to trust a proxy. A trusted result still requires an
+explicit administrator confirmation before a separate migration is issued.
+
+Five simultaneous probes, five-minute expiry and bounded private diagnostic
+history limit work. Results bind node identity, frozen target and source; stale
+previews cannot authorize migration. Lost result receipts retry only at the
+authenticated current source. Manual direct/proxy modes remain in advanced
+settings for older agents and special cases. Existing migration wire capability2
+and proxy capability1 stay unchanged. This read-only extension does not require
+a higher node rollback floor; older versions simply lack automatic detection.
