@@ -37,3 +37,13 @@ A failed uncommitted target does not revoke the old connection. After the
 selection is saved, lost final responses keep it selected and retry confirmation.
 No core restart, token replacement or traffic/offline identity change is required.
 The planned minimum versions above must follow the actual containing release.
+
+
+### bosun v0.99.1 correction
+
+Trusted-proxy migration accepts the implicit default HTTP transport used by a
+normal installed client. Earlier v0.99.0 could verify the anonymous proof but
+reject its nil transport before sending confirmation. This patch keeps strict
+certificate validation, direct-mode proofs and persistent identity unchanged.
+After upgrading bosun, retry the failed trusted-proxy migration; Captain1.68.0
+already supports it and does not require a panel upgrade.

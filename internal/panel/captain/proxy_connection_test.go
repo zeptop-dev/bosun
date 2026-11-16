@@ -19,7 +19,7 @@ import (
 )
 
 func TestTrustedProxyMigrationAcrossTLSAndHTTPOrigin(t *testing.T) {
-	for _, scenario := range []string{"direct", "trusted-proxy", "invalid", "bad-proof", "wrong-target", "redirect", "untrusted-cert", "lost-confirmation", "target-denied"} {
+	for _, scenario := range []string{"direct", "trusted-proxy", "invalid", "bad-proof", "wrong-target", "redirect", "untrusted-cert", "lost-confirmation", "target-denied", "default-transport"} {
 		mode := scenario
 		if scenario != "direct" && scenario != "invalid" {
 			mode = "trusted-proxy"
@@ -107,9 +107,15 @@ func TestTrustedProxyMigrationAcrossTLSAndHTTPOrigin(t *testing.T) {
 				roots = x509.NewCertPool()
 			}
 			c.http = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots}}}
+			if scenario == "default-transport" {
+				original := http.DefaultTransport
+				http.DefaultTransport = c.http.Transport
+				defer func() { http.DefaultTransport = original }()
+				c.http.Transport = nil // New leaves this nil in real production use.
+			}
 			identity := c.TrafficIdentity()
 			c.migrateConnection(agentproto.ConnectionMigration{ID: id, SourceURL: old.URL, TargetURL: targetURL, ProofKey: key, ExpiresAt: expires, VerificationMode: mode})
-			if scenario == "trusted-proxy" || scenario == "lost-confirmation" {
+			if scenario == "trusted-proxy" || scenario == "lost-confirmation" || scenario == "default-transport" {
 				if c.ActiveURL() != targetURL || credentials.Load() != 2 {
 					t.Fatal("proxy migration failed", c.ActiveURL(), credentials.Load())
 				}

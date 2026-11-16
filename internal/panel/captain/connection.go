@@ -334,6 +334,9 @@ func (c *Client) finishConnectionReceiptLocked(pinned ...http.RoundTripper) {
 // Proxy trust is explicit. Preserve standard HTTPS verification, but allow
 // legitimate CDN certificate rotation rather than pinning an edge's SPKI.
 func verifiedProxyTransport(base http.RoundTripper) (*http.Transport, error) {
+	if base == nil {
+		base = http.DefaultTransport
+	}
 	t, ok := base.(*http.Transport)
 	if !ok {
 		return nil, errors.New("unsupported TLS transport")
