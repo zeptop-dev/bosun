@@ -16,6 +16,7 @@ type Line struct {
 	Port     int
 	Inbound  spec.Inbound
 	UUID     string // user identity
+	Username string // optional wire login, e.g. local Naive users whose name differs from UUID
 	UserID   int64  // numeric id (WireGuard tunnel address)
 	Password string
 	// IPVersion selects the client connection family; empty preserves legacy behavior.
@@ -136,6 +137,19 @@ func iniName(name string) string {
 func proxyUsername(l Line) string {
 	if l.Inbound.Protocol == spec.SSH || l.Inbound.Protocol == spec.Mieru && l.Inbound.Core == "singbox-extended" {
 		return spec.ProxyUsername(l.UUID, l.Inbound.Tag)
+	}
+	return l.UUID
+}
+
+// Naive subscriptions use authenticated HTTP/2 over standard TLS. Other
+// transports need an explicit, separately validated client representation.
+func naiveSupported(l Line) bool {
+	return l.Inbound.TLS != nil && l.Inbound.TLS.Mode == spec.TLSStandard && naiveUsername(l) != "" && l.Password != "" && transportType(l) == "tcp"
+}
+
+func naiveUsername(l Line) string {
+	if l.Username != "" {
+		return l.Username
 	}
 	return l.UUID
 }

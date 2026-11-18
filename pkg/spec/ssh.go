@@ -104,6 +104,11 @@ func (i Inbound) validateSSH() error {
 func ProxyUsername(uuid, tag string) string { return InboundUser(uuid, tag) }
 
 func InboundAuthName(i Inbound, u User) string {
+	// Naive exposes the login username as metadata.User; retain existing
+	// credentials. Its user counters aggregate across Naive listeners.
+	if i.Protocol == Naive {
+		return u.Name
+	}
 	if i.Protocol == SSH || i.Protocol == Mieru && i.Core == "singbox-extended" {
 		return ProxyUsername(u.UUID, i.Tag)
 	}

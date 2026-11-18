@@ -93,6 +93,14 @@ func singboxOutbound(l Line) m {
 	ib := l.Inbound
 	o := m{"tag": l.Name, "server": l.Host, "server_port": l.Port}
 	switch ib.Protocol {
+	case spec.Naive:
+		if !naiveSupported(l) {
+			return nil
+		}
+		// Cronet handles TLS itself; generic uTLS/ALPN/transport options do not apply.
+		o["type"], o["username"], o["password"] = "naive", naiveUsername(l), l.Password
+		o["tls"] = m{"enabled": true, "server_name": serverName(l)}
+		return o
 	case spec.SSH:
 		if ib.SSH == nil || ib.SSH.PublicKey == "" {
 			return nil

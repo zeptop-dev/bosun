@@ -1852,3 +1852,17 @@ Captain can provision independent SOCKS5 accounts and single-key Shadowsocks 202
 listeners outside subscriber plans. These listeners do not deduct subscriber quotas;
 server traffic and service controls remain effective. See
 [credential isolation and compatibility](docs/STANDALONE_INBOUNDS.md).
+
+### Naive subscriptions
+
+Naive inbounds can be published as sing-box JSON (requires a Naive/Cronet-enabled
+client build) or `naive+https://` links for compatible importers such as v2rayN.
+The first implementation selects HTTP/2 over trusted TLS. Other renderer formats
+omit Naive; an ordinary HTTPS proxy entry is not a substitute. A URI importer must
+preserve the SNI when the advertised endpoint differs from the certificate name.
+The local panel preserves a user's login name separately from its UUID.
+
+Naive retains its existing wire usernames. User counters aggregate that login's
+traffic across Naive inbounds, while inbound totals remain separate; the adapter
+does not claim per-user-per-inbound attribution from a shared username counter.
+Upgrade bosun along with the panel to obtain the corrected stats registration.

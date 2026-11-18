@@ -68,7 +68,7 @@ func linesFor(u local.User, inbounds []local.Inbound, settings local.Settings, f
 		}
 		h, p, name := endpointFor(ib, settings, byID, fallbackHost)
 		su := u.Spec()
-		out = append(out, subscription.Line{Name: name, Host: h, Port: p, Inbound: ib.Inbound, UUID: su.UUID, Password: su.Password})
+		out = append(out, subscription.Line{Name: name, Host: h, Port: p, Inbound: ib.Inbound, UUID: su.UUID, Username: su.Name, Password: su.Password})
 	}
 	return out
 }
@@ -143,6 +143,8 @@ func shareURI(ib spec.Inbound, host string, port int, name string, u spec.User) 
 	hostPort := hostPortOf(host, port)
 	frag := "#" + url.PathEscape(name)
 	switch ib.Protocol {
+	case spec.Naive:
+		return subscription.ShareURI(subscription.Line{Name: name, Host: host, Port: port, Inbound: ib, UUID: u.UUID, Username: u.Name, Password: u.Password})
 	case spec.VLESS:
 		q := url.Values{}
 		q.Set("encryption", "none")

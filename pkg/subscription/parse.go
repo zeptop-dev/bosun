@@ -38,6 +38,9 @@ func ParseURI(raw string) (Line, error) {
 		return Line{}, errors.New("missing host")
 	}
 	l.Port, _ = strconv.Atoi(u.Port())
+	if l.Port == 0 && u.Port() == "" && scheme == "naive+https" {
+		l.Port = 443
+	}
 	if l.Port <= 0 {
 		return Line{}, errors.New("missing port")
 	}
@@ -75,6 +78,12 @@ func ParseURI(raw string) (Line, error) {
 		}
 		ib.TLS = &spec.TLS{Mode: spec.TLSStandard, ServerName: firstNonEmptyStr(q.Get("sni"), l.Host)}
 		ib.CongestionControl = q.Get("congestion_control")
+	case "naive+https":
+		if user == "" || !hasPass || pass == "" {
+			return Line{}, errors.New("naive needs username and password")
+		}
+		ib.Protocol, l.UUID, l.Password = spec.Naive, user, pass
+		ib.TLS = &spec.TLS{Mode: spec.TLSStandard, ServerName: firstNonEmptyStr(q.Get("sni"), l.Host)}
 	case "anytls":
 		ib.Protocol, l.Password = spec.AnyTLS, user
 		ib.TLS = &spec.TLS{Mode: spec.TLSStandard, ServerName: firstNonEmptyStr(q.Get("sni"), l.Host)}

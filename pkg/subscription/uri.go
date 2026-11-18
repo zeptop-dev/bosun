@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"encoding/json"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -108,6 +109,15 @@ func shareURI(l Line) string {
 		}
 		q.Set("udp_relay_mode", "native")
 		return "tuic://" + l.UUID + ":" + url.PathEscape(l.Password) + "@" + hostPort + "?" + q.Encode() + frag
+	case spec.Naive:
+		if !naiveSupported(l) {
+			return ""
+		}
+		q := url.Values{}
+		if sn := serverName(l); sn != "" {
+			q.Set("sni", sn)
+		}
+		return "naive+https://" + url.UserPassword(naiveUsername(l), l.Password).String() + "@" + net.JoinHostPort(strings.Trim(l.Host, "[]"), strconv.Itoa(l.Port)) + "?" + q.Encode() + frag
 	case spec.AnyTLS:
 		q := url.Values{}
 		if sn := serverName(l); sn != "" {
