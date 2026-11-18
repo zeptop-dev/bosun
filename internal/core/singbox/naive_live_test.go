@@ -138,6 +138,36 @@ func TestRealSingboxNaiveAccountingAndRevocation(t *testing.T) {
 			}
 		}
 	}
+	// Receiving the echoed payload does not synchronize with the server's
+	// post-Write counter update. Observe without consuming counters until
+	// both users and both inbounds have accounted for the completed transfers.
+	for deadline := time.Now().Add(3 * time.Second); ; {
+		current, e := c.Stats(ctx, false)
+		if e != nil {
+			t.Fatal(e)
+		}
+		inbound, e := c.InboundStats(ctx, false)
+		if e != nil {
+			t.Fatal(e)
+		}
+		complete := true
+		for _, u := range users {
+			v := current[u.Name]
+			complete = complete && v.Up >= int64(2*len(payload)) && v.Down >= int64(2*len(payload))
+		}
+		for _, ib := range ins {
+			v := inbound[ib.Tag]
+			complete = complete && v.Up >= int64(2*len(payload)) && v.Down >= int64(2*len(payload))
+		}
+		if complete {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("counters did not converge: users=%v inbounds=%v", current, inbound)
+		}
+		t.Logf("waiting for completed-transfer counters: users=%v inbounds=%v", current, inbound)
+		time.Sleep(20 * time.Millisecond)
+	}
 	totals, err := c.Stats(ctx, true)
 	if err != nil {
 		t.Fatal(err)
