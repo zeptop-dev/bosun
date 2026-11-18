@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 
@@ -158,15 +159,37 @@ func TestApplyDiffAndValidate(t *testing.T) {
 	}
 }
 
+// refusedTCPAddress keeps a bound, non-listening socket for the whole test.
+// Closing a temporary listener does not reserve a dead destination: another
+// test can reuse its port, or a loopback dial can select it as its source port.
+func refusedTCPAddress(t *testing.T) string {
+	t.Helper()
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Close(fd) })
+	if err := syscall.Bind(fd, &syscall.SockaddrInet4{Addr: [4]byte{127, 0, 0, 1}}); err != nil {
+		t.Fatal(err)
+	}
+	sa, err := syscall.Getsockname(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(sa.(*syscall.SockaddrInet4).Port))
+}
+
 func TestProbeDown(t *testing.T) {
+	dead := refusedTCPAddress(t)
 	port := freePort(t)
-	dead := "127.0.0.1:" + strconv.Itoa(freePort(t))
 	m := NewManager(slog.Default())
 	defer m.Stop()
 	if err := m.Apply([]spec.Forward{{Tag: "d", Listen: "127.0.0.1", Port: port, Protocol: "tcp", Target: dead}}); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(4 * time.Second)
+	// Some kernels drop SYNs to a bound non-listener instead of refusing them.
+	// Allow the real initial delay and dial timeout; still require measured down.
+	deadline := time.Now().Add(probeInitialDelay + probeTimeout + 2*time.Second)
 	for time.Now().Before(deadline) {
 		if s := m.Snapshot()[0]; !s.Up && s.LastError != "" {
 			return
