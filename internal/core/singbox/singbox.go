@@ -150,7 +150,7 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 		for _, u := range ib.EffectiveUsers(users) {
 			names[spec.InboundAuthName(ib, u)] = true
 			aliases[spec.InboundAuthName(ib, u)] = spec.InboundUser(u.Name, ib.Tag)
-			if ib.Protocol == spec.Naive {
+			if ib.Protocol == spec.Naive || (ib.WireGuardSlot != 0 && (ib.Protocol == spec.SOCKS || ib.Protocol == spec.HTTP)) {
 				// A shared login counter cannot identify its source inbound.
 				aliases[u.Name] = u.Name
 			}

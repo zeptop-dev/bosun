@@ -20,8 +20,11 @@ func (i Inbound) Validate() error {
 		return err
 	}
 	if i.WireGuardSlot != 0 {
-		if i.WireGuardSlot < 1 || i.WireGuardSlot > 16383 || i.Core != "xray" || i.Reverse != nil || i.Protocol == WireGuard || i.Protocol == SOCKS || i.Protocol == HTTP {
-			return fmt.Errorf("WireGuard transit requires a managed slot and a per-user Xray inbound")
+		if i.Protocol == Snell && !i.SnellMultiUser {
+			return fmt.Errorf("WireGuard Snell requires multi-user mode for subscriber accounting")
+		}
+		if i.WireGuardSlot < 1 || i.WireGuardSlot > 16383 || (i.Core != "xray" && CoreFamily(i.Core) != "singbox") || i.Reverse != nil || (i.Protocol == WireGuard && i.Core != "xray") || (i.Core == "xray" && (i.Protocol == SOCKS || i.Protocol == HTTP)) {
+			return fmt.Errorf("WireGuard transit requires a managed slot and a supported authenticated proxy inbound")
 		}
 	}
 	if err := i.PrivateAccess.Validate(); err != nil {

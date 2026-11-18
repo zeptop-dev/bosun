@@ -53,6 +53,9 @@ func needsWireGuardDevices(inbounds []spec.Inbound, users []spec.User) bool {
 		if ib.Protocol != spec.WireGuard {
 			continue
 		}
+		if ib.WireGuardSlot != 0 {
+			return true
+		}
 		for _, user := range ib.EffectiveUsers(users) {
 			if user.HasWireGuardDevices() {
 				return true

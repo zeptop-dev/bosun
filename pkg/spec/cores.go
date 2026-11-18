@@ -14,6 +14,7 @@ type CoreCapabilities struct {
 	PrivateAccessPolicy    *PrivateAccessPolicyCapabilities `json:"private_access_policy,omitempty"`
 	CoreOnlyPrivateAccess  bool                             `json:"core_only_private_access,omitempty"`
 	PrivateAccessReadiness *PrivateAccessReadiness          `json:"private_access_readiness,omitempty"`
+	WireGuardProtocols     []Protocol                       `json:"wireguard_protocols,omitempty"`
 	WireGuardReverse       bool                             `json:"wireguard_reverse,omitempty"`
 	// WireGuardDevices requires a binary that binds WG source addresses to
 	// users for accounting. Runtime adapters report this from the actual binary.
@@ -64,13 +65,13 @@ func (c CoreCapabilities) UnsupportedReason(ib Inbound) string {
 	switch {
 	case ib.Standalone != nil && !c.StandaloneAuth:
 		return "standaloneAuth"
-	case ib.WireGuardSlot != 0 && !c.WireGuardReverse:
+	case ib.WireGuardSlot != 0 && (!c.WireGuardReverse || !c.SupportsWireGuardProtocol(ib.Protocol) || (ib.Protocol == Snell && !ib.SnellMultiUser) || (ib.Protocol == WireGuard && !c.WireGuardDevices)):
 		return "wireguardReverse"
 	case ib.Protocol == Mieru && c.MieruWildcardOnly && ib.Listen != "" && ib.Listen != "::" && ib.Listen != "0.0.0.0":
 		return "listenAddress"
 	case ib.PrivateAccess.CoreOnly() && (!c.CoreOnlyPrivateAccess || ib.Reverse != nil || ib.WireGuardSlot != 0):
 		return "privateAccessCoreOnly"
-	case ib.PrivateAccess.Enabled() && ((!ib.PrivateAccess.CoreOnly() && !c.PrivateAccess) || ib.Protocol == WireGuard || (ib.Protocol == Snell && !ib.SnellMultiUser) || (c.VLESSReverse && (ib.Protocol == SOCKS || ib.Protocol == HTTP))):
+	case ib.PrivateAccess.Enabled() && ((!ib.PrivateAccess.CoreOnly() && !c.PrivateAccess) || (ib.Protocol == WireGuard && ib.WireGuardSlot == 0) || (ib.Protocol == Snell && !ib.SnellMultiUser) || (c.VLESSReverse && (ib.Protocol == SOCKS || ib.Protocol == HTTP))):
 		return "privateAccess"
 	case ib.Reverse != nil && (!c.VLESSReverse || (!ib.Reverse.Receiver && (ib.Protocol == WireGuard || ib.Protocol == SOCKS || ib.Protocol == HTTP))):
 		return "reverse"
@@ -95,6 +96,14 @@ func (c CoreCapabilities) UnsupportedReason(ib Inbound) string {
 	}
 }
 
+func (c CoreCapabilities) SupportsWireGuardProtocol(protocol Protocol) bool {
+	protocols := c.WireGuardProtocols
+	if len(protocols) == 0 {
+		protocols = []Protocol{VLESS, VMess, Trojan, Shadowsocks}
+	}
+	return slices.Contains(protocols, protocol)
+}
+
 type CoreCandidate struct {
 	Name         string           `json:"name"`
 	Capabilities CoreCapabilities `json:"capabilities"`
@@ -103,14 +112,20 @@ type CoreCandidate struct {
 // CoreCatalog is also the default preference order. Each call returns fresh
 // values so a registry/test cannot mutate the shared catalog.
 func CoreCatalog() []CoreCandidate {
-	return []CoreCandidate{
-		{"singbox", CoreCapabilities{StandaloneAuth: true, CoreOnlyPrivateAccess: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
-		{"xray", CoreCapabilities{StandaloneAuth: true, WireGuardReverse: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true, VLESSReverse: true}},
+	catalog := []CoreCandidate{
+		{"singbox", CoreCapabilities{WireGuardReverse: true, StandaloneAuth: true, CoreOnlyPrivateAccess: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
+		{"xray", CoreCapabilities{WireGuardDevices: true, WireGuardProtocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, WireGuard}, StandaloneAuth: true, WireGuardReverse: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true, VLESSReverse: true}},
 		{"mita", CoreCapabilities{Protocols: []Protocol{Mieru}, HotUserReload: true}},
 		{"hysteria", CoreCapabilities{Protocols: []Protocol{Hysteria2}, HotUserReload: true}},
 		{"snell", CoreCapabilities{Protocols: []Protocol{Snell}, SnellObfsTLS: true}},
-		{"singbox-extended", CoreCapabilities{StandaloneAuth: true, CoreOnlyPrivateAccess: true, MieruWildcardOnly: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell, Mieru, SSH}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
+		{"singbox-extended", CoreCapabilities{WireGuardReverse: true, StandaloneAuth: true, CoreOnlyPrivateAccess: true, MieruWildcardOnly: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell, Mieru, SSH}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
 	}
+	for i := range catalog {
+		if catalog[i].Capabilities.WireGuardReverse && CoreFamily(catalog[i].Name) == "singbox" {
+			catalog[i].Capabilities.WireGuardProtocols = append([]Protocol(nil), catalog[i].Capabilities.Protocols...)
+		}
+	}
+	return catalog
 }
 
 func CapabilitiesForCore(name string) CoreCapabilities {
@@ -209,6 +224,9 @@ func PreviewCores(ib Inbound, inventory []CoreCandidate) CoreOptions {
 // must never be placed in URLs, browser query caches or HTTP access logs.
 func CoreProbe(q url.Values) Inbound {
 	ib := Inbound{Protocol: Protocol(q.Get("protocol")), Cipher: q.Get("cipher"), Transport: &Transport{Type: q.Get("transport")}, AcceptProxyProtocol: q.Get("proxy_protocol") == "true", SnellMultiUser: q.Get("snell_multi_user") == "true", SnellObfs: q.Get("snell_obfs")}
+	if q.Get("wireguard_transit") == "true" {
+		ib.WireGuardSlot = 1
+	}
 	if q.Get("standalone") == "true" {
 		ib.Standalone = &StandaloneAuth{}
 	}

@@ -16,7 +16,7 @@ func (i Inbound) validateStandalone() error {
 	if i.Standalone == nil {
 		return nil
 	}
-	if i.Reverse != nil || i.WireGuardSlot != 0 || i.ShadowTLS != nil || i.PrivateAccess.Enabled() {
+	if i.Reverse != nil || i.ShadowTLS != nil || i.PrivateAccess.Enabled() {
 		return fmt.Errorf("standalone listeners cannot use managed reverse, ShadowTLS or per-user private access")
 	}
 	switch i.Protocol {

@@ -67,6 +67,9 @@ func (c WireGuardLink) Validate() error {
 	if err := c.PrivateAccess.Validate(); err != nil {
 		return err
 	}
+	if c.PrivateAccess.Enabled() && (c.PrivateAccess.CoreOnly() || c.PrivateAccess.Enforcement == "auto") {
+		return fmt.Errorf("reverse WireGuard requires explicit OS-enforced private access")
+	}
 	if c.PrivateAccess != nil && c.PrivateAccess.Mode == "internal" {
 		return fmt.Errorf("reverse WireGuard requires explicit private destination rules")
 	}
@@ -124,6 +127,26 @@ func (n *Node) ValidateWireGuardLinks() error {
 		if !ok || c.Exit {
 			return fmt.Errorf("WireGuard inbound has no managed transit link")
 		}
+		if ib.Protocol == WireGuard {
+			if ib.WGMTU > c.MTU {
+				return fmt.Errorf("WireGuard user MTU must not exceed transport MTU")
+			}
+			if ib.WGAddress != "" {
+				prefix, err := netip.ParsePrefix(ib.WGAddress)
+				if err != nil {
+					return err
+				}
+				for _, link := range links {
+					for _, exit := range []bool{false, true} {
+						for _, v6 := range []bool{false, true} {
+							if prefix.Contains(netip.MustParseAddr(link.Address(exit, v6))) {
+								return fmt.Errorf("WireGuard user network overlaps transport network")
+							}
+						}
+					}
+				}
+			}
+		}
 		if !reflect.DeepEqual(ib.PrivateAccess.EffectiveRules(), c.PrivateAccess.EffectiveRules()) {
 			return fmt.Errorf("WireGuard inbound and link private grants must match")
 		}
@@ -152,14 +175,22 @@ func (n *Node) ValidateWireGuardLinks() error {
 			return fmt.Errorf("wireguard- outbound tags are reserved")
 		}
 	}
-	var patch map[string]any
-	if raw := n.Overrides["xray"]; len(raw) > 0 {
-		if json.Unmarshal(raw, &patch) != nil {
-			return fmt.Errorf("invalid Xray override")
-		}
-		for _, key := range []string{"routing", "outbounds", "inbounds", "policy", "dns"} {
-			if _, ok := patch[key]; ok {
-				return fmt.Errorf("managed WireGuard cannot override Xray %s", key)
+	return CheckWireGuardOverrides(n.Overrides)
+}
+
+// CheckWireGuardOverrides prevents an opaque patch from bypassing managed routing.
+func CheckWireGuardOverrides(overrides map[string]json.RawMessage) error {
+	for _, family := range []string{"xray", "singbox", "singbox-extended"} {
+		var patch map[string]any
+		if raw := overrides[family]; len(raw) > 0 {
+			if json.Unmarshal(raw, &patch) != nil {
+				return fmt.Errorf("invalid managed core override")
+			}
+			for key := range patch {
+				switch strings.ToLower(key) {
+				case "routing", "route", "outbounds", "inbounds", "policy", "dns", "endpoints", "experimental":
+					return fmt.Errorf("managed WireGuard cannot override %s %s", family, key)
+				}
 			}
 		}
 	}

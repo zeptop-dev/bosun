@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zeptop-dev/bosun/internal/audit"
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -25,6 +26,13 @@ type renderOptions struct {
 func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]byte, error) {
 	if len(inbounds) == 0 {
 		return nil, fmt.Errorf("singbox: nothing to render")
+	}
+	if err := validateStatisticsIdentities(inbounds, users); err != nil {
+		return nil, err
+	}
+	wgRules, wgOuts, err := core.WireGuardRoutes("singbox", node, inbounds, users)
+	if err != nil {
+		return nil, err
 	}
 	// Stats counters are per user *and inbound*: each inbound's users
 	// carry the inbound tag in their name (spec.InboundUser), and the
@@ -69,7 +77,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		}
 	}
 
-	outs := []any{m{"type": "direct", "tag": "direct"}}
+	outs := append([]any{m{"type": "direct", "tag": "direct"}}, wgOuts...)
 	var endpoints []any
 	for _, o := range node.Outbounds {
 		if o.WARP != nil {
@@ -176,12 +184,17 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		outs = append(outs, bo)
 		rules = append(rules, m{"inbound": tags, "outbound": "direct@" + ip})
 	}
+	rules = append(append([]any{}, wgRules...), rules...)
 	privateRules, privateOuts, err := core.PrivateRoutes("singbox", node, inbounds, users, rules, outs, final)
 	if err != nil {
 		return nil, err
 	}
 	outs = append(outs, privateOuts...)
 	rules = append(append(privateRules, privRules...), rules...)
+	if len(wgRules) > 0 {
+		blocks, _ := renderRoutes(audit.BlockRules(node.AuditRules))
+		rules = append(blocks, rules...)
+	}
 	cfg["outbounds"] = outs
 	route := m{"rules": append(sniffRules(inbounds), rules...), "final": final}
 	if len(sets) > 0 {
@@ -194,25 +207,39 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	if len(node.DNS) > 0 {
 		cfg["dns"] = renderDNS(node.DNS)
 	}
-	if len(privateRules) > 0 {
+	if len(privateRules) > 0 || len(wgRules) > 0 {
 		server := "dns-0"
 		if len(node.DNS) == 0 {
 			server = "private-dns"
 			cfg["dns"] = m{"servers": []any{m{"type": "local", "tag": server}}}
 		}
 		var tags []string
+		var resolveRules []any
 		for _, ib := range inbounds {
-			if ib.Reverse == nil {
+			if ib.Reverse == nil && (len(privateRules) > 0 || ib.WireGuardSlot != 0) {
 				tag := ib.Tag
 				if ib.ShadowTLS != nil {
 					tag = spec.ShadowTLSTag(tag)
 				}
-				tags = append(tags, tag)
+				if ib.WireGuardSlot != 0 {
+					strategy := "prefer_ipv6"
+					for _, link := range node.WireGuardLinks {
+						if link.Slot == ib.WireGuardSlot && link.DomainPreference == "ipv4" {
+							strategy = "prefer_ipv4"
+						}
+					}
+					resolveRules = append(resolveRules, m{"inbound": []string{tag}, "action": "resolve", "server": server, "strategy": strategy})
+				} else {
+					tags = append(tags, tag)
+				}
 			}
+		}
+		if len(tags) > 0 {
+			resolveRules = append(resolveRules, m{"inbound": tags, "action": "resolve", "server": server})
 		}
 		// Resolve after sniffing and before authorization, using the same
 		// destination-address list consumed by direct and proxy dialing.
-		route["rules"] = append(sniffRules(inbounds), append([]any{m{"inbound": tags, "action": "resolve", "server": server}}, rules...)...)
+		route["rules"] = append(sniffRules(inbounds), append(resolveRules, rules...)...)
 	}
 	if err := core.ApplyOverride("singbox", cfg, node.Overrides[singboxDistribution(opt.Distribution)]); err != nil {
 		return nil, fmt.Errorf("sing-box: %w", err)
@@ -799,4 +826,33 @@ func expandMieruTags(cfg m, inbounds []spec.Inbound) {
 		}
 	}
 	walk(cfg)
+}
+
+// sing-box counters are global to the process and keyed by metadata.User.
+// A standalone SOCKS login cannot share that name with a subscriber counter,
+// even though its inbound is excluded from account/online attribution.
+func validateStatisticsIdentities(inbounds []spec.Inbound, users []spec.User) error {
+	type identity struct {
+		id   int64
+		name string
+	}
+	reserved := map[string]identity{}
+	for _, ib := range inbounds {
+		for _, u := range ib.EffectiveUsers(users) {
+			name := spec.InboundAuthName(ib, u)
+			owner := identity{u.ID, u.Name}
+			if old, exists := reserved[name]; exists && old != owner {
+				return fmt.Errorf("singbox: subscriber statistics identities overlap")
+			}
+			reserved[name] = owner
+		}
+	}
+	for _, ib := range inbounds {
+		if ib.Standalone != nil && ib.Protocol == spec.SOCKS {
+			if _, exists := reserved[ib.Standalone.Username]; exists {
+				return fmt.Errorf("singbox: standalone SOCKS username conflicts with a subscriber statistics identity")
+			}
+		}
+	}
+	return nil
 }
