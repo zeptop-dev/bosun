@@ -1865,4 +1865,4 @@ The local panel preserves a user's login name separately from its UUID.
 Naive retains its existing wire usernames. User counters aggregate that login's
 traffic across Naive inbounds, while inbound totals remain separate; the adapter
 does not claim per-user-per-inbound attribution from a shared username counter.
-Upgrade bosun along with the panel to obtain the corrected stats registration.
+Use bosun v0.101.0 or later along with the panel to obtain the corrected stats registration.
