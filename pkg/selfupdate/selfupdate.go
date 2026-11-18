@@ -439,16 +439,6 @@ func (c *Client) Rollback() (string, error) {
 	return ver, nil
 }
 
-// Restart exits the process after delay so a supervisor (systemd
-// Restart=always, Docker restart policy) starts the new binary. The caller
-// should have flushed its HTTP response first.
-func Restart(delay time.Duration) {
-	go func() {
-		time.Sleep(delay)
-		os.Exit(0)
-	}()
-}
-
 func (c *Client) byTag(ctx context.Context, tag string) (*release, error) {
 	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
 	defer cancel()

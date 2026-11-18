@@ -102,6 +102,20 @@ func (s *Supervisor) Start(ctx context.Context) error {
 }
 
 func (s *Supervisor) launch(ctx context.Context) error {
+	// Stop must not return between spawning a child and recording ownership.
+	// A pending restart can reach here as shutdown begins; serialize the whole
+	// launch with Stop and recheck cancellation after acquiring the lock.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.stopping {
+		return context.Canceled
+	}
+	if s.cmd != nil {
+		return ErrRunning
+	}
 	cmd := exec.Command(s.path, s.args...)
 	cmd.Dir = s.dir
 	// Cores run as the unprivileged account when one is configured; see
@@ -124,7 +138,6 @@ func (s *Supervisor) launch(ctx context.Context) error {
 		return err
 	}
 	exited := make(chan struct{})
-	s.mu.Lock()
 	s.cmd = cmd
 	active.Lock()
 	active.commands[cmd] = s.name
@@ -133,7 +146,6 @@ func (s *Supervisor) launch(ctx context.Context) error {
 	active.Unlock()
 	s.exited = exited
 	s.gen++
-	s.mu.Unlock()
 	s.log.Info("started", "pid", cmd.Process.Pid, "path", s.path, "args", s.args)
 
 	started := time.Now()

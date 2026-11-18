@@ -656,10 +656,11 @@ func (a *Agent) stopAll() {
 	defer cancel()
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
-		if c.Running() {
-			if err := c.Stop(ctx); err != nil {
-				a.log.Warn("stop failed", "core", name, "err", err)
-			}
+		// A non-running adapter can still own a restart timer, preparation
+		// worker or auth listener. Stop also cancels these; Running is only
+		// a point-in-time process observation, not a cleanup predicate.
+		if err := c.Stop(ctx); err != nil {
+			a.log.Warn("stop failed", "core", name, "err", err)
 		}
 	}
 	if err := a.clearWireGuard(ctx); err != nil {
