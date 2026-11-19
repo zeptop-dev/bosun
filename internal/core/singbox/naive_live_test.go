@@ -3,22 +3,17 @@ package singbox
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
-	"golang.org/x/net/http2"
 )
 
 // Exercise the public padding framing with an independent HTTP/2 client.
@@ -86,51 +81,9 @@ func TestRealSingboxNaiveAccountingAndRevocation(t *testing.T) {
 	ready()
 	payload := bytes.Repeat([]byte("naive-echo"), 1000)
 	transfer := func(ib spec.Inbound, u spec.User) error {
-		callCtx, stop := context.WithTimeout(ctx, 3*time.Second)
-		defer stop()
-		tr := &http2.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: "example.com"}}
-		defer tr.CloseIdleConnections()
-		rd, wr := io.Pipe()
-		defer rd.Close()
-		defer wr.Close()
-		req, _ := http.NewRequestWithContext(callCtx, "CONNECT", fmt.Sprintf("https://127.0.0.1:%d", ib.Port), rd)
-		req.Host = echo.Addr().String()
-		req.Header.Set("Padding", "fixture-padding")
-		req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(u.Name+":"+u.Password)))
-		res, e := tr.RoundTrip(req)
-		if e != nil {
-			return e
-		}
-		defer res.Body.Close()
-		if res.StatusCode != 200 {
-			return fmt.Errorf("CONNECT status %d", res.StatusCode)
-		}
-		go func() {
-			frame := make([]byte, 3+len(payload))
-			binary.BigEndian.PutUint16(frame, uint16(len(payload)))
-			copy(frame[3:], payload)
-			_, e := wr.Write(frame)
-			if e != nil {
-				wr.CloseWithError(e)
-			}
-		}()
-		got := []byte{}
-		for len(got) < len(payload) {
-			var hdr [3]byte
-			if _, e = io.ReadFull(res.Body, hdr[:]); e != nil {
-				return e
-			}
-			chunk := make([]byte, int(binary.BigEndian.Uint16(hdr[:2]))+int(hdr[2]))
-			if _, e = io.ReadFull(res.Body, chunk); e != nil {
-				return e
-			}
-			got = append(got, chunk[:len(chunk)-int(hdr[2])]...)
-		}
-		if !bytes.Equal(got, payload) {
-			return fmt.Errorf("payload mismatch")
-		}
-		return nil
+		return naiveTestTransfer(ctx, pool, net.JoinHostPort("127.0.0.1", strconv.Itoa(ib.Port)), echo.Addr().String(), u, payload)
 	}
+
 	for _, ib := range ins {
 		for _, u := range users {
 			if err = transfer(ib, u); err != nil {
