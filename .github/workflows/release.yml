@@ -31,7 +31,7 @@ jobs:
         with: { node-version: 24, cache: pnpm, cache-dependency-path: web/ui/pnpm-lock.yaml }
       - run: python3 scripts/i18n-check.py web/ui/src/i18n
       - run: cd web/ui && pnpm install --frozen-lockfile && pnpm exec oxlint src && pnpm build
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with: { go-version-file: go.mod }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
